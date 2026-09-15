@@ -15,7 +15,7 @@ Native macOS menu-bar app for the two registered GitHub Actions runners on this 
 
 Bundle ID: `works.relux.runnercontrol`  
 Development team: `262RZ595FP` (Relux Works)  
-Platform: macOS 14+, Apple Silicon build supplied.  
+Platform: macOS 14+, universal Apple Silicon + Intel build supplied.  
 Signed with Apple Development for this Mac; not a notarized public distribution.
 
 ## Build
