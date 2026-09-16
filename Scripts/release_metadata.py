@@ -5,6 +5,7 @@ import base64
 import json
 from pathlib import Path
 import re
+import sys
 import xml.etree.ElementTree as ET
 
 REPO = 'relux-works/runner-control'
@@ -27,6 +28,26 @@ def prepare(config, tag, run, attempt):
         raise ValueError('Invalid Sparkle public key')
     config['project_version'] = f'{100 + run}.{attempt}'
     return config
+
+def resolve_signing_identity(find_identity_output, team):
+    """Return the Developer ID Application SHA-1 for team.
+
+    Parses `security find-identity -v -p codesigning` output. Apple
+    Development and other-team identities are ignored. Zero or several
+    matches fail so release signing never silently picks a wrong key.
+    """
+    matches = []
+    for line in find_identity_output.splitlines():
+        if 'Developer ID Application:' not in line or f'({team})' not in line:
+            continue
+        found = re.search(r'\b([A-F0-9]{40})\b', line)
+        if found:
+            matches.append(found.group(1))
+    if not matches:
+        raise ValueError(f'No Developer ID Application identity for team {team}')
+    if len(matches) > 1:
+        raise ValueError(f'Multiple Developer ID Application identities for team {team}; remove the stale certificate')
+    return matches[0]
 
 def verify_appcast(path, dmg, tag, build):
     root = ET.parse(path).getroot()
@@ -61,11 +82,15 @@ def main():
     verify.add_argument('--dmg', type=Path, required=True)
     verify.add_argument('--tag', required=True)
     verify.add_argument('--build', required=True)
+    sig = sub.add_parser('signing-identity')
+    sig.add_argument('--team', required=True)
     args = parser.parse_args()
     if args.command == 'prepare':
         data = prepare(json.loads(args.config.read_text()), args.tag, args.run, args.attempt)
         args.config.write_text(json.dumps(data, indent=2) + '\n')
         print(data['project_version'])
+    elif args.command == 'signing-identity':
+        print(resolve_signing_identity(sys.stdin.read(), args.team))
     else:
         verify_appcast(args.appcast, args.dmg, args.tag, args.build)
         print('Appcast identity, signature presence, size and minimum OS verified')

@@ -58,7 +58,7 @@ ditto "$app" "$release_root/image/RunnerControl.app"
 ln -s /Applications "$release_root/image/Applications"
 hdiutil create -volname 'Runner Control' -srcfolder "$release_root/image" -fs APFS \
   -format ULFO "$release_root/dist/RunnerControl.dmg"
-signing_identity="$(security find-identity -v -p codesigning | sed -nE '/Developer ID Application:.*\(262RZ595FP\)/s/.*[0-9]+\) ([A-Fa-f0-9]+) .*/\1/p' | head -n 1)"
+signing_identity="$(security find-identity -v -p codesigning | python3 Scripts/release_metadata.py signing-identity --team 262RZ595FP)"
 codesign --force --timestamp --sign "$signing_identity" "$release_root/dist/RunnerControl.dmg"
 notarize "$release_root/dist/RunnerControl.dmg" "$release_root/dmg-notary.json"
 xcrun stapler staple "$release_root/dist/RunnerControl.dmg"
