@@ -1,0 +1,124 @@
+$ swift test --package-path /tmp/TASK-260916-304bw2-review/Packages/RunnerControlCore --filter reviewUnknownService|reviewRemovedLastEntry|reviewSameNameFolder|reviewCrossServerGroup
+Fetching https://github.com/relux-works/swift-relux.git from cache
+Fetched https://github.com/relux-works/swift-relux.git from cache (0.04s)
+Creating working copy for https://github.com/relux-works/swift-relux.git
+Working copy of https://github.com/relux-works/swift-relux.git resolved at 9.2.0
+Building for debugging...
+[0/8] Write sources
+[2/8] /private/tmp/TASK-260916-304bw2-review/Packages/RunnerControlCore/.build/arm64-apple-macosx/debug/RunnerControlCorePackageTests.derived/runner.swift
+[3/8] Write sources
+[5/8] Write swift-version--58304C5D6DBC2206.txt
+[7/38] Emitting module Relux
+[8/42] Compiling Relux Relux.Effect.swift
+[9/42] Compiling Relux Relux+Dispatcher+Global.swift
+[10/42] Compiling Relux Relux+Dispatcher+Interface.swift
+[11/42] Compiling Relux Relux+Dispatcher.swift
+[12/42] Compiling Relux Relux+Flow.swift
+[13/42] Compiling Relux Relux+RootSaga.swift
+[14/42] Compiling Relux Relux+Saga.swift
+[15/42] Compiling Relux Relux+State.swift
+[16/42] Compiling Relux Relux+Action.swift
+[17/42] Compiling Relux Relux+ActionResult+Reduced.swift
+[18/42] Compiling Relux Relux+ActionResult.swift
+[19/42] Compiling Relux Relux+ActionResultBuilder.swift
+[20/42] Compiling Relux TypeKeyable.swift
+[21/42] Compiling Relux timestamp.swift
+[22/42] Compiling Relux Relux+ExecutionType.swift
+[23/42] Compiling Relux Seconds.swift
+[24/42] Compiling Relux Relux+Testing+MockModule+Saga.swift
+[25/42] Compiling Relux Relux+Testing+MockModule+State.swift
+[26/42] Compiling Relux Relux+Testing+MockModule.swift
+[27/42] Compiling Relux Relux+Testing.swift
+[28/42] Compiling Relux Relux+Subscriber.swift
+[29/42] Compiling Relux Sequence+AsSet.swift
+[30/42] Compiling Relux AsyncLock.swift
+[31/42] Compiling Relux AsyncUtils.swift
+[32/42] Compiling Relux Optional+isNil.swift
+[33/42] Compiling Relux Relux+Logger+EnumReflectible.swift
+[34/42] Compiling Relux Relux+Logger.swift
+[35/42] Compiling Relux Relux+Module.swift
+[36/42] Compiling Relux Relux+Navigation.swift
+[37/42] Compiling Relux Relux+Store.swift
+[38/42] Compiling Relux Relux.swift
+[39/42] Compiling Relux LockedState.swift
+[40/42] Compiling Relux Relux+Testing+Logger.swift
+[41/78] Emitting module RunnerControlCore
+[42/83] Compiling RunnerControlCore GitHubAuth+Module.swift
+[43/83] Compiling RunnerControlCore GitHubAuth+State+Reducer.swift
+[44/83] Compiling RunnerControlCore GitHubAuth+State.swift
+[45/83] Compiling RunnerControlCore GitHubAuth.swift
+[46/83] Compiling RunnerControlCore GitHubDeviceFlow.swift
+[47/83] Compiling RunnerControlCore GitHubTokenRefresh.swift
+[48/83] Compiling RunnerControlCore GitHubTransport.swift
+[49/83] Compiling RunnerControlCore RunnerCatalog.swift
+[50/83] Compiling RunnerControlCore RunnerControlCore.swift
+[51/83] Compiling RunnerControlCore RunnerControllers.swift
+[52/83] Compiling RunnerControlCore Runners+Module.swift
+[53/83] Compiling RunnerControlCore Runners+Service.swift
+[54/83] Compiling RunnerControlCore Runners+State+Reducer.swift
+[55/83] Compiling RunnerControlCore Runners+State.swift
+[56/83] Compiling RunnerControlCore Runners.swift
+[57/83] Compiling RunnerControlCore CommandExecutor.swift
+[58/83] Compiling RunnerControlCore GitHubAPIClient.swift
+[59/83] Compiling RunnerControlCore GitHubAppConfig.swift
+[60/83] Compiling RunnerControlCore GitHubAuth+Flow.swift
+[61/83] Compiling RunnerControlCore GitHubAuth+Models.swift
+[62/83] Compiling RunnerControlCore RunnerDiagnostics.swift
+[63/83] Compiling RunnerControlCore RunnerDiscovery.swift
+[64/83] Compiling RunnerControlCore RunnerInstallerService.swift
+[65/83] Compiling RunnerControlCore RunnerRegistration+Flow.swift
+[66/83] Compiling RunnerControlCore RunnerRegistration+Gates.swift
+[67/83] Compiling RunnerControlCore RunnerRegistration+Models.swift
+[68/83] Compiling RunnerControlCore RunnerRegistration+Module.swift
+[69/83] Compiling RunnerControlCore RunnerRegistration+State+Reducer.swift
+[70/83] Compiling RunnerControlCore RunnerRegistration+State.swift
+[71/83] Compiling RunnerControlCore RunnerRegistration.swift
+[72/83] Compiling RunnerControlCore RunnerRegistrationReader.swift
+[73/83] Compiling RunnerControlCore RunnerRegistrationTokenStore.swift
+[74/83] Compiling RunnerControlCore RunnerRuntime.swift
+[75/83] Compiling RunnerControlCore Runners+Flow.swift
+[76/83] Compiling RunnerControlCore Runners+Models.swift
+[77/83] Compiling RunnerControlCore GitHubKeychainStore.swift
+[78/83] Compiling RunnerControlCore GitHubRedaction.swift
+[79/83] Compiling RunnerControlCore GitHubRunnerAPIClient.swift
+[80/83] Compiling RunnerControlCore GitHubRunnerObserver.swift
+[81/83] Compiling RunnerControlCore GitHubSessionIdentityStore.swift
+[82/91] Compiling RunnerControlCoreTests RunnerControlCoreTests.swift
+[83/91] Compiling RunnerControlCoreTests GitHubAuthFlowTests.swift
+[84/91] Compiling RunnerControlCoreTests GitHubTransportTests.swift
+[85/91] Compiling RunnerControlCoreTests GitHubAuthLifecycleTests.swift
+[86/91] Emitting module RunnerControlCoreTests
+[87/91] Compiling RunnerControlCoreTests RunnerRegistrationTests.swift
+[88/91] Compiling RunnerControlCoreTests RunnerDiscoveryTests.swift
+[89/91] Compiling RunnerControlCoreTests RunnerCatalogLifecycleTests.swift
+[90/93] Compiling RunnerControlCorePackageTests runner.swift
+[91/93] Emitting module RunnerControlCorePackageTests
+[91/93] Write Objects.LinkFileList
+[92/93] Linking RunnerControlCorePackageTests
+Build complete! (50.69s)
+Test Suite 'Selected tests' started at 2026-09-16 13:19:32.574.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 13:19:32.588.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 13:19:32.588.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 13:19:32.588.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.014) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test reviewSameNameFolderImportsMustHaveDistinctServiceIDs() started.
+􀟈  Test reviewRemovedLastEntryMustStayRemovedOnMigration() started.
+􀟈  Test reviewUnknownServiceMustRefuseUnregister() started.
+􀟈  Test reviewCrossServerGroupApplyMustRefuse() started.
+􀢄  Test reviewCrossServerGroupApplyMustRefuse() recorded an issue at RunnerCatalogLifecycleTests.swift:1265:5: Expectation failed: await h.transport.requests.filter { $0.method == "PUT" }.isEmpty
+􀢄  Test reviewUnknownServiceMustRefuseUnregister() recorded an issue at RunnerCatalogLifecycleTests.swift:1228:5: Expectation failed: await h.transport.requests.isEmpty
+􀢄  Test reviewUnknownServiceMustRefuseUnregister() recorded an issue at RunnerCatalogLifecycleTests.swift:1229:5: Expectation failed: await h.installerExecutor.calls.isEmpty
+􀢄  Test reviewRemovedLastEntryMustStayRemovedOnMigration() recorded an issue at RunnerCatalogLifecycleTests.swift:1240:5: Expectation failed: try await h.catalog.migrateIfNeeded(home: h.home).isEmpty
+􀢄  Test reviewUnknownServiceMustRefuseUnregister() failed after 0.019 seconds with 2 issues.
+􀢄  Test reviewRemovedLastEntryMustStayRemovedOnMigration() failed after 0.020 seconds with 1 issue.
+􀢄  Test reviewCrossServerGroupApplyMustRefuse() recorded an issue at RunnerCatalogLifecycleTests.swift:1266:5: Expectation failed: (loadedGroupAccess(h.logger,id:"actions.runner.review.cross") → GroupAccess(group: Optional(RunnerControlCore.RunnerRegistration.RunnerGroup(id: 4, name: "g", visibility: "selected", allowsPublicRepositories: true)), repoIDs: [1], updatedAt: Optional(2026-09-16 09:19:32 +0000), owned: true, loading: false, error: nil)) == nil
+􀢄  Test reviewCrossServerGroupApplyMustRefuse() failed after 0.032 seconds with 2 issues.
+􀢄  Test reviewSameNameFolderImportsMustHaveDistinctServiceIDs() recorded an issue at RunnerCatalogLifecycleTests.swift:1252:5: Expectation failed: (Set(entries.map(\.serviceLabel)).count → 1) == 2
+􀢄  Test reviewSameNameFolderImportsMustHaveDistinctServiceIDs() failed after 0.039 seconds with 1 issue.
+􀢄  Test run with 4 tests in 0 suites failed after 0.039 seconds with 6 issues.
+
+EXIT 1

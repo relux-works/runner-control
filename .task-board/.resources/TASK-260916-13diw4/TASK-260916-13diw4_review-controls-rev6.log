@@ -1,0 +1,37 @@
+['swift', 'test', '--package-path', 'Packages/RunnerControlCore', '--filter', 'reviewerSymlinkAlias|leaseKeyCanonical|finderAlias|reviewerRetryCannot|beginDraftDuringDownload|resetDuringDownload|cancelDuringConfig|staleRegisterFailure|nonconflictingInstall|reviewerInFlightInstall']
+[0/1] Planning build
+Building for debugging...
+[0/2] Write swift-version--58304C5D6DBC2206.txt
+Build complete! (0.66s)
+Test Suite 'Selected tests' started at 2026-09-16 11:26:38.614.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 11:26:38.621.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 11:26:38.621.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 11:26:38.621.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.007) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test finderAliasInstallFolderIsRefusedBeforeDownload() started.
+􀟈  Test staleRegisterFailureDoesNotUnlockOrPlantFailure() started.
+􀟈  Test reviewerSymlinkAliasCannotBypassDirectoryLease() started.
+􀟈  Test cancelDuringConfigKeepsLeaseAndRecoversAfterSettle() started.
+􀟈  Test reviewerInFlightInstallCannotRepopulateChangedDraft() started.
+􀟈  Test reviewerRetryCannotRunTwoConfigsInSameDirectory() started.
+􀟈  Test leaseKeyCanonicalizesSymlinkAncestorsForMissingLeaf() started.
+􀟈  Test beginDraftDuringDownloadKeepsDirectoryLease() started.
+􀟈  Test nonconflictingInstallProceedsWhileOtherDirectoryRuns() started.
+􀟈  Test resetDuringDownloadKeepsDirectoryLeaseUntilSettled() started.
+􁁛  Test leaseKeyCanonicalizesSymlinkAncestorsForMissingLeaf() passed after 0.006 seconds.
+􁁛  Test finderAliasInstallFolderIsRefusedBeforeDownload() passed after 0.123 seconds.
+􁁛  Test reviewerInFlightInstallCannotRepopulateChangedDraft() passed after 0.179 seconds.
+􁁛  Test beginDraftDuringDownloadKeepsDirectoryLease() passed after 0.181 seconds.
+􁁛  Test resetDuringDownloadKeepsDirectoryLeaseUntilSettled() passed after 0.182 seconds.
+􁁛  Test reviewerRetryCannotRunTwoConfigsInSameDirectory() passed after 0.188 seconds.
+􁁛  Test cancelDuringConfigKeepsLeaseAndRecoversAfterSettle() passed after 0.189 seconds.
+􁁛  Test nonconflictingInstallProceedsWhileOtherDirectoryRuns() passed after 0.233 seconds.
+􁁛  Test staleRegisterFailureDoesNotUnlockOrPlantFailure() passed after 0.235 seconds.
+􁁛  Test reviewerSymlinkAliasCannotBypassDirectoryLease() passed after 0.238 seconds.
+􁁛  Test run with 10 tests in 0 suites passed after 0.238 seconds.
+
+EXIT 0

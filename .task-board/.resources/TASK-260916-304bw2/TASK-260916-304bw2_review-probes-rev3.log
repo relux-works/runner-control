@@ -1,0 +1,35 @@
+COMMAND ['swift', 'test', '--package-path', '/tmp/TASK-260916-304bw2-review-r3/Packages/RunnerControlCore', '--filter', 'reviewR3']
+[0/1] Planning build
+Building for debugging...
+[0/3] Write sources
+[1/3] Write swift-version--58304C5D6DBC2206.txt
+[3/5] Compiling RunnerControlCoreTests RunnerCatalogLifecycleTests.swift
+[4/5] Emitting module RunnerControlCoreTests
+[5/6] Compiling RunnerControlCoreTests RunnerRegistrationTests.swift
+[5/7] Write Objects.LinkFileList
+[6/7] Linking RunnerControlCorePackageTests
+Build complete! (46.31s)
+Test Suite 'Selected tests' started at 2026-09-16 14:28:56.243.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 14:28:56.267.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 14:28:56.267.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 14:28:56.268.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.025) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test reviewR3RelinkMustNotRebindLoadedEditorToOtherOrg() started.
+􀟈  Test reviewR3SameAccountReloginDuringPutMustNotPublishAccess() started.
+􀟈  Test reviewR3SameAccountReloginDuringRemoveTokenMustRefuseSideEffect() started.
+􀢄  Test reviewR3SameAccountReloginDuringRemoveTokenMustRefuseSideEffect() recorded an issue at RunnerCatalogLifecycleTests.swift:1807:5: Expectation failed: await h.installerExecutor.calls.isEmpty
+􀢄  Test reviewR3SameAccountReloginDuringRemoveTokenMustRefuseSideEffect() recorded an issue at RunnerCatalogLifecycleTests.swift:1808:5: Expectation failed: await h.catalog.load().first?.remoteAgentID == 42
+􀢄  Test reviewR3SameAccountReloginDuringRemoveTokenMustRefuseSideEffect() failed after 0.048 seconds with 2 issues.
+R3 relink writes: ["https://api.github.com/orgs/other-org/actions/runner-groups/4/repositories"]
+􀢄  Test reviewR3SameAccountReloginDuringPutMustNotPublishAccess() recorded an issue at RunnerCatalogLifecycleTests.swift:1792:5: Expectation failed: (loadedGroupAccess(h.logger, id: label) → GroupAccess(group: Optional(RunnerControlCore.RunnerRegistration.RunnerGroup(id: 4, name: "g", visibility: "selected", allowsPublicRepositories: true)), repoIDs: [1], updatedAt: Optional(2026-09-16 10:28:56 +0000), owned: true, loading: false, error: nil)) == nil
+􀢄  Test reviewR3SameAccountReloginDuringPutMustNotPublishAccess() recorded an issue at RunnerCatalogLifecycleTests.swift:1793:5: Expectation failed: await h.transport.requests.count == 3
+􀢄  Test reviewR3SameAccountReloginDuringPutMustNotPublishAccess() failed after 0.069 seconds with 2 issues.
+􀢄  Test reviewR3RelinkMustNotRebindLoadedEditorToOtherOrg() recorded an issue at RunnerCatalogLifecycleTests.swift:1830:5: Expectation failed: (writes → [RunnerControlCore.GitHubHTTPRequest(method: "PUT", url: https://api.github.com/orgs/other-org/actions/runner-groups/4/repositories, headers: ["Content-Type": "application/json", "Accept": "application/vnd.github+json", "Authorization": "Bearer user-token-42"], body: Optional(31 bytes))]).isEmpty → false
+􀢄  Test reviewR3RelinkMustNotRebindLoadedEditorToOtherOrg() failed after 0.075 seconds with 1 issue.
+􀢄  Test run with 3 tests in 0 suites failed after 0.076 seconds with 5 issues.
+
+EXIT 1

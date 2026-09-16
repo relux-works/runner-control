@@ -1,0 +1,43 @@
+COMMAND ['swift', 'test', '--package-path', '/tmp/TASK-260916-304bw2-review-r5/Packages/RunnerControlCore', '--filter', 'reviewR4|reviewR3|unregisterRefusesLogoutBetweenFinalInspectionAndConfigRemove|editorOverlappingLoadSuppressesStaleCompletion|editorRetryAfterSessionInvalidationSucceedsOnSameFlow|unregisterRemovesRemoteKeepsFilesAndEntry|unregisterRetryInNewIncarnationSucceeds|applySucceedsAfterTokenRefreshWithinSameLogin']
+[0/1] Planning build
+Building for debugging...
+[0/2] Write swift-version--58304C5D6DBC2206.txt
+Build complete! (0.96s)
+Test Suite 'Selected tests' started at 2026-09-16 15:45:03.360.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 15:45:03.384.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 15:45:03.384.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 15:45:03.385.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.024) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test reviewR4LogoutDuringFinalStoppedInspectionMustRefuseRemoval() started.
+􀟈  Test reviewR3SameAccountReloginDuringRemoveTokenMustRefuseSideEffect() started.
+􀟈  Test editorRetryAfterSessionInvalidationSucceedsOnSameFlow() started.
+􀟈  Test unregisterRetryInNewIncarnationSucceeds() started.
+􀟈  Test unregisterRemovesRemoteKeepsFilesAndEntry() started.
+􀟈  Test unregisterRefusesLogoutBetweenFinalInspectionAndConfigRemove() started.
+􀟈  Test editorOverlappingLoadSuppressesStaleCompletion() started.
+􀟈  Test reviewR3RelinkMustNotRebindLoadedEditorToOtherOrg() started.
+􀟈  Test applySucceedsAfterTokenRefreshWithinSameLogin() started.
+􀟈  Test reviewR3SiblingLoadDuringReloginMustNotPublishAccess() started.
+􀟈  Test reviewR3SameAccountReloginDuringPutMustNotPublishAccess() started.
+􀟈  Test reviewR4SessionInvalidationMustReleaseEditorLoading(apply:) started.
+􀟈  Test case passing 1 argument apply → false to reviewR4SessionInvalidationMustReleaseEditorLoading(apply:) started.
+􀟈  Test case passing 1 argument apply → true to reviewR4SessionInvalidationMustReleaseEditorLoading(apply:) started.
+􁁛  Test applySucceedsAfterTokenRefreshWithinSameLogin() passed after 0.045 seconds.
+􁁛  Test reviewR3SiblingLoadDuringReloginMustNotPublishAccess() passed after 0.043 seconds.
+􁁛  Test reviewR4LogoutDuringFinalStoppedInspectionMustRefuseRemoval() passed after 0.050 seconds.
+􁁛  Test reviewR3RelinkMustNotRebindLoadedEditorToOtherOrg() passed after 0.051 seconds.
+􁁛  Test reviewR3SameAccountReloginDuringRemoveTokenMustRefuseSideEffect() passed after 0.052 seconds.
+􁁛  Test reviewR3SameAccountReloginDuringPutMustNotPublishAccess() passed after 0.056 seconds.
+􁁛  Test unregisterRemovesRemoteKeepsFilesAndEntry() passed after 0.062 seconds.
+􁁛  Test unregisterRetryInNewIncarnationSucceeds() passed after 0.065 seconds.
+􁁛  Test unregisterRefusesLogoutBetweenFinalInspectionAndConfigRemove() passed after 0.068 seconds.
+􁁛  Test editorRetryAfterSessionInvalidationSucceedsOnSameFlow() passed after 0.075 seconds.
+􁁛  Test reviewR4SessionInvalidationMustReleaseEditorLoading(apply:) with 2 test cases passed after 0.084 seconds.
+􁁛  Test editorOverlappingLoadSuppressesStaleCompletion() passed after 0.088 seconds.
+􁁛  Test run with 12 tests in 0 suites passed after 0.088 seconds.
+
+EXIT 0

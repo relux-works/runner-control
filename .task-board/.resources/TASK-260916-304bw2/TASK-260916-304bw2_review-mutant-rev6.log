@@ -1,0 +1,31 @@
+[0/1] Planning build
+Building for debugging...
+[0/3] Write sources
+[1/3] Write swift-version--58304C5D6DBC2206.txt
+[3/5] Compiling RunnerControlCore Runners+Flow.swift
+[4/5] Emitting module RunnerControlCore
+[4/6] Write Objects.LinkFileList
+[5/6] Linking RunnerControlCorePackageTests
+Build complete! (3.15s)
+Test Suite 'Selected tests' started at 2026-09-16 16:02:18.253.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 16:02:18.262.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 16:02:18.262.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 16:02:18.262.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.009) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test editorRetryAfterSessionInvalidationSucceedsOnSameFlow() started.
+􀟈  Test reviewR5RemoveReimportMustNotReviveOldEditorOwner() started.
+􀟈  Test editorOverlappingLoadSuppressesStaleCompletion() started.
+􁁛  Test editorRetryAfterSessionInvalidationSucceedsOnSameFlow() passed after 0.011 seconds.
+􁁛  Test editorOverlappingLoadSuppressesStaleCompletion() passed after 0.017 seconds.
+􀢄  Test reviewR5RemoveReimportMustNotReviveOldEditorOwner() recorded an issue at RunnerCatalogLifecycleTests.swift:2250:5: Expectation failed: (state.groupAccess[label]?.loading → false) == true
+􀄵  Old operation must not clear the newer pending Load
+􀢄  Test reviewR5RemoveReimportMustNotReviveOldEditorOwner() recorded an issue at RunnerCatalogLifecycleTests.swift:2251:5: Expectation failed: (state.groupAccess[label]?.error → "Runner catalog changed during group access. Reload group access to retry.") == nil
+􀄵  Old operation must not publish its catalog-change error into new editor
+􀢄  Test reviewR5RemoveReimportMustNotReviveOldEditorOwner() failed after 0.034 seconds with 2 issues.
+􀢄  Test run with 3 tests in 0 suites failed after 0.034 seconds with 2 issues.
+
+[exit 1]

@@ -1,0 +1,116 @@
+Fetching https://github.com/relux-works/swift-relux.git from cache
+Fetched https://github.com/relux-works/swift-relux.git from cache (0.05s)
+Creating working copy for https://github.com/relux-works/swift-relux.git
+Working copy of https://github.com/relux-works/swift-relux.git resolved at 9.2.0
+Building for debugging...
+[0/8] Write sources
+[3/8] /private/tmp/TASK-260916-13diw4-review3/Packages/RunnerControlCore/.build/arm64-apple-macosx/debug/RunnerControlCorePackageTests.derived/runner.swift
+[4/8] Write sources
+[5/8] Write swift-version--58304C5D6DBC2206.txt
+[7/38] Emitting module Relux
+[8/42] Compiling Relux Relux+Flow.swift
+[9/42] Compiling Relux Relux+RootSaga.swift
+[10/42] Compiling Relux Relux+Saga.swift
+[11/42] Compiling Relux Relux+State.swift
+[12/42] Compiling Relux Relux+Action.swift
+[13/42] Compiling Relux Relux+ActionResult+Reduced.swift
+[14/42] Compiling Relux Relux+ActionResult.swift
+[15/42] Compiling Relux Relux+ActionResultBuilder.swift
+[16/42] Compiling Relux Relux.Effect.swift
+[17/42] Compiling Relux Relux+Dispatcher+Global.swift
+[18/42] Compiling Relux Relux+Dispatcher+Interface.swift
+[19/42] Compiling Relux Relux+Dispatcher.swift
+[20/42] Compiling Relux Relux+Testing+MockModule+Saga.swift
+[21/42] Compiling Relux Relux+Testing+MockModule+State.swift
+[22/42] Compiling Relux Relux+Testing+MockModule.swift
+[23/42] Compiling Relux Relux+Testing.swift
+[24/42] Compiling Relux Relux+Logger+EnumReflectible.swift
+[25/42] Compiling Relux Relux+Logger.swift
+[26/42] Compiling Relux Relux+Module.swift
+[27/42] Compiling Relux Relux+Navigation.swift
+[28/42] Compiling Relux TypeKeyable.swift
+[29/42] Compiling Relux timestamp.swift
+[30/42] Compiling Relux Relux+ExecutionType.swift
+[31/42] Compiling Relux Seconds.swift
+[32/42] Compiling Relux Relux+Subscriber.swift
+[33/42] Compiling Relux Sequence+AsSet.swift
+[34/42] Compiling Relux AsyncLock.swift
+[35/42] Compiling Relux AsyncUtils.swift
+[36/42] Compiling Relux Optional+isNil.swift
+[37/42] Compiling Relux Relux+Store.swift
+[38/42] Compiling Relux Relux.swift
+[39/42] Compiling Relux LockedState.swift
+[40/42] Compiling Relux Relux+Testing+Logger.swift
+[41/74] Compiling RunnerControlCore GitHubAuth+Module.swift
+[42/74] Compiling RunnerControlCore GitHubAuth+State+Reducer.swift
+[43/74] Compiling RunnerControlCore GitHubAuth+State.swift
+[44/74] Compiling RunnerControlCore GitHubAuth.swift
+[45/74] Compiling RunnerControlCore GitHubDeviceFlow.swift
+[46/78] Emitting module RunnerControlCore
+[47/78] Compiling RunnerControlCore RunnerRuntime.swift
+[48/78] Compiling RunnerControlCore Runners+Flow.swift
+[49/78] Compiling RunnerControlCore Runners+Models.swift
+[50/78] Compiling RunnerControlCore Runners+Module.swift
+[51/78] Compiling RunnerControlCore GitHubKeychainStore.swift
+[52/78] Compiling RunnerControlCore GitHubRedaction.swift
+[53/78] Compiling RunnerControlCore GitHubRunnerAPIClient.swift
+[54/78] Compiling RunnerControlCore GitHubSessionIdentityStore.swift
+[55/78] Compiling RunnerControlCore GitHubTokenRefresh.swift
+[56/78] Compiling RunnerControlCore GitHubTransport.swift
+[57/78] Compiling RunnerControlCore RunnerControlCore.swift
+[58/78] Compiling RunnerControlCore RunnerDiscovery.swift
+[59/78] Compiling RunnerControlCore RunnerInstallerService.swift
+[60/78] Compiling RunnerControlCore Runners+Service.swift
+[61/78] Compiling RunnerControlCore Runners+State+Reducer.swift
+[62/78] Compiling RunnerControlCore Runners+State.swift
+[63/78] Compiling RunnerControlCore Runners.swift
+[64/78] Compiling RunnerControlCore RunnerRegistration+State+Reducer.swift
+[65/78] Compiling RunnerControlCore RunnerRegistration+State.swift
+[66/78] Compiling RunnerControlCore RunnerRegistration.swift
+[67/78] Compiling RunnerControlCore RunnerRegistrationTokenStore.swift
+[68/78] Compiling RunnerControlCore RunnerRegistration+Flow.swift
+[69/78] Compiling RunnerControlCore RunnerRegistration+Gates.swift
+[70/78] Compiling RunnerControlCore RunnerRegistration+Models.swift
+[71/78] Compiling RunnerControlCore RunnerRegistration+Module.swift
+[72/78] Compiling RunnerControlCore CommandExecutor.swift
+[73/78] Compiling RunnerControlCore GitHubAPIClient.swift
+[74/78] Compiling RunnerControlCore GitHubAppConfig.swift
+[75/78] Compiling RunnerControlCore GitHubAuth+Flow.swift
+[76/78] Compiling RunnerControlCore GitHubAuth+Models.swift
+[77/85] Compiling RunnerControlCoreTests GitHubTransportTests.swift
+[78/85] Compiling RunnerControlCoreTests RunnerControlCoreTests.swift
+[79/85] Compiling RunnerControlCoreTests GitHubAuthFlowTests.swift
+[80/85] Emitting module RunnerControlCoreTests
+[81/85] Compiling RunnerControlCoreTests GitHubAuthLifecycleTests.swift
+[82/85] Compiling RunnerControlCoreTests RunnerRegistrationTests.swift
+[83/85] Compiling RunnerControlCoreTests RunnerDiscoveryTests.swift
+[84/87] Compiling RunnerControlCorePackageTests runner.swift
+[85/87] Emitting module RunnerControlCorePackageTests
+[85/87] Write Objects.LinkFileList
+[86/87] Linking RunnerControlCorePackageTests
+Build complete! (60.70s)
+Test Suite 'Selected tests' started at 2026-09-16 09:28:26.414.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 09:28:26.435.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 09:28:26.435.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 09:28:26.435.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.021) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test reviewerChangedWorkFolderCannotReuseConfiguredSuccess() started.
+􀟈  Test reviewerForeignServerIdentityCannotAuthorizeLabels() started.
+􀟈  Test reviewerInFlightInstallCannotRepopulateChangedDraft() started.
+􀢄  Test reviewerInFlightInstallCannotRepopulateChangedDraft() recorded an issue at RunnerRegistrationTests.swift:1998:5: Expectation failed: (state.installPath → "/var/folders/v5/c7x5kxfd2dvc6gmb1772xdp00000gn/T/RegHome-6B4F0CA2-7E43-4BEA-8A07-5A04E8B421C3/Library/GitHubActions/macbook-test") == nil
+􀄵  Old async install must not attest the new draft
+􀢄  Test reviewerInFlightInstallCannotRepopulateChangedDraft() recorded an issue at RunnerRegistrationTests.swift:1999:5: Expectation failed: !((state.completedSteps → ["downloadAndInstall"]).contains("downloadAndInstall") → true)
+􀢄  Test reviewerInFlightInstallCannotRepopulateChangedDraft() failed after 0.224 seconds with 2 issues.
+􀢄  Test reviewerChangedWorkFolderCannotReuseConfiguredSuccess() recorded an issue at RunnerRegistrationTests.swift:2044:5: Expectation failed: !(after.contains { if case .registered = $0 { true } else { false } } → <not evaluated>)
+􀄵  Old _work configuration is not new_work success
+􀢄  Test reviewerChangedWorkFolderCannotReuseConfiguredSuccess() recorded an issue at RunnerRegistrationTests.swift:2045:5: Expectation failed: (lastFailure(harness.logger)?.step → nil) == "registerRunner"
+􀢄  Test reviewerForeignServerIdentityCannotAuthorizeLabels() recorded an issue at RunnerRegistrationTests.swift:2020:5: Expectation failed: await transport.requests.filter { $0.method == "PUT" }.isEmpty
+􀄵  Foreign server ID must not authorize github.com writes
+􀢄  Test reviewerForeignServerIdentityCannotAuthorizeLabels() recorded an issue at RunnerRegistrationTests.swift:2021:5: Expectation failed: (lastFailure(harness.logger)?.step → nil) == "applyLabels"
+􀢄  Test reviewerChangedWorkFolderCannotReuseConfiguredSuccess() failed after 0.229 seconds with 2 issues.
+􀢄  Test reviewerForeignServerIdentityCannotAuthorizeLabels() failed after 0.230 seconds with 2 issues.
+􀢄  Test run with 3 tests in 0 suites failed after 0.231 seconds with 6 issues.

@@ -1,0 +1,44 @@
+[0/1] Planning build
+Building for debugging...
+[0/2] Write swift-version--58304C5D6DBC2206.txt
+Build complete! (0.39s)
+Test Suite 'Selected tests' started at 2026-09-16 10:17:12.857.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 10:17:12.868.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 10:17:12.868.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 10:17:12.868.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.011) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test reviewerForeignServerIdentityCannotAuthorizeLabels() started.
+􀟈  Test serverChangeBetweenStepsInvalidatesGroupAndRunner() started.
+􀟈  Test inFlightLabelsCannotWriteForEditedDraft() started.
+􀟈  Test inFlightLabelsAbandonedWhenLabelsEdited() started.
+􀟈  Test groupChangeRefusesOldConfiguredSuccess() started.
+􀟈  Test orgWizardEndToEndDeletesTokenAndLeaksNothing() started.
+􀟈  Test inFlightRegistrationCannotAttributeOldConfigToNewDraft() started.
+􀟈  Test reviewerChangedWorkFolderCannotReuseConfiguredSuccess() started.
+􀟈  Test inFlightGroupCannotResolveForEditedDraft() started.
+􀟈  Test reviewerInFlightInstallCannotRepopulateChangedDraft() started.
+􀟈  Test resolvePatchesDeniedPublicReposOnOwnedGroup() started.
+􀟈  Test downloadRefusesMissingChecksum() started.
+􀟈  Test inFlightAccessAbandonedWhenRepositoriesEdited() started.
+􀟈  Test remoteDuplicateWithoutReplaceIsRefusedBeforeToken() started.
+􁁛  Test serverChangeBetweenStepsInvalidatesGroupAndRunner() passed after 0.008 seconds.
+􁁛  Test resolvePatchesDeniedPublicReposOnOwnedGroup() passed after 0.011 seconds.
+􁁛  Test inFlightGroupCannotResolveForEditedDraft() passed after 0.020 seconds.
+􁁛  Test inFlightAccessAbandonedWhenRepositoriesEdited() passed after 0.024 seconds.
+􁁛  Test downloadRefusesMissingChecksum() passed after 0.109 seconds.
+􁁛  Test reviewerInFlightInstallCannotRepopulateChangedDraft() passed after 0.161 seconds.
+􁁛  Test remoteDuplicateWithoutReplaceIsRefusedBeforeToken() passed after 0.167 seconds.
+􁁛  Test reviewerChangedWorkFolderCannotReuseConfiguredSuccess() passed after 0.171 seconds.
+􁁛  Test reviewerForeignServerIdentityCannotAuthorizeLabels() passed after 0.171 seconds.
+􁁛  Test inFlightRegistrationCannotAttributeOldConfigToNewDraft() passed after 0.171 seconds.
+􁁛  Test groupChangeRefusesOldConfiguredSuccess() passed after 0.172 seconds.
+􁁛  Test orgWizardEndToEndDeletesTokenAndLeaksNothing() passed after 0.173 seconds.
+􁁛  Test inFlightLabelsCannotWriteForEditedDraft() passed after 0.173 seconds.
+􁁛  Test inFlightLabelsAbandonedWhenLabelsEdited() passed after 0.175 seconds.
+􁁛  Test run with 14 tests in 0 suites passed after 0.176 seconds.
+
+[reviewer observed process exit 0]

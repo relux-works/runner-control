@@ -1,0 +1,3685 @@
+diff --git a/Packages/RunnerControlCore/Sources/GitHubRunnerAPIClient.swift b/Packages/RunnerControlCore/Sources/GitHubRunnerAPIClient.swift
+new file mode 100644
+index 0000000..16cfcfd
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/GitHubRunnerAPIClient.swift
+@@ -0,0 +1,413 @@
++import Foundation
++
++/// GitHub REST client for self-hosted runner registration. Takes the user
++/// token explicitly per call; never stores it.
++public actor GitHubRunnerAPIClient {
++    private let transport: any GitHubHTTPTransport
++
++    public init(transport: any GitHubHTTPTransport) {
++        self.transport = transport
++    }
++
++    private func authorizedHeaders(token: String) throws -> [String: String] {
++        let header: String
++        do {
++            header = try GitHubAuth.PATGuard.authorizationHeader(token: token)
++        } catch {
++            throw GitHubAuth.AuthError.patNotSupported
++        }
++        return ["Accept": "application/vnd.github+json", "Authorization": header]
++    }
++
++    private func send(
++        method: String,
++        config: GitHubAuth.AppConfig,
++        path: String,
++        token: String,
++        body: Data? = nil
++    ) async throws -> GitHubHTTPResponse {
++        let headers = try authorizedHeaders(token: token)
++        var all = headers
++        if body != nil { all["Content-Type"] = "application/json" }
++        let request = GitHubHTTPRequest(
++            method: method,
++            url: config.apiBaseURL.appendingPathComponent(path),
++            headers: all,
++            body: body
++        )
++        let response: GitHubHTTPResponse
++        do {
++            response = try await transport.send(request)
++        } catch {
++            throw RunnerRegistration.RegistrationError.network(
++                GitHubTransportError.offline.localizedDescription
++            )
++        }
++        switch response.status {
++        case 200, 201:
++            return response
++        case 401:
++            throw RunnerRegistration.RegistrationError.unauthorized
++        case 403:
++            throw RunnerRegistration.RegistrationError.forbidden(
++                String(String(decoding: response.body, as: UTF8.self).prefix(300))
++            )
++        case 404:
++            throw RunnerRegistration.RegistrationError.network("GitHub resource not found (404): \(path).")
++        case 422:
++            throw RunnerRegistration.RegistrationError.network(
++                "GitHub rejected the request (422): " +
++                    String(String(decoding: response.body, as: UTF8.self).prefix(300))
++            )
++        default:
++            if response.status == 429
++                || String(decoding: response.body, as: UTF8.self).lowercased().contains("rate limit") {
++                throw RunnerRegistration.RegistrationError.rateLimited
++            }
++            throw RunnerRegistration.RegistrationError.network(
++                "GitHub request failed (HTTP \(response.status))."
++            )
++        }
++    }
++
++    private func decode<T: Decodable>(_ type: T.Type, from response: GitHubHTTPResponse) throws -> T {
++        do {
++            return try JSONDecoder().decode(type, from: response.body)
++        } catch {
++            throw RunnerRegistration.RegistrationError.network(
++                GitHubTransportError.invalidResponse.localizedDescription
++            )
++        }
++    }
++
++    // MARK: - Downloads
++
++    public func fetchDownloads(
++        config: GitHubAuth.AppConfig,
++        token: String,
++        scope: RunnerRegistration.Scope
++    ) async throws -> [RunnerRegistration.DownloadAsset] {
++        let response: GitHubHTTPResponse
++        do {
++            response = try await send(
++                method: "GET", config: config,
++                path: "\(scope.apiPrefix)/actions/runners/downloads", token: token
++            )
++        } catch let error as RunnerRegistration.RegistrationError {
++            if case .forbidden(let text) = error {
++                throw RunnerRegistration.RegistrationError.missingPermission(readHelp(scope: scope, detail: text))
++            }
++            throw error
++        }
++        let decoded = try decode([RunnerDownloadDTO].self, from: response)
++        return decoded.compactMap { dto -> RunnerRegistration.DownloadAsset? in
++            guard let url = URL(string: dto.downloadURL) else { return nil }
++            return .init(
++                osName: dto.osName, architecture: dto.architecture,
++                downloadURL: url, filename: dto.filename,
++                sha256Checksum: dto.sha256Checksum
++            )
++        }
++    }
++
++    // MARK: - Registration token (short-lived, single use)
++
++    public func createRegistrationToken(
++        config: GitHubAuth.AppConfig,
++        token: String,
++        scope: RunnerRegistration.Scope
++    ) async throws -> (token: String, expiresAt: Date?) {
++        let response: GitHubHTTPResponse
++        do {
++            response = try await send(
++                method: "POST", config: config,
++                path: "\(scope.apiPrefix)/actions/runners/registration-token", token: token
++            )
++        } catch let error as RunnerRegistration.RegistrationError {
++            if case .forbidden(let text) = error {
++                throw RunnerRegistration.RegistrationError.missingPermission(permissionHelp(scope: scope, detail: text))
++            }
++            throw error
++        }
++        let decoded = try decode(RegistrationTokenDTO.self, from: response)
++        guard !decoded.token.isEmpty else {
++            throw RunnerRegistration.RegistrationError.network(
++                GitHubTransportError.invalidResponse.localizedDescription
++            )
++        }
++        var expiresAt: Date?
++        if let raw = decoded.expiresAt {
++            expiresAt = ISO8601DateFormatter().date(from: raw)
++        }
++        return (decoded.token, expiresAt)
++    }
++
++    private func permissionHelp(scope: RunnerRegistration.Scope, detail: String) -> String {
++        writeHelp(scope: scope, detail: detail)
++    }
++
++    private func readHelp(scope: RunnerRegistration.Scope, detail: String) -> String {
++        let need: String
++        switch scope {
++        case .organization:
++            need = "Self-hosted runners/read for the organization"
++        case .repository:
++            need = "Administration/read for the repository"
++        }
++        let suffix = detail.isEmpty ? "" : " GitHub says: \(detail)"
++        return "Missing permission: \(need).\(suffix)"
++    }
++
++    private func writeHelp(scope: RunnerRegistration.Scope, detail: String) -> String {
++        let need: String
++        switch scope {
++        case .organization:
++            need = "Self-hosted runners/write for the organization"
++        case .repository:
++            need = "Administration/write for the repository"
++        }
++        let suffix = detail.isEmpty ? "" : " GitHub says: \(detail)"
++        return "Missing permission: \(need).\(suffix)"
++    }
++
++    private func groupReadHelp(org: String, detail: String) -> String {
++        let suffix = detail.isEmpty ? "" : " GitHub says: \(detail)"
++        return "Missing permission: Self-hosted runners/read for the organization \(org).\(suffix)"
++    }
++
++    // MARK: - Runners (fetch real IDs)
++
++    public func fetchRunners(
++        config: GitHubAuth.AppConfig,
++        token: String,
++        scope: RunnerRegistration.Scope
++    ) async throws -> [RunnerRegistration.RegisteredRunner] {
++        let response: GitHubHTTPResponse
++        do {
++            response = try await send(
++                method: "GET", config: config,
++                path: "\(scope.apiPrefix)/actions/runners", token: token
++            )
++        } catch let error as RunnerRegistration.RegistrationError {
++            if case .forbidden(let text) = error {
++                throw RunnerRegistration.RegistrationError.missingPermission(readHelp(scope: scope, detail: text))
++            }
++            throw error
++        }
++        let decoded = try decode(RunnersListDTO.self, from: response)
++        return decoded.runners.map {
++            .init(id: $0.id, name: $0.name, labels: $0.labels.map(\.name))
++        }
++    }
++
++    // MARK: - Runner groups (org only)
++
++    public func fetchGroups(
++        config: GitHubAuth.AppConfig,
++        token: String,
++        org: String
++    ) async throws -> [RunnerRegistration.RunnerGroup] {
++        let response: GitHubHTTPResponse
++        do {
++            response = try await send(
++                method: "GET", config: config,
++                path: "orgs/\(org)/actions/runner-groups", token: token
++            )
++        } catch let error as RunnerRegistration.RegistrationError {
++            if case .forbidden(let text) = error {
++                throw RunnerRegistration.RegistrationError.missingPermission(groupReadHelp(org: org, detail: text))
++            }
++            throw error
++        }
++        let decoded = try decode(RunnerGroupsListDTO.self, from: response)
++        return decoded.runnerGroups.map { .init(id: $0.id, name: $0.name, visibility: $0.visibility) }
++    }
++
++    public func createGroup(
++        config: GitHubAuth.AppConfig,
++        token: String,
++        org: String,
++        name: String,
++        selectedRepositoryIDs: Set<Int64>
++    ) async throws -> RunnerRegistration.RunnerGroup {
++        let payload = CreateGroupDTO(
++            name: name, visibility: "selected",
++            selectedRepositoryIDs: Array(selectedRepositoryIDs).sorted()
++        )
++        let body = try JSONEncoder().encode(payload)
++        let response: GitHubHTTPResponse
++        do {
++            response = try await send(
++                method: "POST", config: config,
++                path: "orgs/\(org)/actions/runner-groups", token: token, body: body
++            )
++        } catch let error as RunnerRegistration.RegistrationError {
++            if case .forbidden(let text) = error {
++                throw RunnerRegistration.RegistrationError.missingPermission(
++                    permissionHelp(scope: .organization(org: org), detail: text)
++                )
++            }
++            throw error
++        }
++        let decoded = try decode(RunnerGroupDTO.self, from: response)
++        return .init(id: decoded.id, name: decoded.name, visibility: decoded.visibility)
++    }
++
++    public func fetchGroupRepositories(
++        config: GitHubAuth.AppConfig,
++        token: String,
++        org: String,
++        groupID: Int64
++    ) async throws -> [Int64] {
++        let response: GitHubHTTPResponse
++        do {
++            response = try await send(
++                method: "GET", config: config,
++                path: "orgs/\(org)/actions/runner-groups/\(groupID)/repositories", token: token
++            )
++        } catch let error as RunnerRegistration.RegistrationError {
++            if case .forbidden(let text) = error {
++                throw RunnerRegistration.RegistrationError.missingPermission(groupReadHelp(org: org, detail: text))
++            }
++            throw error
++        }
++        let decoded = try decode(GroupRepositoriesDTO.self, from: response)
++        return decoded.repositories.map(\.id)
++    }
++
++    public func setGroupRepositories(
++        config: GitHubAuth.AppConfig,
++        token: String,
++        org: String,
++        groupID: Int64,
++        selectedRepositoryIDs: Set<Int64>
++    ) async throws {
++        let payload = SetGroupRepositoriesDTO(selectedRepositoryIDs: Array(selectedRepositoryIDs).sorted())
++        let body = try JSONEncoder().encode(payload)
++        do {
++            _ = try await send(
++                method: "PUT", config: config,
++                path: "orgs/\(org)/actions/runner-groups/\(groupID)/repositories", token: token, body: body
++            )
++        } catch let error as RunnerRegistration.RegistrationError {
++            if case .forbidden(let text) = error {
++                throw RunnerRegistration.RegistrationError.missingPermission(
++                    permissionHelp(scope: .organization(org: org), detail: text)
++                )
++            }
++            throw error
++        }
++    }
++
++    // MARK: - Labels (editable after registration)
++
++    public func setRunnerLabels(
++        config: GitHubAuth.AppConfig,
++        token: String,
++        scope: RunnerRegistration.Scope,
++        runnerID: Int64,
++        labels: [String]
++    ) async throws {
++        let payload = SetLabelsDTO(labels: labels)
++        let body = try JSONEncoder().encode(payload)
++        do {
++            _ = try await send(
++                method: "PUT", config: config,
++                path: "\(scope.apiPrefix)/actions/runners/\(runnerID)/labels", token: token, body: body
++            )
++        } catch let error as RunnerRegistration.RegistrationError {
++            if case .forbidden(let text) = error {
++                throw RunnerRegistration.RegistrationError.missingPermission(writeHelp(scope: scope, detail: text))
++            }
++            throw error
++        }
++    }
++}
++
++// MARK: - DTOs
++
++private struct RunnerDownloadDTO: Decodable, Sendable {
++    let osName: String
++    let architecture: String
++    let downloadURL: String
++    let filename: String
++    let sha256Checksum: String?
++
++    private enum CodingKeys: String, CodingKey {
++        case osName = "os"
++        case architecture
++        case downloadURL = "download_url"
++        case filename
++        case sha256Checksum = "sha256_checksum"
++    }
++}
++
++private struct RegistrationTokenDTO: Decodable, Sendable {
++    let token: String
++    let expiresAt: String?
++
++    private enum CodingKeys: String, CodingKey {
++        case token
++        case expiresAt = "expires_at"
++    }
++}
++
++private struct RunnersListDTO: Decodable, Sendable {
++    let runners: [RunnerDTO]
++}
++
++private struct RunnerDTO: Decodable, Sendable {
++    let id: Int64
++    let name: String
++    let labels: [LabelDTO]
++}
++
++private struct LabelDTO: Decodable, Sendable {
++    let name: String
++}
++
++private struct RunnerGroupsListDTO: Decodable, Sendable {
++    let runnerGroups: [RunnerGroupDTO]
++
++    private enum CodingKeys: String, CodingKey {
++        case runnerGroups = "runner_groups"
++    }
++}
++
++private struct RunnerGroupDTO: Decodable, Sendable {
++    let id: Int64
++    let name: String
++    let visibility: String
++}
++
++private struct GroupRepositoriesDTO: Decodable, Sendable {
++    let repositories: [GroupRepositoryDTO]
++}
++
++private struct GroupRepositoryDTO: Decodable, Sendable {
++    let id: Int64
++}
++
++private struct CreateGroupDTO: Encodable, Sendable {
++    let name: String
++    let visibility: String
++    let selectedRepositoryIDs: [Int64]
++
++    private enum CodingKeys: String, CodingKey {
++        case name
++        case visibility
++        case selectedRepositoryIDs = "selected_repository_ids"
++    }
++}
++
++private struct SetGroupRepositoriesDTO: Encodable, Sendable {
++    let selectedRepositoryIDs: [Int64]
++
++    private enum CodingKeys: String, CodingKey {
++        case selectedRepositoryIDs = "selected_repository_ids"
++    }
++}
++
++private struct SetLabelsDTO: Encodable, Sendable {
++    let labels: [String]
++}
+diff --git a/Packages/RunnerControlCore/Sources/RunnerInstallerService.swift b/Packages/RunnerControlCore/Sources/RunnerInstallerService.swift
+new file mode 100644
+index 0000000..4280bad
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/RunnerInstallerService.swift
+@@ -0,0 +1,263 @@
++import CryptoKit
++import Foundation
++
++/// Filesystem installer for downloaded GitHub Actions runners.
++///
++/// Production path: download bytes → SHA-256 verify → tar extract →
++/// `bin/runsvc.sh` copied into the root and chmodded (as official `svc.sh`
++/// would) → exact `config.sh` invocation → manual LaunchAgent plist.
++/// All side effects stay below `installRoot`; tests inject a temporary root,
++/// a fake downloader, and fixtures instead of touching production runners.
++public actor RunnerInstallerService {
++    public static let markerFileName = ".runnercontrol-install.json"
++    public static let installOS = "osx"
++
++    private let installRoot: URL
++    private let downloader: @Sendable (URL) async throws -> Data
++    private let executor: any CommandExecuting
++    private let currentArch: @Sendable () -> String
++    private let hasher: @Sendable (Data) -> String
++
++    public init(
++        installRoot: URL? = nil,
++        downloader: (@Sendable (URL) async throws -> Data)? = nil,
++        executor: (any CommandExecuting)? = nil,
++        currentArch: (@Sendable () -> String)? = nil,
++        hasher: (@Sendable (Data) -> String)? = nil
++    ) {
++        self.installRoot = installRoot
++            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/GitHubActions")
++        self.downloader = downloader ?? { url in
++            let (data, _) = try await URLSession.shared.data(from: url)
++            return data
++        }
++        self.executor = executor ?? CommandExecutor()
++        self.currentArch = currentArch ?? {
++            #if arch(arm64)
++            return "arm64"
++            #else
++            return "x64"
++            #endif
++        }
++        self.hasher = hasher ?? { data in
++            SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
++        }
++    }
++
++    public nonisolated var root: URL { installRoot }
++    public nonisolated var architecture: String { currentArch() }
++
++    public func directory(for installDirName: String) -> URL {
++        installRoot.appendingPathComponent(installDirName)
++    }
++
++    // MARK: - Idempotency markers
++
++    public struct Marker: Codable, Sendable, Equatable {
++        public var scopeKey: String
++        public var completedSteps: Set<String>
++        public init(scopeKey: String, completedSteps: Set<String> = []) {
++            self.scopeKey = scopeKey; self.completedSteps = completedSteps
++        }
++    }
++
++    public static let stepDownloaded = "downloaded"
++    public static let stepInstalled = "installed"
++    public static let stepConfigured = "configured"
++    public static let stepServiceReady = "serviceReady"
++
++    public func loadMarker(directory: URL) -> Marker? {
++        let url = directory.appendingPathComponent(Self.markerFileName)
++        guard let data = try? Data(contentsOf: url) else { return nil }
++        return try? JSONDecoder().decode(Marker.self, from: data)
++    }
++
++    private func storeMarker(_ marker: Marker, directory: URL) throws {
++        let data = try JSONEncoder().encode(marker)
++        try data.write(to: directory.appendingPathComponent(Self.markerFileName), options: .atomic)
++    }
++
++    public func markCompleted(_ step: String, directory: URL, scopeKey: String) throws {
++        var marker = loadMarker(directory: directory) ?? Marker(scopeKey: scopeKey)
++        marker.completedSteps.insert(step)
++        try storeMarker(marker, directory: directory)
++    }
++
++    public func hasCompleted(_ step: String, directory: URL) -> Bool {
++        loadMarker(directory: directory)?.completedSteps.contains(step) == true
++    }
++
++    // MARK: - Install
++
++    /// Downloads, verifies, and extracts the official package. Idempotent:
++    /// a completed `installed` marker with matching scope skips the work.
++    /// Refuses to overwrite an already-registered directory (no duplicates).
++    public func downloadAndInstall(
++        asset: RunnerRegistration.DownloadAsset,
++        draft: RunnerRegistration.Draft
++    ) async throws -> URL {
++        try RunnerRegistration.Gates.validateNoSpace(
++            installDirName: draft.installDirName, workFolder: draft.workFolder
++        )
++        let directory = self.directory(for: draft.installDirName)
++        if directory.path.contains(" ") {
++            throw RunnerRegistration.RegistrationError.noSpacePath("Installation path must not contain spaces.")
++        }
++        let files = FileManager.default
++        if let marker = loadMarker(directory: directory),
++           marker.completedSteps.contains(Self.stepInstalled),
++           marker.scopeKey == draft.scope.scopeKey,
++           files.fileExists(atPath: directory.appendingPathComponent("run.sh").path) {
++            return directory
++        }
++        if files.fileExists(atPath: directory.appendingPathComponent(".runner").path) {
++            throw RunnerRegistration.RegistrationError.alreadyRegistered(name: draft.runnerName)
++        }
++        let bytes: Data
++        do {
++            bytes = try await downloader(asset.downloadURL)
++        } catch {
++            throw RunnerRegistration.RegistrationError.network("Runner download failed: \(error.localizedDescription)")
++        }
++        if let expected = asset.sha256Checksum, !expected.isEmpty {
++            let actual = hasher(bytes)
++            guard actual.lowercased() == expected.lowercased() else {
++                throw RunnerRegistration.RegistrationError.integrityMismatch
++            }
++        }
++        try files.createDirectory(at: directory, withIntermediateDirectories: true)
++        let archive = files.temporaryDirectory.appendingPathComponent(UUID().uuidString + "-" + asset.filename)
++        defer { try? files.removeItem(at: archive) }
++        try bytes.write(to: archive, options: .atomic)
++        let result = try await executor.run("/usr/bin/tar", ["-xzf", archive.path, "-C", directory.path])
++        guard result.code == 0 else {
++            throw RunnerRegistration.RegistrationError.network(
++                "Runner archive extraction failed: \(String(result.output.prefix(300)))"
++            )
++        }
++        // Official packages keep runsvc.sh under bin/ until svc.sh installs it;
++        // a bare extraction leaves the root copy absent, so install it here.
++        try installRunsvc(directory: directory)
++        try markCompleted(Self.stepDownloaded, directory: directory, scopeKey: draft.scope.scopeKey)
++        try markCompleted(Self.stepInstalled, directory: directory, scopeKey: draft.scope.scopeKey)
++        return directory
++    }
++
++    /// Copies official `bin/runsvc.sh` into the installation root and makes
++    /// it executable, mirroring what official `svc.sh install` would do.
++    public func installRunsvc(directory: URL) throws {
++        let files = FileManager.default
++        let source = directory.appendingPathComponent("bin/runsvc.sh")
++        let target = directory.appendingPathComponent("runsvc.sh")
++        guard files.fileExists(atPath: source.path) else {
++            throw RunnerRegistration.RegistrationError.network("Runner package is missing bin/runsvc.sh.")
++        }
++        if files.fileExists(atPath: target.path) {
++            try files.removeItem(at: target)
++        }
++        try files.copyItem(at: source, to: target)
++        try files.setAttributes([.posixPermissions: 0o755], ofItemAtPath: target.path)
++    }
++
++    // MARK: - Configure
++
++    /// Runs the exact `config.sh` invocation. Skips when a previous attempt
++    /// already registered this directory (marker + `.runner` present), so
++    /// retries never create orphan or duplicate GitHub registrations.
++    /// Returns the local agent ID read back from `.runner`.
++    @discardableResult
++    public func runConfig(
++        directory: URL,
++        scopeURL: String,
++        token: String,
++        draft: RunnerRegistration.Draft,
++        runnerGroup: String?
++    ) async throws -> Int64? {
++        let files = FileManager.default
++        if hasCompleted(Self.stepConfigured, directory: directory),
++           files.fileExists(atPath: directory.appendingPathComponent(".runner").path) {
++            return readAgentID(directory: directory)
++        }
++        if files.fileExists(atPath: directory.appendingPathComponent(".runner").path),
++           hasCompleted(Self.stepConfigured, directory: directory) {
++            return readAgentID(directory: directory)
++        }
++        let spec = RunnerRegistration.ConfigSpec(
++            scopeURL: scopeURL, token: token, name: draft.runnerName,
++            workFolder: draft.workFolder, labels: draft.labels, runnerGroup: runnerGroup
++        )
++        let args = RunnerRegistration.ConfigInvocation.arguments(spec)
++        let executable = directory.appendingPathComponent("config.sh").path
++        guard files.fileExists(atPath: executable) else {
++            throw RunnerRegistration.RegistrationError.network("Runner package is missing config.sh.")
++        }
++        let result = try await executor.run(executable, args)
++        guard result.code == 0 else {
++            // Never echo the token: config output may repeat arguments.
++            let scrubbed = GitHubAuth.Redaction.sanitize(result.output, secrets: [token])
++            throw RunnerRegistration.RegistrationError.configFailed(String(scrubbed.prefix(700)))
++        }
++        guard files.fileExists(atPath: directory.appendingPathComponent(".runner").path) else {
++            throw RunnerRegistration.RegistrationError.configFailed(
++                "config.sh reported success but .runner is missing."
++            )
++        }
++        try markCompleted(Self.stepConfigured, directory: directory, scopeKey: draft.scope.scopeKey)
++        return readAgentID(directory: directory)
++    }
++
++    /// Reads the local agent ID from `.runner` without touching credentials.
++    public func readAgentID(directory: URL) -> Int64? {
++        guard let data = try? Data(contentsOf: directory.appendingPathComponent(".runner")),
++              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
++        if let id = object["agentId"] as? Int64 { return id }
++        if let id = object["agentId"] as? Int { return Int64(id) }
++        if let id = object["agentId"] as? NSNumber { return id.int64Value }
++        return nil
++    }
++
++    // MARK: - Manual LaunchAgent
++
++    /// Writes the manual service plist (RunAtLoad off for new runners) and
++    /// validates it matches the directory. Never bootstraps the service:
++    /// enabling is the user's separate action.
++    @discardableResult
++    public func setupService(directory: URL, label: String) throws -> URL {
++        guard !directory.path.contains(" ") else {
++            throw RunnerRegistration.RegistrationError.noSpacePath("Installation path must not contain spaces.")
++        }
++        let files = FileManager.default
++        guard files.fileExists(atPath: directory.appendingPathComponent("runsvc.sh").path) else {
++            throw RunnerRegistration.RegistrationError.network(
++                "runsvc.sh is missing; reinstall before setting up the service."
++            )
++        }
++        let plist = directory.appendingPathComponent("manual-service.plist")
++        let payload: [String: Any] = [
++            "Label": label,
++            "ProgramArguments": [directory.appendingPathComponent("runsvc.sh").path],
++            "WorkingDirectory": directory.path,
++            "RunAtLoad": false
++        ]
++        let data = try PropertyListSerialization.data(fromPropertyList: payload, format: .xml, options: 0)
++        try data.write(to: plist, options: .atomic)
++        let scopeKey = loadMarker(directory: directory)?.scopeKey ?? ""
++        try markCompleted(Self.stepServiceReady, directory: directory, scopeKey: scopeKey)
++        return plist
++    }
++
++    /// Removes a failed partial install so retries start clean. Refuses to
++    /// touch directories that already hold a registration (`.runner`) or an
++    /// unknown marker scope: recovery never deletes a working runner.
++    public func recoverPartialInstall(directory: URL, scopeKey: String) throws {
++        let files = FileManager.default
++        guard files.fileExists(atPath: directory.path) else { return }
++        guard !files.fileExists(atPath: directory.appendingPathComponent(".runner").path) else {
++            throw RunnerRegistration.RegistrationError.alreadyRegistered(name: directory.lastPathComponent)
++        }
++        if let marker = loadMarker(directory: directory), marker.scopeKey != scopeKey {
++            throw RunnerRegistration.RegistrationError.alreadyInstalled(path: directory.path)
++        }
++        try files.removeItem(at: directory)
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/RunnerRegistration+Flow.swift b/Packages/RunnerControlCore/Sources/RunnerRegistration+Flow.swift
+new file mode 100644
+index 0000000..cd9f65e
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/RunnerRegistration+Flow.swift
+@@ -0,0 +1,591 @@
++import Foundation
++import Relux
++
++extension RunnerRegistration {
++    public protocol IFlow: Relux.Flow {}
++
++    public actor Flow {
++        public let dispatcher: Relux.Dispatcher
++        private let api: GitHubRunnerAPIClient
++        private let installer: RunnerInstallerService
++        private let registrationTokens: any RunnerRegistrationTokenStoring
++        private let userStore: any GitHubCredentialStoring
++        private let identities: any GitHubSessionIdentityStoring
++        private let refresher: GitHubTokenRefresh
++        private let configProvider: @Sendable (String?) throws -> GitHubAuth.AppConfig
++        private let now: @Sendable () -> Date
++
++        private var generation = 0
++        private var working = false
++        private var draft: Draft?
++        private var group: RunnerGroup?
++        private var asset: DownloadAsset?
++        private var installPath: String?
++        private var runnerID: Int64?
++        private var failedStep: String?
++        private var pendingRepositoryIDs: Set<Int64>?
++        private var pendingTargetGroupID: Int64?
++        private var pendingLabels: [String]?
++
++        public init(
++            api: GitHubRunnerAPIClient,
++            installer: RunnerInstallerService,
++            registrationTokens: any RunnerRegistrationTokenStoring,
++            userStore: any GitHubCredentialStoring,
++            identityStore: any GitHubSessionIdentityStoring,
++            refresher: GitHubTokenRefresh,
++            configProvider: (@Sendable (String?) throws -> GitHubAuth.AppConfig)? = nil,
++            now: (@Sendable () -> Date)? = nil,
++            dispatcher: Relux.Dispatcher? = nil
++        ) async {
++            self.api = api
++            self.installer = installer
++            self.registrationTokens = registrationTokens
++            self.userStore = userStore
++            self.identities = identityStore
++            self.refresher = refresher
++            self.configProvider = configProvider ?? { host in
++                try GitHubAuth.AppConfig.current(serverHost: host ?? "github.com")
++            }
++            self.now = now ?? Date.init
++            self.dispatcher = if let dispatcher { dispatcher } else { await Self.defaultDispatcher }
++        }
++
++        /// Deterministic LaunchAgent label for a draft. Always carries the
++        /// `actions.runner.` prefix discovery requires.
++        public nonisolated static func serviceLabel(draft: Draft) -> String {
++            let scope = draft.scope.detail.replacingOccurrences(of: "/", with: "-")
++            let raw = "actions.runner.\(scope).\(draft.installDirName)"
++            let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".-"))
++            return raw.unicodeScalars.map { allowed.contains($0) ? String($0) : "-" }.joined()
++        }
++
++        public nonisolated static func tokenScopeKey(draft: Draft) -> String {
++            "\(draft.scope.scopeKey):\(draft.installDirName)"
++        }
++    }
++}
++
++/// Authenticated user token for wizard API calls. Never logged.
++private struct FlowUserToken: Sendable {
++    let config: GitHubAuth.AppConfig
++    let token: String
++    let identity: GitHubSessionIdentity
++}
++
++extension RunnerRegistration.Flow: RunnerRegistration.IFlow {
++    public func apply(_ effect: any Relux.Effect) async -> Relux.ActionResult {
++        guard let effect = effect as? RunnerRegistration.Effect else { return .success }
++        switch effect {
++        case .beginDraft(let draft): await beginDraft(draft)
++        case .updateDraft(let draft): await updateDraft(draft)
++        case .resolveGroup: await resolveGroup()
++        case .prepareDownload: await prepareDownload()
++        case .downloadAndInstall: await downloadAndInstall()
++        case .registerRunner: await registerRunner()
++        case .setupService: await setupService()
++        case .applyRepositoryAccess(let groupID, let ids): await applyRepositoryAccess(groupID: groupID, ids: ids)
++        case .applyLabels(let labels): await applyLabels(labels)
++        case .retry: await retry()
++        case .cancel: await cancel()
++        case .reset: await reset()
++        case .dismissPermission: await action { RunnerRegistration.Action.permissionDismissed }
++        }
++        return .success
++    }
++
++    private func isStale(_ gen: Int) -> Bool { generation != gen }
++
++    // MARK: - Draft
++
++    private func beginDraft(_ draft: RunnerRegistration.Draft) async {
++        do {
++            try RunnerRegistration.Gates.validateDraft(draft)
++        } catch {
++            await action { RunnerRegistration.Action.failed(message: error.localizedDescription, step: "beginDraft") }
++            return
++        }
++        self.draft = draft
++        group = nil
++        asset = nil
++        installPath = nil
++        runnerID = nil
++        failedStep = nil
++        await action { RunnerRegistration.Action.draftBegan(draft) }
++    }
++
++    private func updateDraft(_ draft: RunnerRegistration.Draft) async {
++        do {
++            try RunnerRegistration.Gates.validateDraft(draft)
++        } catch {
++            await action { RunnerRegistration.Action.failed(message: error.localizedDescription, step: "updateDraft") }
++            return
++        }
++        // A scope change invalidates resolved group/download state.
++        if self.draft?.scope != draft.scope {
++            group = nil
++            asset = nil
++        }
++        self.draft = draft
++        await action { RunnerRegistration.Action.draftUpdated(draft) }
++    }
++
++    // MARK: - Auth
++
++    private func currentUserToken(generation gen: Int) async throws -> FlowUserToken {
++        guard let identity = await identities.load() else {
++            throw RunnerRegistration.RegistrationError.notAuthenticated
++        }
++        let config = try configProvider(identity.serverHost)
++        guard var record = await userStore.load(
++            serverHost: identity.serverHost, userID: identity.userID, clientID: identity.clientID
++        ) else {
++            throw RunnerRegistration.RegistrationError.notAuthenticated
++        }
++        guard !isStale(gen) else { throw CancellationError() }
++        if GitHubTokenRefresh.isExpiringSoon(record, now: now()) {
++            do {
++                record = try await refresher.refresh(config: config, userID: identity.userID, current: record)
++            } catch is CancellationError {
++                throw CancellationError()
++            } catch let error as GitHubAuth.AuthError {
++                switch error {
++                case .revoked, .unauthorized, .tokenRefreshFailed:
++                    throw RunnerRegistration.RegistrationError.unauthorized
++                default:
++                    break
++                }
++            }
++            guard !isStale(gen) else { throw CancellationError() }
++        }
++        return FlowUserToken(config: config, token: record.accessToken, identity: identity)
++    }
++
++    private func fail(_ error: Error, step: String, generation gen: Int) async {
++        guard !isStale(gen) else { return }
++        failedStep = step
++        if error is CancellationError { return }
++        if let reg = error as? RunnerRegistration.RegistrationError {
++            switch reg {
++            case .missingPermission, .forbidden:
++                await action {
++                    RunnerRegistration.Action.permissionDenied(message: reg.localizedDescription, step: step)
++                }
++                return
++            default:
++                break
++            }
++        }
++        let message = (error as? LocalizedError)?.localizedDescription ?? error.localizedDescription
++        await action { RunnerRegistration.Action.failed(message: message, step: step) }
++    }
++
++    private func finishStep(_ step: String, generation gen: Int) async {
++        guard !isStale(gen) else { return }
++        failedStep = nil
++        working = false
++        await action { RunnerRegistration.Action.stepFinished(step) }
++    }
++
++    // MARK: - Group
++
++    private func resolveGroup() async {
++        let gen = generation
++        guard !working else { return }
++        guard let draft else {
++            await action { RunnerRegistration.Action.failed(message: "Start a draft first.", step: "resolveGroup") }
++            return
++        }
++        do {
++            try RunnerRegistration.Gates.requireOrganizationScope(draft.scope)
++        } catch {
++            failedStep = "resolveGroup"
++            await action { RunnerRegistration.Action.failed(message: error.localizedDescription, step: "resolveGroup") }
++            return
++        }
++        guard case .organization(let org) = draft.scope else { return }
++        working = true
++        await action { RunnerRegistration.Action.stepStarted("resolveGroup") }
++        do {
++            let auth = try await currentUserToken(generation: gen)
++            guard !isStale(gen) else { return }
++            let groups = try await api.fetchGroups(config: auth.config, token: auth.token, org: org)
++            guard !isStale(gen) else { return }
++            let name = draft.groupName.trimmingCharacters(in: .whitespacesAndNewlines)
++            let resolved: RunnerRegistration.RunnerGroup
++            if let existing = groups.first(where: { $0.name == name }) {
++                resolved = existing
++            } else {
++                resolved = try await api.createGroup(
++                    config: auth.config, token: auth.token, org: org,
++                    name: name, selectedRepositoryIDs: draft.selectedRepositoryIDs
++                )
++            }
++            guard !isStale(gen) else { return }
++            let repoIDs = try await api.fetchGroupRepositories(
++                config: auth.config, token: auth.token, org: org, groupID: resolved.id
++            )
++            guard !isStale(gen) else { return }
++            group = resolved
++            await action { RunnerRegistration.Action.groupResolved(resolved, repositoryIDs: repoIDs) }
++            guard !isStale(gen) else { return }
++            await action { RunnerRegistration.Action.permissionDismissed }
++            await finishStep("resolveGroup", generation: gen)
++        } catch {
++            working = false
++            await fail(error, step: "resolveGroup", generation: gen)
++        }
++    }
++
++    // MARK: - Download
++
++    private func prepareDownload() async {
++        let gen = generation
++        guard !working else { return }
++        guard let draft else {
++            await action { RunnerRegistration.Action.failed(message: "Start a draft first.", step: "prepareDownload") }
++            return
++        }
++        working = true
++        await action { RunnerRegistration.Action.stepStarted("prepareDownload") }
++        do {
++            let found = try await prepareDownloadInner(draft: draft, generation: gen)
++            guard !isStale(gen) else { return }
++            asset = found
++            await action { RunnerRegistration.Action.downloadReady(found) }
++            await finishStep("prepareDownload", generation: gen)
++        } catch {
++            working = false
++            await fail(error, step: "prepareDownload", generation: gen)
++        }
++    }
++
++    private func prepareDownloadInner(
++        draft: RunnerRegistration.Draft, generation gen: Int
++    ) async throws -> RunnerRegistration.DownloadAsset {
++        let auth = try await currentUserToken(generation: gen)
++        guard !isStale(gen) else { throw CancellationError() }
++        let assets = try await api.fetchDownloads(config: auth.config, token: auth.token, scope: draft.scope)
++        guard !isStale(gen) else { throw CancellationError() }
++        return try RunnerRegistration.Gates.selectDownload(
++            osName: RunnerInstallerService.installOS,
++            arch: installer.architecture,
++            from: assets
++        )
++    }
++
++    // MARK: - Install
++
++    private func downloadAndInstall() async {
++        let gen = generation
++        guard !working else { return }
++        guard let draft else {
++            await action {
++                RunnerRegistration.Action.failed(message: "Start a draft first.", step: "downloadAndInstall")
++            }
++            return
++        }
++        working = true
++        await action { RunnerRegistration.Action.stepStarted("downloadAndInstall") }
++        do {
++            let resolved: RunnerRegistration.DownloadAsset
++            if let asset {
++                resolved = asset
++            } else {
++                resolved = try await prepareDownloadInner(draft: draft, generation: gen)
++                guard !isStale(gen) else { return }
++                asset = resolved
++                await action { RunnerRegistration.Action.downloadReady(resolved) }
++            }
++            guard !isStale(gen) else { return }
++            let directory = try await installer.downloadAndInstall(asset: resolved, draft: draft)
++            guard !isStale(gen) else { return }
++            installPath = directory.path
++            await action { RunnerRegistration.Action.installed(path: directory.path) }
++            await finishStep("downloadAndInstall", generation: gen)
++        } catch {
++            working = false
++            await fail(error, step: "downloadAndInstall", generation: gen)
++        }
++    }
++
++    // MARK: - Register
++
++    private func registerRunner() async {
++        let gen = generation
++        guard !working else { return }
++        guard let draft else {
++            await action { RunnerRegistration.Action.failed(message: "Start a draft first.", step: "registerRunner") }
++            return
++        }
++        guard let installPath else {
++            failedStep = "registerRunner"
++            await action {
++                RunnerRegistration.Action.failed(message: "Install the runner package first.", step: "registerRunner")
++            }
++            return
++        }
++        working = true
++        await action { RunnerRegistration.Action.stepStarted("registerRunner") }
++        let directory = URL(fileURLWithPath: installPath)
++        let scopeKey = Self.tokenScopeKey(draft: draft)
++        do {
++            // Idempotent resume: an already-configured directory never mints
++            // a second registration token or a duplicate GitHub registration.
++            if await installer.hasCompleted(RunnerInstallerService.stepConfigured, directory: directory) {
++                let localID = await installer.readAgentID(directory: directory)
++                let remoteID = try await resolveRemoteRunnerID(draft: draft, generation: gen)
++                guard !isStale(gen) else { return }
++                runnerID = remoteID
++                await action { RunnerRegistration.Action.registered(runnerID: remoteID, localAgentID: localID) }
++                await finishStep("registerRunner", generation: gen)
++                return
++            }
++            let auth = try await currentUserToken(generation: gen)
++            guard !isStale(gen) else { return }
++            let created = try await api.createRegistrationToken(
++                config: auth.config, token: auth.token, scope: draft.scope
++            )
++            guard !isStale(gen) else { return }
++            let scoped = RunnerRegistration.ScopedToken(
++                token: created.token, expiresAt: created.expiresAt, obtainedAt: now()
++            )
++            try await registrationTokens.save(scoped, scopeKey: scopeKey)
++            guard !isStale(gen) else { return }
++            let groupName: String?
++            switch draft.scope {
++            case .organization: groupName = draft.groupName.trimmingCharacters(in: .whitespacesAndNewlines)
++            case .repository: groupName = nil
++            }
++            let localID: Int64?
++            do {
++                localID = try await installer.runConfig(
++                    directory: directory,
++                    scopeURL: draft.scope.configURL(serverHost: auth.identity.serverHost),
++                    token: created.token,
++                    draft: draft,
++                    runnerGroup: groupName
++                )
++            } catch {
++                await registrationTokens.delete(scopeKey: scopeKey)
++                throw error
++            }
++            guard !isStale(gen) else { return }
++            let remoteID = try await resolveRemoteRunnerID(draft: draft, generation: gen)
++            guard !isStale(gen) else { return }
++            await registrationTokens.delete(scopeKey: scopeKey)
++            guard !isStale(gen) else { return }
++            runnerID = remoteID
++            await action { RunnerRegistration.Action.registered(runnerID: remoteID, localAgentID: localID) }
++            guard !isStale(gen) else { return }
++            await action { RunnerRegistration.Action.permissionDismissed }
++            await finishStep("registerRunner", generation: gen)
++        } catch {
++            working = false
++            await fail(error, step: "registerRunner", generation: gen)
++        }
++    }
++
++    /// Fetches the real GitHub runner ID by matching the registered name.
++    /// Returns nil when the runner list does not (yet) contain it.
++    private func resolveRemoteRunnerID(draft: RunnerRegistration.Draft, generation gen: Int) async throws -> Int64? {
++        let auth = try await currentUserToken(generation: gen)
++        guard !isStale(gen) else { throw CancellationError() }
++        let runners = try await api.fetchRunners(config: auth.config, token: auth.token, scope: draft.scope)
++        let wanted = draft.runnerName.trimmingCharacters(in: .whitespacesAndNewlines)
++        return runners.first(where: { $0.name == wanted })?.id
++    }
++
++    // MARK: - Service
++
++    private func setupService() async {
++        let gen = generation
++        guard !working else { return }
++        guard let draft, let installPath else {
++            await action {
++                RunnerRegistration.Action.failed(message: "Register the runner first.", step: "setupService")
++            }
++            return
++        }
++        working = true
++        await action { RunnerRegistration.Action.stepStarted("setupService") }
++        do {
++            let directory = URL(fileURLWithPath: installPath)
++            let label = Self.serviceLabel(draft: draft)
++            let plist = try await installer.setupService(directory: directory, label: label)
++            guard !isStale(gen) else { return }
++            await action { RunnerRegistration.Action.serviceReady(plistPath: plist.path) }
++            await finishStep("setupService", generation: gen)
++        } catch {
++            working = false
++            await fail(error, step: "setupService", generation: gen)
++        }
++    }
++
++    // MARK: - Editable access and labels
++
++    private func applyRepositoryAccess(groupID: Int64, ids: Set<Int64>) async {
++        let gen = generation
++        guard !working else { return }
++        guard let draft else {
++            await action {
++                RunnerRegistration.Action.failed(message: "Start a draft first.", step: "applyRepositoryAccess")
++            }
++            return
++        }
++        do {
++            try RunnerRegistration.Gates.requireOrganizationScope(draft.scope)
++            guard case .organization(let org) = draft.scope else { return }
++            guard let group else {
++                failedStep = "applyRepositoryAccess"
++                await action {
++                    RunnerRegistration.Action.failed(
++                        message: "Resolve the dedicated group first.", step: "applyRepositoryAccess"
++                    )
++                }
++                return
++            }
++            try RunnerRegistration.Gates.authorizeGroupMutation(
++                targetGroupID: groupID, resolvedGroupID: group.id,
++                allowFlag: draft.allowGroupMutation
++            )
++            working = true
++            pendingRepositoryIDs = ids
++            pendingTargetGroupID = groupID
++            await action { RunnerRegistration.Action.stepStarted("applyRepositoryAccess") }
++            let auth = try await currentUserToken(generation: gen)
++            guard !isStale(gen) else { return }
++            try await api.setGroupRepositories(
++                config: auth.config, token: auth.token, org: org, groupID: group.id, selectedRepositoryIDs: ids
++            )
++            guard !isStale(gen) else { return }
++            let confirmed = try await api.fetchGroupRepositories(
++                config: auth.config, token: auth.token, org: org, groupID: group.id
++            )
++            guard !isStale(gen) else { return }
++            if var current = self.draft {
++                current.selectedRepositoryIDs = Set(confirmed)
++                self.draft = current
++            }
++            await action { RunnerRegistration.Action.repositoryAccessApplied(confirmed) }
++            guard !isStale(gen) else { return }
++            await action { RunnerRegistration.Action.permissionDismissed }
++            pendingRepositoryIDs = nil
++            pendingTargetGroupID = nil
++            await finishStep("applyRepositoryAccess", generation: gen)
++        } catch {
++            working = false
++            await fail(error, step: "applyRepositoryAccess", generation: gen)
++        }
++    }
++
++    private func applyLabels(_ labels: [String]) async {
++        let gen = generation
++        guard !working else { return }
++        guard let draft else {
++            await action { RunnerRegistration.Action.failed(message: "Start a draft first.", step: "applyLabels") }
++            return
++        }
++        let trimmed = labels.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
++        guard !trimmed.isEmpty else {
++            failedStep = "applyLabels"
++            await action {
++                RunnerRegistration.Action.failed(message: "At least one label is required.", step: "applyLabels")
++            }
++            return
++        }
++        working = true
++        pendingLabels = trimmed
++        await action { RunnerRegistration.Action.stepStarted("applyLabels") }
++        do {
++            let resolved: Int64?
++            if let runnerID {
++                resolved = runnerID
++            } else {
++                resolved = try await resolveRemoteRunnerID(draft: draft, generation: gen)
++                guard !isStale(gen) else { return }
++            }
++            guard let runnerID = resolved else {
++                failedStep = "applyLabels"
++                working = false
++                await action {
++                    RunnerRegistration.Action.failed(
++                        message: "Register the runner first so labels have a real runner ID.",
++                        step: "applyLabels"
++                    )
++                }
++                return
++            }
++            let auth = try await currentUserToken(generation: gen)
++            guard !isStale(gen) else { return }
++            try await api.setRunnerLabels(
++                config: auth.config, token: auth.token, scope: draft.scope, runnerID: runnerID, labels: trimmed
++            )
++            guard !isStale(gen) else { return }
++            self.runnerID = runnerID
++            if var current = self.draft {
++                current.labels = trimmed
++                self.draft = current
++            }
++            await action { RunnerRegistration.Action.labelsApplied(trimmed) }
++            pendingLabels = nil
++            await finishStep("applyLabels", generation: gen)
++        } catch {
++            working = false
++            await fail(error, step: "applyLabels", generation: gen)
++        }
++    }
++
++    // MARK: - Retry / cancel / reset
++
++    private func retry() async {
++        guard !working else { return }
++        guard let step = failedStep else { return }
++        switch step {
++        case "resolveGroup": await resolveGroup()
++        case "prepareDownload": await prepareDownload()
++        case "downloadAndInstall": await downloadAndInstall()
++        case "registerRunner": await registerRunner()
++        case "setupService": await setupService()
++        case "applyRepositoryAccess":
++            if let ids = pendingRepositoryIDs, let target = pendingTargetGroupID {
++                await applyRepositoryAccess(groupID: target, ids: ids)
++            }
++        case "applyLabels":
++            if let labels = pendingLabels { await applyLabels(labels) }
++        default:
++            return
++        }
++    }
++
++    private func cancel() async {
++        generation += 1
++        working = false
++        if let draft {
++            await registrationTokens.delete(scopeKey: Self.tokenScopeKey(draft: draft))
++        }
++        failedStep = nil
++        pendingRepositoryIDs = nil
++        pendingTargetGroupID = nil
++        pendingLabels = nil
++        await action { RunnerRegistration.Action.cancelled }
++    }
++
++    private func reset() async {
++        generation += 1
++        working = false
++        if let draft {
++            await registrationTokens.delete(scopeKey: Self.tokenScopeKey(draft: draft))
++        }
++        draft = nil
++        group = nil
++        asset = nil
++        installPath = nil
++        runnerID = nil
++        failedStep = nil
++        pendingRepositoryIDs = nil
++        pendingTargetGroupID = nil
++        pendingLabels = nil
++        await action { RunnerRegistration.Action.didReset }
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/RunnerRegistration+Gates.swift b/Packages/RunnerControlCore/Sources/RunnerRegistration+Gates.swift
+new file mode 100644
+index 0000000..c9eeb03
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/RunnerRegistration+Gates.swift
+@@ -0,0 +1,116 @@
++import Foundation
++
++extension RunnerRegistration {
++    /// Validation gates. Each gate refuses a concrete invalid class; negative
++    /// tests narrow every one of them.
++    public enum Gates {
++        /// Refuses install/work paths containing spaces. GitHub's own setup has
++        /// a known defect with spaced paths; the wizard never reproduces it.
++        public static func validateNoSpace(installDirName: String, workFolder: String) throws {
++            if installDirName.contains(" ") {
++                throw RegistrationError.noSpacePath("Installation folder name must not contain spaces.")
++            }
++            if installDirName.contains("/") || installDirName.isEmpty {
++                throw RegistrationError.invalidDraft("Installation folder name is invalid.")
++            }
++            if workFolder.contains(" ") {
++                throw RegistrationError.noSpacePath("Work folder must not contain spaces.")
++            }
++            if workFolder.isEmpty || workFolder.contains("/") {
++                throw RegistrationError.invalidDraft("Work folder name is invalid.")
++            }
++        }
++
++        /// Validates the full draft before any network or filesystem mutation.
++        public static func validateDraft(_ draft: Draft) throws {
++            let name = draft.runnerName.trimmingCharacters(in: .whitespacesAndNewlines)
++            guard !name.isEmpty else {
++                throw RegistrationError.invalidDraft("Runner name must not be empty.")
++            }
++            guard name.count <= 64 else {
++                throw RegistrationError.invalidDraft("Runner name is too long (max 64 characters).")
++            }
++            let labels = draft.labels.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
++            guard !labels.isEmpty else {
++                throw RegistrationError.invalidDraft("At least one label is required.")
++            }
++            for label in labels {
++                guard !label.isEmpty else {
++                    throw RegistrationError.invalidDraft("Labels must not be empty.")
++                }
++                guard label.count <= 100 else {
++                    throw RegistrationError.invalidDraft("Label '\(label)' is too long (max 100 characters).")
++                }
++            }
++            try validateNoSpace(installDirName: draft.installDirName, workFolder: draft.workFolder)
++            switch draft.scope {
++            case .organization:
++                let group = draft.groupName.trimmingCharacters(in: .whitespacesAndNewlines)
++                guard !group.isEmpty else {
++                    throw RegistrationError.invalidDraft("Organization runners need a dedicated per-Mac group name.")
++                }
++            case .repository:
++                break
++            }
++        }
++
++        /// Picks the architecture-matched official asset. Refuses any
++        /// substitute: both OS and architecture must match exactly.
++        public static func selectDownload(
++            osName: String, arch: String, from assets: [DownloadAsset]
++        ) throws -> DownloadAsset {
++            guard let match = assets.first(where: { $0.osName == osName && $0.architecture == arch }) else {
++                throw RegistrationError.downloadMismatch(osName: osName, arch: arch)
++            }
++            return match
++        }
++
++        /// Authorizes a group mutation only when the UI explicitly scoped it
++        /// AND the target is this run's resolved dedicated group. Never
++        /// mutates unrelated or shared groups.
++        public static func authorizeGroupMutation(
++            targetGroupID: Int64, resolvedGroupID: Int64?, allowFlag: Bool
++        ) throws {
++            guard allowFlag else { throw RegistrationError.groupScopeNotConfirmed }
++            guard let resolved = resolvedGroupID, resolved == targetGroupID else {
++                throw RegistrationError.refusesSharedGroup(groupID: targetGroupID)
++            }
++        }
++
++        /// Repository scope never touches groups: personal repos get separate
++        /// installations without shared-group coupling.
++        public static func requireOrganizationScope(_ scope: Scope) throws {
++            if case .organization = scope { return }
++            throw RegistrationError.groupNotApplicable
++        }
++    }
++
++    /// Exact `config.sh` invocation inputs.
++    public struct ConfigSpec: Sendable, Equatable {
++        let scopeURL: String
++        let token: String
++        let name: String
++        let workFolder: String
++        let labels: [String]
++        let runnerGroup: String?
++    }
++
++    /// Exact `config.sh` invocation builder. Argument order is fixed and
++    /// covered by tests; production runs this exact array.
++    public enum ConfigInvocation {
++        public static func arguments(_ spec: ConfigSpec) -> [String] {
++            var args = [
++                "--url", spec.scopeURL,
++                "--token", spec.token,
++                "--name", spec.name,
++                "--work", spec.workFolder,
++                "--labels", spec.labels.joined(separator: ",")
++            ]
++            if let group = spec.runnerGroup, !group.isEmpty {
++                args += ["--runnergroup", group]
++            }
++            args += ["--unattended", "--replace"]
++            return args
++        }
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/RunnerRegistration+Models.swift b/Packages/RunnerControlCore/Sources/RunnerRegistration+Models.swift
+new file mode 100644
+index 0000000..02363e0
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/RunnerRegistration+Models.swift
+@@ -0,0 +1,183 @@
++import Foundation
++
++extension RunnerRegistration {
++    /// Registration scope. One wizard run registers exactly one scope:
++    /// an organization (shared, via a dedicated per-Mac group) or a single
++    /// personal repository (separate installation, no group).
++    public enum Scope: Sendable, Equatable, Hashable {
++        case organization(org: String)
++        case repository(owner: String, name: String)
++
++        /// REST path prefix below the API base URL, e.g. `orgs/acme` or `repos/acme/app`.
++        public var apiPrefix: String {
++            switch self {
++            case .organization(let org): "orgs/\(org)"
++            case .repository(let owner, let name): "repos/\(owner)/\(name)"
++            }
++        }
++
++        /// Short key for token-store accounts and markers. Never contains secrets.
++        public var scopeKey: String {
++            switch self {
++            case .organization(let org): "org:\(org)"
++            case .repository(let owner, let name): "repo:\(owner)/\(name)"
++            }
++        }
++
++        /// URL passed to `config.sh --url`. Enterprise hosts keep their own server.
++        public func configURL(serverHost: String) -> String {
++            let host = serverHost == "github.com" || serverHost == "www.github.com"
++                ? "https://github.com"
++                : "https://\(serverHost)"
++            switch self {
++            case .organization(let org): return "\(host)/\(org)"
++            case .repository(let owner, let name): return "\(host)/\(owner)/\(name)"
++            }
++        }
++
++        /// Detail line shown in UI, e.g. `acme` or `acme/app`.
++        public var detail: String {
++            switch self {
++            case .organization(let org): org
++            case .repository(let owner, let name): "\(owner)/\(name)"
++            }
++        }
++    }
++
++    /// User-editable wizard input. Holds no tokens.
++    public struct Draft: Sendable, Equatable {
++        public var scope: Scope
++        public var runnerName: String
++        public var labels: [String]
++        public var installDirName: String
++        public var workFolder: String
++        /// Dedicated per-Mac group name for org scope. Ignored for repo scope.
++        public var groupName: String
++        public var selectedRepositoryIDs: Set<Int64>
++        /// Explicit UI scope: user confirmed that group mutations apply only
++        /// to the resolved dedicated group. Never implied.
++        public var allowGroupMutation: Bool
++
++        public init(
++            scope: Scope,
++            runnerName: String,
++            labels: [String] = ["self-hosted", "macOS"],
++            installDirName: String,
++            workFolder: String = "_work",
++            groupName: String = "",
++            selectedRepositoryIDs: Set<Int64> = [],
++            allowGroupMutation: Bool = false
++        ) {
++            self.scope = scope
++            self.runnerName = runnerName
++            self.labels = labels
++            self.installDirName = installDirName
++            self.workFolder = workFolder
++            self.groupName = groupName
++            self.selectedRepositoryIDs = selectedRepositoryIDs
++            self.allowGroupMutation = allowGroupMutation
++        }
++
++        /// Default per-Mac group name derived from the Mac name.
++        public static func defaultGroupName(hostName: String) -> String {
++            let trimmed = hostName.trimmingCharacters(in: .whitespacesAndNewlines)
++            let base = trimmed.isEmpty ? "Mac" : trimmed
++            return "RunnerControl-\(base)"
++        }
++    }
++
++    /// Official runner download asset as returned by the downloads endpoint.
++    public struct DownloadAsset: Sendable, Equatable {
++        public let osName: String
++        public let architecture: String
++        public let downloadURL: URL
++        public let filename: String
++        public let sha256Checksum: String?
++        public init(osName: String, architecture: String, downloadURL: URL, filename: String, sha256Checksum: String?) {
++            self.osName = osName; self.architecture = architecture
++            self.downloadURL = downloadURL; self.filename = filename
++            self.sha256Checksum = sha256Checksum
++        }
++    }
++
++    /// Runner group summary. Repository access is fetched separately.
++    public struct RunnerGroup: Sendable, Equatable {
++        public let id: Int64
++        public let name: String
++        public let visibility: String
++        public init(id: Int64, name: String, visibility: String) {
++            self.id = id; self.name = name; self.visibility = visibility
++        }
++    }
++
++    /// Registered runner identity fetched from GitHub after config.
++    public struct RegisteredRunner: Sendable, Equatable {
++        public let id: Int64
++        public let name: String
++        public let labels: [String]
++        public init(id: Int64, name: String, labels: [String]) {
++            self.id = id; self.name = name; self.labels = labels
++        }
++    }
++}
++
++extension RunnerRegistration {
++    public enum RegistrationError: LocalizedError, Sendable, Equatable {
++        case notAuthenticated
++        case missingPermission(String)
++        case invalidDraft(String)
++        case noSpacePath(String)
++        case downloadMismatch(osName: String, arch: String)
++        case integrityMismatch
++        case groupScopeNotConfirmed
++        case refusesSharedGroup(groupID: Int64)
++        case groupNotApplicable
++        case alreadyInstalled(path: String)
++        case alreadyRegistered(name: String)
++        case network(String)
++        case unauthorized
++        case forbidden(String)
++        case rateLimited
++        case configFailed(String)
++        case cancelled
++
++        public var errorDescription: String? {
++            switch self {
++            case .notAuthenticated:
++                "Sign in with GitHub first. Registration needs an authenticated session."
++            case .missingPermission(let text):
++                text.isEmpty ? "Missing GitHub permission for this step." : text
++            case .invalidDraft(let text):
++                text
++            case .noSpacePath(let text):
++                text
++            case .downloadMismatch(let osName, let arch):
++                "No official runner package for os=\(osName) arch=\(arch). Refusing substitute builds."
++            case .integrityMismatch:
++                "Download integrity check failed (SHA-256 mismatch). Refusing to install."
++            case .groupScopeNotConfirmed:
++                "Repository access changes need explicit confirmation for the dedicated group."
++            case .refusesSharedGroup(let groupID):
++                "Refusing to change group \(groupID): it is not this Mac's dedicated group."
++            case .groupNotApplicable:
++                "Runner groups apply to organization runners only. Repository runners use separate installations."
++            case .alreadyInstalled(let path):
++                "Installation already exists at \(path). Resume or remove it before retrying."
++            case .alreadyRegistered(let name):
++                "Runner '\(name)' is already registered here. Reuse it instead of creating a duplicate."
++            case .network(let text):
++                text
++            case .unauthorized:
++                "Session expired or revoked (401). Sign in again."
++            case .forbidden(let text):
++                text.isEmpty ? "Access forbidden (403)." : text
++            case .rateLimited:
++                "GitHub rate limit reached. Retry later; local runners keep working."
++            case .configFailed(let text):
++                text.isEmpty ? "Runner configuration failed." : text
++            case .cancelled:
++                "Registration cancelled."
++            }
++        }
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/RunnerRegistration+Module.swift b/Packages/RunnerControlCore/Sources/RunnerRegistration+Module.swift
+new file mode 100644
+index 0000000..1980f66
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/RunnerRegistration+Module.swift
+@@ -0,0 +1,11 @@
++import Relux
++
++extension RunnerRegistration {
++    @MainActor public struct Module: Relux.Module {
++        nonisolated public var states: [any Relux.AnyState] { [state] }
++        nonisolated public var sagas: [any Relux.Saga] { [flow] }
++        public let state: State
++        public let flow: Flow
++        public init(state: State, flow: Flow) { self.state = state; self.flow = flow }
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/RunnerRegistration+State+Reducer.swift b/Packages/RunnerControlCore/Sources/RunnerRegistration+State+Reducer.swift
+new file mode 100644
+index 0000000..144c828
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/RunnerRegistration+State+Reducer.swift
+@@ -0,0 +1,126 @@
++import Foundation
++import Relux
++
++extension RunnerRegistration.State {
++    public func reduce(with action: any Relux.Action) async {
++        guard let action = action as? RunnerRegistration.Action else { return }
++        if reduceDraftAction(action) { return }
++        if reduceProgressAction(action) { return }
++        await reduceResultAction(action)
++    }
++
++    /// Draft lifecycle actions. Returns true when the action was handled.
++    private func reduceDraftAction(_ action: RunnerRegistration.Action) -> Bool {
++        switch action {
++        case .draftBegan(let draft):
++            self.draft = draft
++            phase = .drafting
++            error = nil
++            failedStep = nil
++        case .draftUpdated(let draft):
++            self.draft = draft
++            // Draft edits retain the permission error by design.
++            if error != nil, permissionError == nil {
++                error = nil
++                failedStep = nil
++            }
++        case .cancelled:
++            working = false
++            error = nil
++            failedStep = nil
++        default:
++            return false
++        }
++        return true
++    }
++
++    /// Step progress actions. Returns true when the action was handled.
++    private func reduceProgressAction(_ action: RunnerRegistration.Action) -> Bool {
++        switch action {
++        case .stepStarted(let step):
++            working = true
++            error = nil
++            failedStep = nil
++            reducePhase(step)
++        case .stepFinished(let step):
++            working = false
++            completedSteps.insert(step)
++        case .permissionDismissed:
++            permissionError = nil
++        default:
++            return false
++        }
++        return true
++    }
++
++    private func reducePhase(_ step: String) {
++        switch step {
++        case "resolveGroup": phase = .resolvingGroup
++        case "prepareDownload": phase = .preparingDownload
++        case "downloadAndInstall": phase = .installing
++        case "registerRunner": phase = .registering
++        case "setupService": phase = .settingUpService
++        default: break
++        }
++    }
++
++    /// Fetched results, failures, and reset.
++    private func reduceResultAction(_ action: RunnerRegistration.Action) async {
++        if reduceFetchResult(action) { return }
++        switch action {
++        case .failed(let message, let step):
++            working = false
++            error = message
++            failedStep = step
++        case .permissionDenied(let message, let step):
++            working = false
++            error = message
++            failedStep = step
++            permissionError = message
++        case .didReset:
++            await cleanup()
++        default:
++            break
++        }
++    }
++
++    /// Fetched values applied to state. Returns true when handled.
++    private func reduceFetchResult(_ action: RunnerRegistration.Action) -> Bool {
++        switch action {
++        case .groupResolved(let group, let repositoryIDs):
++            self.group = group
++            groupRepositoryIDs = repositoryIDs
++        case .downloadReady(let asset):
++            self.asset = asset
++        case .installed(let path):
++            installPath = path
++        case .registered(let runnerID, let localAgentID):
++            self.runnerID = runnerID
++            self.localAgentID = localAgentID
++        case .serviceReady:
++            phase = .done
++        case .repositoryAccessApplied(let ids):
++            groupRepositoryIDs = ids
++            syncDraftRepositories(ids)
++        case .labelsApplied(let labels):
++            syncDraftLabels(labels)
++        default:
++            return false
++        }
++        return true
++    }
++
++    private func syncDraftRepositories(_ ids: [Int64]) {
++        if var current = draft {
++            current.selectedRepositoryIDs = Set(ids)
++            draft = current
++        }
++    }
++
++    private func syncDraftLabels(_ labels: [String]) {
++        if var current = draft {
++            current.labels = labels
++            draft = current
++        }
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/RunnerRegistration+State.swift b/Packages/RunnerControlCore/Sources/RunnerRegistration+State.swift
+new file mode 100644
+index 0000000..05b70a9
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/RunnerRegistration+State.swift
+@@ -0,0 +1,88 @@
++import Combine
++import Foundation
++import Relux
++
++extension RunnerRegistration {
++    /// Wizard phases. Holds IDs, paths, and errors — never tokens.
++    public enum Phase: Sendable, Equatable {
++        case idle
++        case drafting
++        case resolvingGroup
++        case preparingDownload
++        case installing
++        case registering
++        case settingUpService
++        case done
++    }
++
++    @MainActor public final class State: ObservableObject, Relux.HybridState {
++        @Published public internal(set) var phase: Phase = .idle
++        @Published public internal(set) var draft: Draft?
++        @Published public internal(set) var working: Bool = false
++        @Published public internal(set) var group: RunnerGroup?
++        @Published public internal(set) var groupRepositoryIDs: [Int64] = []
++        @Published public internal(set) var asset: DownloadAsset?
++        @Published public internal(set) var installPath: String?
++        @Published public internal(set) var runnerID: Int64?
++        @Published public internal(set) var localAgentID: Int64?
++        @Published public internal(set) var completedSteps: Set<String> = []
++        @Published public internal(set) var error: String?
++        @Published public internal(set) var failedStep: String?
++        /// Retained permission errors (403/missing rights). Draft edits never
++        /// clear them; only an explicit retry, reset, or dismiss does.
++        @Published public internal(set) var permissionError: String?
++
++        public init() {}
++
++        public func cleanup() async {
++            phase = .idle
++            draft = nil
++            working = false
++            group = nil
++            groupRepositoryIDs = []
++            asset = nil
++            installPath = nil
++            runnerID = nil
++            localAgentID = nil
++            completedSteps = []
++            error = nil
++            failedStep = nil
++            permissionError = nil
++        }
++    }
++
++    public enum Action: Relux.Action {
++        case draftBegan(Draft)
++        case draftUpdated(Draft)
++        case stepStarted(String)
++        case stepFinished(String)
++        case groupResolved(RunnerGroup, repositoryIDs: [Int64])
++        case downloadReady(DownloadAsset)
++        case installed(path: String)
++        case registered(runnerID: Int64?, localAgentID: Int64?)
++        case serviceReady(plistPath: String)
++        case repositoryAccessApplied([Int64])
++        case labelsApplied([String])
++        case failed(message: String, step: String)
++        case permissionDenied(message: String, step: String)
++        case permissionDismissed
++        case cancelled
++        case didReset
++    }
++
++    public enum Effect: Relux.Effect {
++        case beginDraft(Draft)
++        case updateDraft(Draft)
++        case resolveGroup
++        case prepareDownload
++        case downloadAndInstall
++        case registerRunner
++        case setupService
++        case applyRepositoryAccess(groupID: Int64, repositories: Set<Int64>)
++        case applyLabels([String])
++        case retry
++        case cancel
++        case reset
++        case dismissPermission
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/RunnerRegistration.swift b/Packages/RunnerControlCore/Sources/RunnerRegistration.swift
+new file mode 100644
+index 0000000..584e18d
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/RunnerRegistration.swift
+@@ -0,0 +1,3 @@
++@_exported import Relux
++import Foundation
++public enum RunnerRegistration {}
+diff --git a/Packages/RunnerControlCore/Sources/RunnerRegistrationTokenStore.swift b/Packages/RunnerControlCore/Sources/RunnerRegistrationTokenStore.swift
+new file mode 100644
+index 0000000..c651c6c
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/RunnerRegistrationTokenStore.swift
+@@ -0,0 +1,85 @@
++import Foundation
++
++extension RunnerRegistration {
++    /// Short-lived registration token. Lives in Keychain + Flow actor
++    /// privates only; never enters Relux state, logs, or diagnostics.
++    public struct ScopedToken: Sendable, Equatable, Codable {
++        public let token: String
++        public let expiresAt: Date?
++        public let obtainedAt: Date
++        public init(token: String, expiresAt: Date?, obtainedAt: Date = Date()) {
++            self.token = token; self.expiresAt = expiresAt; self.obtainedAt = obtainedAt
++        }
++        public var isExpired: Bool {
++            guard let expiresAt else { return false }
++            return expiresAt <= Date()
++        }
++    }
++}
++
++/// Keychain boundary for scoped short-lived registration tokens.
++public protocol RunnerRegistrationTokenStoring: Sendable {
++    func save(_ token: RunnerRegistration.ScopedToken, scopeKey: String) async throws
++    func load(scopeKey: String) async -> RunnerRegistration.ScopedToken?
++    func delete(scopeKey: String) async
++}
++
++public actor RunnerRegistrationTokenStore: RunnerRegistrationTokenStoring {
++    private let backend: any KeychainBackend
++    private let service: String
++
++    public init(
++        service: String = "works.relux.runnercontrol.runner-registration-token",
++        backend: (any KeychainBackend)? = nil
++    ) {
++        self.service = service
++        self.backend = backend ?? SecurityKeychainBackend()
++    }
++
++    public func save(_ token: RunnerRegistration.ScopedToken, scopeKey: String) async throws {
++        let data = try JSONEncoder().encode(token)
++        try backend.save(data, service: service, account: scopeKey)
++    }
++
++    public func load(scopeKey: String) async -> RunnerRegistration.ScopedToken? {
++        guard let data = backend.load(service: service, account: scopeKey) else { return nil }
++        guard let decoded = try? JSONDecoder().decode(RunnerRegistration.ScopedToken.self, from: data) else {
++            return nil
++        }
++        if decoded.isExpired {
++            backend.delete(service: service, account: scopeKey)
++            return nil
++        }
++        return decoded
++    }
++
++    public func delete(scopeKey: String) async {
++        backend.delete(service: service, account: scopeKey)
++    }
++}
++
++/// In-memory registration-token backend for unit tests. Never used in production.
++public final class InMemoryRegistrationTokenBackend: KeychainBackend, @unchecked Sendable {
++    private let lock = NSLock()
++    private var storage: [String: Data] = [:]
++    public init() {}
++    private func key(service: String, account: String) -> String { "\(service)\u{0}\(account)" }
++    public func save(_ data: Data, service: String, account: String) throws {
++        lock.withLock { storage[key(service: service, account: account)] = data }
++    }
++    public func load(service: String, account: String) -> Data? {
++        lock.withLock { storage[key(service: service, account: account)] }
++    }
++    public func delete(service: String, account: String) {
++        lock.withLock { _ = storage.removeValue(forKey: key(service: service, account: account)) }
++    }
++    public func deleteMatching(service: String, accountPrefix: String, accountSuffix: String) {
++        lock.withLock {
++            let prefix = "\(service)\u{0}\(accountPrefix)"
++            let doomed = storage.keys.filter { $0.hasPrefix(prefix) && $0.hasSuffix(accountSuffix) }
++            for key in doomed {
++                storage.removeValue(forKey: key)
++            }
++        }
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/RunnerRuntime.swift b/Packages/RunnerControlCore/Sources/RunnerRuntime.swift
+index cdaac53..5abc40b 100644
+--- a/Packages/RunnerControlCore/Sources/RunnerRuntime.swift
++++ b/Packages/RunnerControlCore/Sources/RunnerRuntime.swift
+@@ -15,6 +15,18 @@ import OSLog
+         service: any RunnerServicing = LaunchAgentService(),
+         transport: any GitHubHTTPTransport = URLSessionGitHubTransport(),
+         store: any GitHubCredentialStoring = GitHubKeychainStore()
++    ) async -> Relux {
++        let registrationState = await MainActor.run { RunnerRegistration.State() }
++        return await make(state: state, githubState: githubState, registrationState: registrationState, service: service, transport: transport, store: store)
++    }
++
++    public static func make(
++        state: Runners.State,
++        githubState: GitHubAuth.State,
++        registrationState: RunnerRegistration.State,
++        service: any RunnerServicing = LaunchAgentService(),
++        transport: any GitHubHTTPTransport = URLSessionGitHubTransport(),
++        store: any GitHubCredentialStoring = GitHubKeychainStore()
+     ) async -> Relux {
+         let runtime = await Relux(logger: RuntimeLogger())
+         let flow = await Runners.Flow(service: service, dispatcher: runtime.dispatcher)
+@@ -24,6 +36,15 @@ import OSLog
+         let refresher = GitHubTokenRefresh(transport: transport, store: store)
+         let githubFlow = await GitHubAuth.Flow(deviceFlow: deviceFlow, api: api, refresher: refresher, store: store, dispatcher: runtime.dispatcher)
+         runtime.register(GitHubAuth.Module(state: githubState, flow: githubFlow))
++        let runnerAPI = GitHubRunnerAPIClient(transport: transport)
++        let installer = RunnerInstallerService()
++        let registrationTokens = RunnerRegistrationTokenStore()
++        let registrationFlow = await RunnerRegistration.Flow(
++            api: runnerAPI, installer: installer, registrationTokens: registrationTokens,
++            userStore: store, identityStore: UserDefaultsGitHubSessionIdentityStore(),
++            refresher: refresher, dispatcher: runtime.dispatcher
++        )
++        runtime.register(RunnerRegistration.Module(state: registrationState, flow: registrationFlow))
+         return runtime
+     }
+ }
+diff --git a/Packages/RunnerControlCore/Tests/RunnerRegistrationTests.swift b/Packages/RunnerControlCore/Tests/RunnerRegistrationTests.swift
+new file mode 100644
+index 0000000..4c7c283
+--- /dev/null
++++ b/Packages/RunnerControlCore/Tests/RunnerRegistrationTests.swift
+@@ -0,0 +1,998 @@
++import CryptoKit
++import Foundation
++import Testing
++import Relux
++@testable import RunnerControlCore
++
++// MARK: - Registration harness (production entry points, controlled IO)
++
++// TestTransport, jsonResponse, and testConfig are shared from GitHubTransportTests.
++
++private struct RegistrationHarness {
++    let flow: RunnerRegistration.Flow
++    let logger: Relux.Testing.Logger
++    let transport: TestTransport
++    let userStore: GitHubKeychainStore
++    let registrationTokens: RunnerRegistrationTokenStore
++    let installer: RunnerInstallerService
++    let home: URL
++    let installRoot: URL
++}
++
++private func registrationHarness(
++    transport: TestTransport,
++    downloader: (@Sendable (URL) async throws -> Data)? = nil,
++    executor: (any CommandExecuting)? = nil,
++    arch: String = "arm64",
++    seedAuth: Bool = true
++) async -> RegistrationHarness {
++    let logger = Relux.Testing.Logger()
++    let dispatcher = Relux.Dispatcher(logger: logger)
++    let userStore = GitHubKeychainStore(backend: InMemoryKeychainBackend())
++    let identities = InMemoryGitHubSessionIdentityStore()
++    if seedAuth {
++        await identities.save(GitHubSessionIdentity(serverHost: "github.com", userID: 42, clientID: testConfig.clientID, username: "octo"))
++        try? await userStore.save(
++            GitHubAuth.TokenRecord(accessToken: "user-token-42", refreshToken: "refresh-42", expiresAt: Date().addingTimeInterval(3600)),
++            serverHost: "github.com", userID: 42, clientID: testConfig.clientID
++        )
++    }
++    let home = FileManager.default.temporaryDirectory.appendingPathComponent("RegHome-" + UUID().uuidString)
++    let installRoot = home.appendingPathComponent("Library/GitHubActions")
++    try? FileManager.default.createDirectory(at: installRoot, withIntermediateDirectories: true)
++    let archCopy = arch
++    let installer = RunnerInstallerService(
++        installRoot: installRoot,
++        downloader: downloader,
++        executor: executor,
++        currentArch: { archCopy }
++    )
++    let api = GitHubRunnerAPIClient(transport: transport)
++    let registrationTokens = RunnerRegistrationTokenStore(backend: InMemoryRegistrationTokenBackend())
++    let refresher = GitHubTokenRefresh(transport: transport, store: userStore)
++    let flow = await RunnerRegistration.Flow(
++        api: api, installer: installer, registrationTokens: registrationTokens,
++        userStore: userStore, identityStore: identities, refresher: refresher,
++        configProvider: { _ in testConfig }, dispatcher: dispatcher
++    )
++    return RegistrationHarness(
++        flow: flow, logger: logger, transport: transport, userStore: userStore,
++        registrationTokens: registrationTokens, installer: installer, home: home, installRoot: installRoot
++    )
++}
++
++private func registrationActions(_ logger: Relux.Testing.Logger) -> [RunnerRegistration.Action] {
++    logger.actions.compactMap { $0 as? RunnerRegistration.Action }
++}
++
++private func lastFailure(_ logger: Relux.Testing.Logger) -> (message: String, step: String)? {
++    for action in registrationActions(logger).reversed() {
++        switch action {
++        case .failed(let message, let step): return (message, step)
++        case .permissionDenied(let message, let step): return (message, step)
++        default: break
++        }
++    }
++    return nil
++}
++
++private func orgDraft(
++    name: String = "macbook-test",
++    dir: String = "macbook-test",
++    group: String = "RunnerControl-Mac",
++    repos: Set<Int64> = [9],
++    allowGroup: Bool = true
++) -> RunnerRegistration.Draft {
++    RunnerRegistration.Draft(
++        scope: .organization(org: "acme"),
++        runnerName: name,
++        labels: ["self-hosted", "macOS"],
++        installDirName: dir,
++        workFolder: "_work",
++        groupName: group,
++        selectedRepositoryIDs: repos,
++        allowGroupMutation: allowGroup
++    )
++}
++
++private func repoDraft(dir: String = "personal-app") -> RunnerRegistration.Draft {
++    RunnerRegistration.Draft(
++        scope: .repository(owner: "octo", name: "app"),
++        runnerName: "personal-runner",
++        labels: ["self-hosted", "macOS"],
++        installDirName: dir,
++        workFolder: "_work"
++    )
++}
++
++/// The downloads endpoint returns a bare JSON array, not an object.
++private func downloadsArrayPayload(_ assets: [[String: Any]]) -> GitHubHTTPResponse {
++    // swiftlint:disable:next force_try
++    let data = try! JSONSerialization.data(withJSONObject: assets)
++    return GitHubHTTPResponse(status: 200, body: data)
++}
++
++// MARK: - Fixture package (real tarball, controlled filesystem)
++
++/// Builds a minimal official-shaped runner package and packs it with the
++/// real system tar. Scripts keep their executable bit inside the archive.
++private struct FixturePackage {
++    let bytes: Data
++    let sha256ViaSystem: String
++
++    static func make(withRealConfigScript: Bool = true) async throws -> FixturePackage {
++        let files = FileManager.default
++        let src = files.temporaryDirectory.appendingPathComponent("FixtureSrc-" + UUID().uuidString)
++        let bin = src.appendingPathComponent("bin")
++        try files.createDirectory(at: bin, withIntermediateDirectories: true)
++        try "#!/bin/sh\nexec \"$(dirname \"$0\")/../run.sh\" \"$@\"\n".write(to: bin.appendingPathComponent("runsvc.sh"), atomically: true, encoding: .utf8)
++        try "#!/bin/sh\necho runner\n".write(to: src.appendingPathComponent("run.sh"), atomically: true, encoding: .utf8)
++        if withRealConfigScript {
++            let script = """
++            #!/bin/sh
++            DIR="$(cd "$(dirname "$0")" && pwd)"
++            NAME=""
++            while [ $# -gt 0 ]; do
++              case "$1" in
++                --name) NAME="$2"; shift 2;;
++                *) shift;;
++              esac
++            done
++            printf '{"agentId":4242,"agentName":"%s","gitHubUrl":"https://github.com/acme","workFolder":"_work"}' "$NAME" > "$DIR/.runner"
++            """
++            try script.write(to: src.appendingPathComponent("config.sh"), atomically: true, encoding: .utf8)
++        } else {
++            try "#!/bin/sh\nexit 0\n".write(to: src.appendingPathComponent("config.sh"), atomically: true, encoding: .utf8)
++        }
++        for path in ["bin/runsvc.sh", "run.sh", "config.sh"] {
++            try files.setAttributes([.posixPermissions: 0o755], ofItemAtPath: src.appendingPathComponent(path).path)
++        }
++        let archive = files.temporaryDirectory.appendingPathComponent("fixture-" + UUID().uuidString + ".tar.gz")
++        defer { try? files.removeItem(at: src) }
++        defer { try? files.removeItem(at: archive) }
++        let executor = CommandExecutor()
++        let packed = try await executor.run("/usr/bin/tar", ["-czf", archive.path, "-C", src.path, "."])
++        guard packed.code == 0 else { throw RunnerError.message("fixture tar failed: \(packed.output)") }
++        let bytes = try Data(contentsOf: archive)
++        // Independent oracle: system shasum pins the production CryptoKit hasher.
++        let hashed = try await executor.run("/usr/bin/shasum", ["-a", "256", archive.path])
++        guard hashed.code == 0 else { throw RunnerError.message("shasum missing: \(hashed.output)") }
++        let digest = hashed.output.split(separator: " ").first.map(String.init) ?? ""
++        guard digest.count == 64 else { throw RunnerError.message("bad shasum output: \(hashed.output)") }
++        return FixturePackage(bytes: bytes, sha256ViaSystem: digest)
++    }
++}
++
++private func fixtureDownloader(_ bytes: Data) -> @Sendable (URL) async throws -> Data {
++    let copy = bytes
++    return { _ in copy }
++}
++
++/// Records config.sh argv and simulates a successful registration by writing
++/// `.runner`. Delegates every other command (tar) to the real executor.
++private actor SplitExecutor: CommandExecuting {
++    private(set) var configCalls: [[String]] = []
++    var failure: CommandResult?
++    private let real = CommandExecutor()
++
++    func run(_ executable: String, _ arguments: [String]) async throws -> CommandResult {
++        if executable.hasSuffix("config.sh") {
++            configCalls.append(arguments)
++            if let failure { return failure }
++            let dir = URL(fileURLWithPath: executable).deletingLastPathComponent()
++            var name = "unnamed"
++            var index = arguments.startIndex
++            while index < arguments.endIndex {
++                if arguments[index] == "--name", arguments.index(after: index) < arguments.endIndex {
++                    name = arguments[arguments.index(after: index)]
++                }
++                index = arguments.index(after: index)
++            }
++            let payload = ["agentId": 4242, "agentName": name, "gitHubUrl": "https://github.com/acme", "workFolder": "_work"] as [String: Any]
++            let data = try JSONSerialization.data(withJSONObject: payload)
++            try data.write(to: dir.appendingPathComponent(".runner"), options: .atomic)
++            return CommandResult(code: 0, output: "Configured")
++        }
++        return try await real.run(executable, arguments)
++    }
++}
++
++// MARK: - Reducer and pure gates
++
++@Test @MainActor func registrationReducerRetainsPermissionErrorAcrossDraftEdits() async {
++    let state = RunnerRegistration.State()
++    await state.reduce(with: ForeignAction())
++    #expect(state.phase == .idle)
++    let draft = orgDraft()
++    await state.reduce(with: RunnerRegistration.Action.draftBegan(draft))
++    #expect(state.phase == .drafting)
++    await state.reduce(with: RunnerRegistration.Action.permissionDenied(message: "Missing permission: X", step: "resolveGroup"))
++    #expect(state.permissionError == "Missing permission: X")
++    // Draft edits must retain the permission error by design.
++    var edited = draft
++    edited.runnerName = "renamed"
++    await state.reduce(with: RunnerRegistration.Action.draftUpdated(edited))
++    #expect(state.permissionError == "Missing permission: X")
++    #expect(state.draft?.runnerName == "renamed")
++    await state.reduce(with: RunnerRegistration.Action.permissionDismissed)
++    #expect(state.permissionError == nil)
++    await state.reduce(with: RunnerRegistration.Action.registered(runnerID: 11, localAgentID: 4242))
++    #expect(state.runnerID == 11)
++    await state.cleanup()
++    #expect(state.phase == .idle)
++    #expect(state.draft == nil)
++}
++
++@Test func configInvocationIsExactAndOrdered() {
++    let orgSpec = RunnerRegistration.ConfigSpec(
++        scopeURL: "https://github.com/acme", token: "TOKEN",
++        name: "mac1", workFolder: "_work",
++        labels: ["self-hosted", "macOS"], runnerGroup: "RunnerControl-Mac"
++    )
++    let org = RunnerRegistration.ConfigInvocation.arguments(orgSpec)
++    #expect(org == [
++        "--url", "https://github.com/acme",
++        "--token", "TOKEN",
++        "--name", "mac1",
++        "--work", "_work",
++        "--labels", "self-hosted,macOS",
++        "--runnergroup", "RunnerControl-Mac",
++        "--unattended", "--replace",
++    ])
++    let repoSpec = RunnerRegistration.ConfigSpec(
++        scopeURL: "https://github.com/octo/app", token: "TOKEN",
++        name: "r2", workFolder: "_work",
++        labels: ["a"], runnerGroup: nil
++    )
++    let repo = RunnerRegistration.ConfigInvocation.arguments(repoSpec)
++    #expect(!repo.contains("--runnergroup"))
++    #expect(repo == [
++        "--url", "https://github.com/octo/app",
++        "--token", "TOKEN",
++        "--name", "r2",
++        "--work", "_work",
++        "--labels", "a",
++        "--unattended", "--replace",
++    ])
++}
++
++@Test func serviceLabelCarriesDiscoveryPrefixAndSanitizes() {
++    let label = RunnerRegistration.Flow.serviceLabel(draft: orgDraft())
++    #expect(label.hasPrefix("actions.runner."))
++    #expect(!label.contains(" "))
++    #expect(!label.contains("/"))
++    var spaced = orgDraft()
++    spaced.installDirName = "a b/c"
++    #expect(!RunnerRegistration.Flow.serviceLabel(draft: spaced).contains(" "))
++}
++
++@Test func scopeURLsAndKeysAreExact() {
++    #expect(RunnerRegistration.Scope.organization(org: "acme").apiPrefix == "orgs/acme")
++    #expect(RunnerRegistration.Scope.repository(owner: "o", name: "r").apiPrefix == "repos/o/r")
++    #expect(RunnerRegistration.Scope.organization(org: "acme").configURL(serverHost: "github.com") == "https://github.com/acme")
++    #expect(RunnerRegistration.Scope.repository(owner: "o", name: "r").configURL(serverHost: "ghe.example.com") == "https://ghe.example.com/o/r")
++}
++
++@Test @MainActor func registrationModuleRegistersStateAndFlow() async {
++    let transport = TestTransport([])
++    let harness = await registrationHarness(transport: transport)
++    let state = RunnerRegistration.State()
++    let module = RunnerRegistration.Module(state: state, flow: harness.flow)
++    #expect(module.states.count == 1)
++    #expect(module.sagas.count == 1)
++}
++
++// MARK: - Draft gates (no network before validation)
++
++@Test(arguments: [
++    ("bad dir", "_work"),
++    ("gooddir", "bad work"),
++]) func beginDraftRefusesSpacesBeforeAnyNetwork(dir: String, work: String) async {
++    let transport = TestTransport([])
++    let harness = await registrationHarness(transport: transport)
++    var draft = orgDraft()
++    draft.installDirName = dir
++    draft.workFolder = work
++    _ = await harness.flow.apply(RunnerRegistration.Effect.beginDraft(draft))
++    let failure = lastFailure(harness.logger)
++    #expect(failure?.step == "beginDraft")
++    #expect((failure?.message.contains("space") ?? false))
++    #expect(await transport.requests.isEmpty)
++}
++
++@Test func installerRefusesSpacesWithoutDownloading() async {
++    actor Probe {
++        var count = 0
++        func next(_ url: URL) async throws -> Data { count += 1; return Data() }
++    }
++    let probe = Probe()
++    let downloader: @Sendable (URL) async throws -> Data = { url in try await probe.next(url) }
++    let harness = await registrationHarness(transport: TestTransport([]), downloader: downloader)
++    var draft = orgDraft()
++    draft.installDirName = "has space"
++    let asset = RunnerRegistration.DownloadAsset(
++        osName: "osx", architecture: "arm64",
++        downloadURL: URL(string: "https://example.com/x.tar.gz")!,
++        filename: "x.tar.gz", sha256Checksum: nil
++    )
++    do {
++        _ = try await harness.installer.downloadAndInstall(asset: asset, draft: draft)
++        Issue.record("installer admitted spaced path")
++    } catch let error as RunnerRegistration.RegistrationError {
++        guard case .noSpacePath = error else { Issue.record("wrong error: \(error)"); return }
++    } catch {
++        Issue.record("unexpected error: \(error)")
++    }
++    #expect(await probe.count == 0)
++}
++
++@Test func beginDraftRequiresNameAndLabels() async {
++    let harness = await registrationHarness(transport: TestTransport([]))
++    var nameless = orgDraft()
++    nameless.runnerName = "   "
++    _ = await harness.flow.apply(RunnerRegistration.Effect.beginDraft(nameless))
++    #expect(lastFailure(harness.logger)?.step == "beginDraft")
++    var labelless = orgDraft()
++    labelless.labels = []
++    _ = await harness.flow.apply(RunnerRegistration.Effect.beginDraft(labelless))
++    #expect(registrationActions(harness.logger).filter {
++        if case .failed = $0 { true } else { false }
++    }.count == 2)
++}
++
++@Test func unauthenticatedWizardFailsClosedWithoutNetwork() async {
++    let transport = TestTransport([])
++    let harness = await registrationHarness(transport: transport, seedAuth: false)
++    _ = await harness.flow.apply(RunnerRegistration.Effect.beginDraft(orgDraft()))
++    _ = await harness.flow.apply(RunnerRegistration.Effect.resolveGroup)
++    let failure = lastFailure(harness.logger)
++    #expect(failure?.step == "resolveGroup")
++    #expect((failure?.message.contains("Sign in") ?? false))
++    #expect(await transport.requests.isEmpty)
++}
++
++// MARK: - Download selection (architecture-matched, official only)
++
++private func downloadAssets(checksum: String) -> [[String: Any]] {
++    [
++        ["os": "linux", "architecture": "x64", "download_url": "https://example.com/linux.tar.gz", "filename": "linux.tar.gz"],
++        ["os": "osx", "architecture": "x64", "download_url": "https://example.com/osx-x64.tar.gz", "filename": "osx-x64.tar.gz", "sha256_checksum": "x64sum"],
++        ["os": "osx", "architecture": "arm64", "download_url": "https://example.com/osx-arm64.tar.gz", "filename": "osx-arm64.tar.gz", "sha256_checksum": checksum],
++    ]
++}
++
++@Test func prepareDownloadSelectsArchMatchedAsset() async {
++    let transport = TestTransport([downloadsArrayPayload(downloadAssets(checksum: "arm64sum"))])
++    let harness = await registrationHarness(transport: transport)
++    _ = await harness.flow.apply(RunnerRegistration.Effect.beginDraft(orgDraft()))
++    _ = await harness.flow.apply(RunnerRegistration.Effect.prepareDownload)
++    let ready = registrationActions(harness.logger).compactMap { action -> RunnerRegistration.DownloadAsset? in
++        if case .downloadReady(let asset) = action { asset } else { nil }
++    }
++    #expect(ready.count == 1)
++    #expect(ready.first?.architecture == "arm64")
++    #expect(ready.first?.osName == "osx")
++    let requests = await transport.requests
++    #expect(requests.count == 1)
++    #expect(requests.first?.url.path.hasSuffix("/orgs/acme/actions/runners/downloads") ?? false)
++    #expect(requests.first?.headers["Authorization"] == "Bearer user-token-42")
++}
++
++@Test func prepareDownloadRefusesSubstituteArch() async {
++    let assets = [
++        ["os": "osx", "architecture": "x64", "download_url": "https://example.com/osx-x64.tar.gz", "filename": "osx-x64.tar.gz", "sha256_checksum": "x64sum"],
++        ["os": "linux", "architecture": "arm64", "download_url": "https://example.com/linux.tar.gz", "filename": "linux.tar.gz"],
++    ]
++    let transport = TestTransport([downloadsArrayPayload(assets)])
++    let harness = await registrationHarness(transport: transport, arch: "arm64")
++    _ = await harness.flow.apply(RunnerRegistration.Effect.beginDraft(orgDraft()))
++    _ = await harness.flow.apply(RunnerRegistration.Effect.prepareDownload)
++    let failure = lastFailure(harness.logger)
++    #expect(failure?.step == "prepareDownload")
++    #expect((failure?.message.contains("arm64") ?? false))
++    #expect(FileManager.default.fileExists(atPath: harness.installRoot.appendingPathComponent("macbook-test").path) == false)
++}
++
++// MARK: - Groups (dedicated per-Mac, explicit scope)
++
++@Test func orgResolveGroupFindsExistingWithoutCreating() async {
++    let transport = TestTransport([
++        jsonResponse(["runner_groups": [
++            ["id": 1, "name": "Default", "visibility": "all"],
++            ["id": 5, "name": "RunnerControl-Mac", "visibility": "selected"],
++        ]]),
++        jsonResponse(["repositories": [["id": 9], ["id": 10]]]),
++    ])
++    let harness = await registrationHarness(transport: transport)
++    _ = await harness.flow.apply(RunnerRegistration.Effect.beginDraft(orgDraft()))
++    _ = await harness.flow.apply(RunnerRegistration.Effect.resolveGroup)
++    let resolved = registrationActions(harness.logger).compactMap { action -> (RunnerRegistration.RunnerGroup, [Int64])? in
++        if case .groupResolved(let group, let ids) = action { (group, ids) } else { nil }
++    }
++    #expect(resolved.count == 1)
++    #expect(resolved.first?.0.id == 5)
++    #expect(resolved.first?.1.sorted() == [9, 10])
++    let requests = await transport.requests
++    #expect(requests.filter { $0.method == "POST" }.isEmpty)
++}
++
++@Test func orgResolveGroupCreatesWithSelectedRepos() async throws {
++    let transport = TestTransport([
++        jsonResponse(["runner_groups": [["id": 1, "name": "Default", "visibility": "all"]]]),
++        jsonResponse(["id": 7, "name": "RunnerControl-Mac", "visibility": "selected"], status: 201),
++        jsonResponse(["repositories": [["id": 9]]]),
++    ])
++    let harness = await registrationHarness(transport: transport)
++    _ = await harness.flow.apply(RunnerRegistration.Effect.beginDraft(orgDraft()))
++    _ = await harness.flow.apply(RunnerRegistration.Effect.resolveGroup)
++    let requests = await transport.requests
++    let posts = requests.filter { $0.method == "POST" }
++    #expect(posts.count == 1)
++    let body = try JSONDecoder().decode([String: JSONAny].self, from: posts[0].body ?? Data())
++    #expect(body["name"]?.string == "RunnerControl-Mac")
++    #expect(body["visibility"]?.string == "selected")
++    #expect(body["selected_repository_ids"]?.ints?.sorted() == [9])
++}
++
++/// Minimal JSON reader for asserting request bodies without DTO coupling.
++private enum JSONAny: Decodable {
++    case string(String)
++    case ints([Int64])
++    case other
++    var string: String? { if case .string(let value) = self { value } else { nil } }
++    var ints: [Int64]? { if case .ints(let values) = self { values } else { nil } }
++    init(from decoder: Decoder) throws {
++        let container = try decoder.singleValueContainer()
++        if let value = try? container.decode(String.self) { self = .string(value); return }
++        if let values = try? container.decode([Int64].self) { self = .ints(values); return }
++        self = .other
++    }
++}
++
++@Test func repoScopeRefusesGroupResolution() async {
++    let transport = TestTransport([])
++    let harness = await registrationHarness(transport: transport)
++    _ = await harness.flow.apply(RunnerRegistration.Effect.beginDraft(repoDraft()))
++    _ = await harness.flow.apply(RunnerRegistration.Effect.resolveGroup)
++    let failure = lastFailure(harness.logger)
++    #expect(failure?.step == "resolveGroup")
++    #expect((failure?.message.contains("organization") ?? false))
++    #expect(await transport.requests.isEmpty)
++}
++
++private func harnessWithResolvedGroup(allow: Bool) async -> RegistrationHarness {
++    let transport = TestTransport([
++        jsonResponse(["runner_groups": [["id": 5, "name": "RunnerControl-Mac", "visibility": "selected"]]]),
++        jsonResponse(["repositories": [["id": 9]]]),
++    ])
++    let harness = await registrationHarness(transport: transport)
++    _ = await harness.flow.apply(RunnerRegistration.Effect.beginDraft(orgDraft(allowGroup: allow)))
++    _ = await harness.flow.apply(RunnerRegistration.Effect.resolveGroup)
++    return harness
++}
++
++@Test func repoAccessWithoutExplicitScopeIsRefused() async {
++    let harness = await harnessWithResolvedGroup(allow: false)
++    let before = await harness.transport.requests.count
++    _ = await harness.flow.apply(RunnerRegistration.Effect.applyRepositoryAccess(groupID: 5, repositories: [9, 10]))
++    let failure = lastFailure(harness.logger)
++    #expect(failure?.step == "applyRepositoryAccess")
++    #expect((failure?.message.contains("explicit") ?? false))
++    #expect(await harness.transport.requests.count == before)
++}
++
++@Test func repoAccessToForeignGroupIsRefused() async {
++    let harness = await harnessWithResolvedGroup(allow: true)
++    let before = await harness.transport.requests.count
++    _ = await harness.flow.apply(RunnerRegistration.Effect.applyRepositoryAccess(groupID: 1, repositories: [9]))
++    let failure = lastFailure(harness.logger)
++    #expect(failure?.step == "applyRepositoryAccess")
++    #expect((failure?.message.contains("not this Mac") ?? false))
++    #expect(await harness.transport.requests.count == before)
++}
++
++@Test func repoAccessAppliesAndConfirmsRealIDs() async throws {
++    let harness = await harnessWithResolvedGroup(allow: true)
++    await harness.transport.append(jsonResponse([:]))
++    await harness.transport.append(jsonResponse(["repositories": [["id": 9], ["id": 10]]]))
++    _ = await harness.flow.apply(RunnerRegistration.Effect.applyRepositoryAccess(groupID: 5, repositories: [10, 9]))
++    let applied = registrationActions(harness.logger).compactMap { action -> [Int64]? in
++        if case .repositoryAccessApplied(let ids) = action { ids } else { nil }
++    }
++    #expect(applied.last?.sorted() == [9, 10])
++    let puts = await harness.transport.requests.filter { $0.method == "PUT" }
++    #expect(puts.count == 1)
++    #expect(puts.first?.url.path.contains("/orgs/acme/actions/runner-groups/5/repositories") ?? false)
++    let body = try JSONDecoder().decode([String: JSONAny].self, from: puts.first?.body ?? Data())
++    #expect(body["selected_repository_ids"]?.ints?.sorted() == [9, 10])
++}
++
++// MARK: - Install (integrity, runsvc, idempotency)
++
++@Test func downloadVerifiesIntegrityAgainstSystemShasum() async throws {
++    let package = try await FixturePackage.make()
++    let draft = orgDraft()
++    let asset = RunnerRegistration.DownloadAsset(
++        osName: "osx", architecture: "arm64",
++        downloadURL: URL(string: "https://example.com/osx-arm64.tar.gz")!,
++        filename: "osx-arm64.tar.gz", sha256Checksum: package.sha256ViaSystem
++    )
++    let harness = await registrationHarness(
++        transport: TestTransport([]), downloader: fixtureDownloader(package.bytes)
++    )
++    let directory = try await harness.installer.downloadAndInstall(asset: asset, draft: draft)
++    let files = FileManager.default
++    #expect(files.fileExists(atPath: directory.appendingPathComponent("run.sh").path))
++    let runsvc = directory.appendingPathComponent("runsvc.sh")
++    #expect(files.fileExists(atPath: runsvc.path))
++    let mode = try files.attributesOfItem(atPath: runsvc.path)[.posixPermissions] as? Int
++    #expect(mode == 0o755)
++    #expect(await harness.installer.hasCompleted(RunnerInstallerService.stepInstalled, directory: directory))
++    // Idempotent: a completed install skips the download entirely.
++    actor Counting {
++        var count = 0
++        func next(_ url: URL) async throws -> Data { count += 1; return Data() }
++    }
++    let counting = Counting()
++    let skipper = RunnerInstallerService(
++        installRoot: harness.installRoot,
++        downloader: { url in try await counting.next(url) },
++        currentArch: { "arm64" }
++    )
++    _ = try await skipper.downloadAndInstall(asset: asset, draft: draft)
++    #expect(await counting.count == 0)
++}
++
++@Test func downloadRefusesTamperedBytes() async throws {
++    let package = try await FixturePackage.make()
++    var tampered = package.bytes
++    tampered[tampered.count - 1] ^= 0xFF
++    let draft = orgDraft()
++    let asset = RunnerRegistration.DownloadAsset(
++        osName: "osx", architecture: "arm64",
++        downloadURL: URL(string: "https://example.com/osx-arm64.tar.gz")!,
++        filename: "osx-arm64.tar.gz", sha256Checksum: package.sha256ViaSystem
++    )
++    let harness = await registrationHarness(
++        transport: TestTransport([]), downloader: fixtureDownloader(tampered)
++    )
++    do {
++        _ = try await harness.installer.downloadAndInstall(asset: asset, draft: draft)
++        Issue.record("installer admitted tampered bytes")
++    } catch let error as RunnerRegistration.RegistrationError {
++        guard case .integrityMismatch = error else { Issue.record("wrong error: \(error)"); return }
++    }
++    let directory = await harness.installer.directory(for: draft.installDirName)
++    #expect(FileManager.default.fileExists(atPath: directory.appendingPathComponent("run.sh").path) == false)
++    #expect(await harness.installer.hasCompleted(RunnerInstallerService.stepInstalled, directory: directory) == false)
++}
++
++@Test func downloadRefusesMalformedChecksum() async throws {
++    let package = try await FixturePackage.make()
++    let draft = orgDraft()
++    let asset = RunnerRegistration.DownloadAsset(
++        osName: "osx", architecture: "arm64",
++        downloadURL: URL(string: "https://example.com/osx-arm64.tar.gz")!,
++        filename: "osx-arm64.tar.gz", sha256Checksum: "not-a-sha256"
++    )
++    let harness = await registrationHarness(
++        transport: TestTransport([]), downloader: fixtureDownloader(package.bytes)
++    )
++    do {
++        _ = try await harness.installer.downloadAndInstall(asset: asset, draft: draft)
++        Issue.record("installer admitted malformed checksum")
++    } catch let error as RunnerRegistration.RegistrationError {
++        guard case .integrityMismatch = error else { Issue.record("wrong error: \(error)"); return }
++    }
++}
++
++@Test func existingRegistrationBlocksFreshInstall() async throws {
++    let package = try await FixturePackage.make()
++    let harness = await registrationHarness(
++        transport: TestTransport([]), downloader: fixtureDownloader(package.bytes)
++    )
++    let draft = orgDraft()
++    let directory = await harness.installer.directory(for: draft.installDirName)
++    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
++    try Data("{}".utf8).write(to: directory.appendingPathComponent(".runner"))
++    let asset = RunnerRegistration.DownloadAsset(
++        osName: "osx", architecture: "arm64",
++        downloadURL: URL(string: "https://example.com/x.tar.gz")!,
++        filename: "x.tar.gz", sha256Checksum: nil
++    )
++    do {
++        _ = try await harness.installer.downloadAndInstall(asset: asset, draft: draft)
++        Issue.record("installer overwrote a registered directory")
++    } catch let error as RunnerRegistration.RegistrationError {
++        guard case .alreadyRegistered = error else { Issue.record("wrong error: \(error)"); return }
++    }
++}
++
++// MARK: - Configure (exact invocation, no secret leakage)
++
++@Test func runConfigUsesExactInvocation() async throws {
++    let package = try await FixturePackage.make(withRealConfigScript: false)
++    let executor = SplitExecutor()
++    let harness = await registrationHarness(
++        transport: TestTransport([]),
++        downloader: fixtureDownloader(package.bytes),
++        executor: executor
++    )
++    let draft = orgDraft()
++    let asset = RunnerRegistration.DownloadAsset(
++        osName: "osx", architecture: "arm64",
++        downloadURL: URL(string: "https://example.com/x.tar.gz")!,
++        filename: "x.tar.gz", sha256Checksum: package.sha256ViaSystem
++    )
++    let directory = try await harness.installer.downloadAndInstall(asset: asset, draft: draft)
++    let agentID = try await harness.installer.runConfig(
++        directory: directory, scopeURL: "https://github.com/acme",
++        token: "REG-TOKEN", draft: draft, runnerGroup: "RunnerControl-Mac"
++    )
++    #expect(agentID == 4242)
++    let calls = await executor.configCalls
++    #expect(calls.count == 1)
++    #expect(calls.first == [
++        "--url", "https://github.com/acme",
++        "--token", "REG-TOKEN",
++        "--name", "macbook-test",
++        "--work", "_work",
++        "--labels", "self-hosted,macOS",
++        "--runnergroup", "RunnerControl-Mac",
++        "--unattended", "--replace",
++    ])
++}
++
++@Test func runConfigScrubsTokenFromFailure() async throws {
++    let package = try await FixturePackage.make(withRealConfigScript: false)
++    let executor = SplitExecutor()
++    await executor.setFailure(CommandResult(code: 1, output: "config failed for --token SUPER-SECRET-TOKEN tail"))
++    let harness = await registrationHarness(
++        transport: TestTransport([]),
++        downloader: fixtureDownloader(package.bytes),
++        executor: executor
++    )
++    let draft = orgDraft()
++    let asset = RunnerRegistration.DownloadAsset(
++        osName: "osx", architecture: "arm64",
++        downloadURL: URL(string: "https://example.com/x.tar.gz")!,
++        filename: "x.tar.gz", sha256Checksum: package.sha256ViaSystem
++    )
++    let directory = try await harness.installer.downloadAndInstall(asset: asset, draft: draft)
++    do {
++        try await harness.installer.runConfig(
++            directory: directory, scopeURL: "https://github.com/acme",
++            token: "SUPER-SECRET-TOKEN", draft: draft, runnerGroup: "RunnerControl-Mac"
++        )
++        Issue.record("runConfig swallowed a failing script")
++    } catch let error as RunnerRegistration.RegistrationError {
++        guard case .configFailed(let text) = error else { Issue.record("wrong error: \(error)"); return }
++        #expect(!text.contains("SUPER-SECRET-TOKEN"))
++        #expect(text.contains("[REDACTED]"))
++    }
++}
++
++private extension SplitExecutor {
++    func setFailure(_ result: CommandResult) { failure = result }
++}
++
++@Test func runConfigExecutesRealScript() async throws {
++    // The fixture config.sh is a real executable shell script: production
++    // runConfig must execute it (not only a fake) and read back `.runner`.
++    let package = try await FixturePackage.make(withRealConfigScript: true)
++    let harness = await registrationHarness(
++        transport: TestTransport([]), downloader: fixtureDownloader(package.bytes)
++    )
++    let draft = orgDraft()
++    let asset = RunnerRegistration.DownloadAsset(
++        osName: "osx", architecture: "arm64",
++        downloadURL: URL(string: "https://example.com/x.tar.gz")!,
++        filename: "x.tar.gz", sha256Checksum: package.sha256ViaSystem
++    )
++    let directory = try await harness.installer.downloadAndInstall(asset: asset, draft: draft)
++    let agentID = try await harness.installer.runConfig(
++        directory: directory, scopeURL: "https://github.com/acme",
++        token: "REG-TOKEN", draft: draft, runnerGroup: "RunnerControl-Mac"
++    )
++    #expect(agentID == 4242)
++    let data = try Data(contentsOf: directory.appendingPathComponent(".runner"))
++    let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
++    #expect(object?["agentName"] as? String == "macbook-test")
++}
++
++// MARK: - Service (manual LaunchAgent, discovered)
++
++@Test func setupServiceWritesManualPlistFoundByDiscovery() async throws {
++    let package = try await FixturePackage.make()
++    let harness = await registrationHarness(
++        transport: TestTransport([]), downloader: fixtureDownloader(package.bytes)
++    )
++    let draft = orgDraft()
++    let asset = RunnerRegistration.DownloadAsset(
++        osName: "osx", architecture: "arm64",
++        downloadURL: URL(string: "https://example.com/x.tar.gz")!,
++        filename: "x.tar.gz", sha256Checksum: package.sha256ViaSystem
++    )
++    let directory = try await harness.installer.downloadAndInstall(asset: asset, draft: draft)
++    try Data("""
++    {"agentId":4242,"agentName":"macbook-test","gitHubUrl":"https://github.com/acme","workFolder":"_work"}
++    """.utf8).write(to: directory.appendingPathComponent(".runner"))
++    let label = RunnerRegistration.Flow.serviceLabel(draft: draft)
++    let plist = try await harness.installer.setupService(directory: directory, label: label)
++    let data = try Data(contentsOf: plist)
++    let object = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
++    #expect(object?["Label"] as? String == label)
++    #expect(object?["ProgramArguments"] as? [String] == [directory.appendingPathComponent("runsvc.sh").path])
++    #expect(object?["WorkingDirectory"] as? String == directory.path)
++    #expect(object?["RunAtLoad"] as? Bool == false)
++    // The wizard output must be visible to production discovery.
++    let found = RunnerDiscovery.installed(home: harness.home)
++    #expect(found.count == 1)
++    #expect(found.first?.title == "macbook-test")
++    #expect(found.first?.detail == "acme")
++}
++
++// MARK: - Recovery and token lifetime
++
++@Test func recoverPartialInstallRefusesWorkingRunner() async throws {
++    let harness = await registrationHarness(transport: TestTransport([]))
++    let draft = orgDraft()
++    let occupied = await harness.installer.directory(for: draft.installDirName)
++    try FileManager.default.createDirectory(at: occupied, withIntermediateDirectories: true)
++    try Data("{}".utf8).write(to: occupied.appendingPathComponent(".runner"))
++    do {
++        try await harness.installer.recoverPartialInstall(directory: occupied, scopeKey: draft.scope.scopeKey)
++        Issue.record("recovery deleted a registered runner")
++    } catch let error as RunnerRegistration.RegistrationError {
++        guard case .alreadyRegistered = error else { Issue.record("wrong error: \(error)"); return }
++    }
++    #expect(FileManager.default.fileExists(atPath: occupied.path))
++    let partial = harness.installRoot.appendingPathComponent("partial-dir")
++    try FileManager.default.createDirectory(at: partial, withIntermediateDirectories: true)
++    try await harness.installer.recoverPartialInstall(directory: partial, scopeKey: draft.scope.scopeKey)
++    #expect(FileManager.default.fileExists(atPath: partial.path) == false)
++}
++
++@Test func registrationTokenStoreExpiresShortLivedToken() async throws {
++    let store = RunnerRegistrationTokenStore(backend: InMemoryRegistrationTokenBackend())
++    let live = RunnerRegistration.ScopedToken(token: "live", expiresAt: Date().addingTimeInterval(60))
++    try await store.save(live, scopeKey: "org:acme:dir")
++    #expect(await store.load(scopeKey: "org:acme:dir") == live)
++    let dead = RunnerRegistration.ScopedToken(token: "dead", expiresAt: Date().addingTimeInterval(-5))
++    try await store.save(dead, scopeKey: "org:acme:other")
++    #expect(await store.load(scopeKey: "org:acme:other") == nil)
++    await store.delete(scopeKey: "org:acme:dir")
++    #expect(await store.load(scopeKey: "org:acme:dir") == nil)
++}
++
++// MARK: - End-to-end wizard through production Flow effects
++
++private func runnersListPayload(_ runners: [[String: Any]]) -> GitHubHTTPResponse {
++    jsonResponse(["runners": runners])
++}
++
++@Test func orgWizardEndToEndDeletesTokenAndLeaksNothing() async throws {
++    let package = try await FixturePackage.make(withRealConfigScript: false)
++    let executor = SplitExecutor()
++    let transport = TestTransport([
++        jsonResponse(["runner_groups": [["id": 5, "name": "RunnerControl-Mac", "visibility": "selected"]]]),
++        jsonResponse(["repositories": [["id": 9]]]),
++        downloadsArrayPayload(downloadAssets(checksum: package.sha256ViaSystem)),
++        jsonResponse(["token": "REG-SECRET-1", "expires_at": "2030-01-01T00:00:00Z"], status: 201),
++        runnersListPayload([["id": 77, "name": "macbook-test", "labels": [["name": "self-hosted"], ["name": "macOS"]]]]),
++    ])
++    let harness = await registrationHarness(
++        transport: transport,
++        downloader: fixtureDownloader(package.bytes),
++        executor: executor
++    )
++    let draft = orgDraft()
++    _ = await harness.flow.apply(RunnerRegistration.Effect.beginDraft(draft))
++    _ = await harness.flow.apply(RunnerRegistration.Effect.resolveGroup)
++    _ = await harness.flow.apply(RunnerRegistration.Effect.downloadAndInstall)
++    _ = await harness.flow.apply(RunnerRegistration.Effect.registerRunner)
++    _ = await harness.flow.apply(RunnerRegistration.Effect.setupService)
++    let actions = registrationActions(harness.logger)
++    let registered = actions.compactMap { action -> (Int64?, Int64?)? in
++        if case .registered(let runnerID, let localID) = action { (runnerID, localID) } else { nil }
++    }
++    // Real IDs: remote GitHub runner ID matched by name + local agent ID from .runner.
++    #expect(registered.last?.0 == 77)
++    #expect(registered.last?.1 == 4242)
++    #expect(actions.contains { if case .serviceReady = $0 { true } else { false } })
++    // The short-lived registration token is deleted immediately after use.
++    let scopeKey = RunnerRegistration.Flow.tokenScopeKey(draft: draft)
++    #expect(await harness.registrationTokens.load(scopeKey: scopeKey) == nil)
++    // No secret leakage: the registration token appears nowhere in
++    // dispatched actions, request URLs, headers, or bodies.
++    let haystack = actions.map { String(describing: $0) }.joined(separator: "\n")
++    #expect(!haystack.contains("REG-SECRET-1"))
++    for request in await transport.requests {
++        #expect(!request.url.absoluteString.contains("REG-SECRET-1"))
++        #expect(!request.headers.values.joined().contains("REG-SECRET-1"))
++        if let body = request.body {
++            #expect(!String(decoding: body, as: UTF8.self).contains("REG-SECRET-1"))
++        }
++    }
++    // The token reached exactly one place: the config.sh argv in memory.
++    let calls = await executor.configCalls
++    #expect(calls.count == 1)
++    #expect(calls.first?.contains("REG-SECRET-1") ?? false)
++    #expect(calls.first?.contains("--runnergroup") ?? false)
++    // Wizard output is discoverable and launchable by production code.
++    #expect(RunnerDiscovery.installed(home: harness.home).count == 1)
++}
++
++@Test func repoWizardOmitsRunnerGroup() async throws {
++    let package = try await FixturePackage.make(withRealConfigScript: false)
++    let executor = SplitExecutor()
++    let transport = TestTransport([
++        downloadsArrayPayload(downloadAssets(checksum: package.sha256ViaSystem)),
++        jsonResponse(["token": "REG-SECRET-2", "expires_at": "2030-01-01T00:00:00Z"], status: 201),
++        runnersListPayload([["id": 78, "name": "personal-runner", "labels": [["name": "self-hosted"]]]]),
++    ])
++    let harness = await registrationHarness(
++        transport: transport,
++        downloader: fixtureDownloader(package.bytes),
++        executor: executor
++    )
++    _ = await harness.flow.apply(RunnerRegistration.Effect.beginDraft(repoDraft()))
++    _ = await harness.flow.apply(RunnerRegistration.Effect.downloadAndInstall)
++    _ = await harness.flow.apply(RunnerRegistration.Effect.registerRunner)
++    let calls = await executor.configCalls
++    #expect(calls.count == 1)
++    #expect(!(calls.first?.contains("--runnergroup") ?? true))
++    let requests = await transport.requests
++    #expect(requests.allSatisfy { !$0.url.path.contains("runner-groups") })
++    #expect(requests.contains { $0.url.path.contains("/repos/octo/app/actions/runners/registration-token") })
++}
++
++@Test func retryResumesFailedDownloadWithoutDuplicates() async throws {
++    let package = try await FixturePackage.make()
++    actor Flaky {
++        let bytes: Data
++        var calls = 0
++        init(bytes: Data) { self.bytes = bytes }
++        func next(_ url: URL) async throws -> Data {
++            calls += 1
++            if calls == 1 { throw URLError(.notConnectedToInternet) }
++            return bytes
++        }
++    }
++    let flaky = Flaky(bytes: package.bytes)
++    let transport = TestTransport([downloadsArrayPayload(downloadAssets(checksum: package.sha256ViaSystem))])
++    let harness = await registrationHarness(
++        transport: transport,
++        downloader: { url in try await flaky.next(url) }
++    )
++    _ = await harness.flow.apply(RunnerRegistration.Effect.beginDraft(orgDraft()))
++    _ = await harness.flow.apply(RunnerRegistration.Effect.downloadAndInstall)
++    #expect(lastFailure(harness.logger)?.step == "downloadAndInstall")
++    _ = await harness.flow.apply(RunnerRegistration.Effect.retry)
++    let actions = registrationActions(harness.logger)
++    #expect(actions.contains { if case .installed = $0 { true } else { false } })
++    // The asset resolved once; the retry resumed the download, not the lookup.
++    #expect(await transport.requests.count == 1)
++    #expect(await flaky.calls == 2)
++    let directory = await harness.installer.directory(for: "macbook-test")
++    #expect(FileManager.default.fileExists(atPath: directory.appendingPathComponent("run.sh").path))
++}
++
++@Test func registerIsIdempotentAcrossRetries() async throws {
++    let package = try await FixturePackage.make(withRealConfigScript: false)
++    let executor = SplitExecutor()
++    let transport = TestTransport([
++        downloadsArrayPayload(downloadAssets(checksum: package.sha256ViaSystem)),
++        jsonResponse(["token": "REG-SECRET-3", "expires_at": "2030-01-01T00:00:00Z"], status: 201),
++        runnersListPayload([["id": 77, "name": "macbook-test", "labels": []]]),
++        runnersListPayload([["id": 77, "name": "macbook-test", "labels": []]]),
++    ])
++    let harness = await registrationHarness(
++        transport: transport,
++        downloader: fixtureDownloader(package.bytes),
++        executor: executor
++    )
++    _ = await harness.flow.apply(RunnerRegistration.Effect.beginDraft(orgDraft()))
++    _ = await harness.flow.apply(RunnerRegistration.Effect.downloadAndInstall)
++    _ = await harness.flow.apply(RunnerRegistration.Effect.registerRunner)
++    _ = await harness.flow.apply(RunnerRegistration.Effect.registerRunner)
++    let tokenPosts = await transport.requests.filter {
++        $0.method == "POST" && $0.url.path.contains("registration-token")
++    }
++    // The retry minted no second token and ran config.sh exactly once:
++    // no orphan or duplicate GitHub registrations.
++    #expect(tokenPosts.count == 1)
++    #expect(await executor.configCalls.count == 1)
++    let registered = registrationActions(harness.logger).filter {
++        if case .registered = $0 { true } else { false }
++    }
++    #expect(registered.count == 2)
++}
++
++@Test func failedConfigDeletesTokenAndReportsScrubbedError() async throws {
++    let package = try await FixturePackage.make(withRealConfigScript: false)
++    let executor = SplitExecutor()
++    await executor.setFailure(CommandResult(code: 1, output: "bad --token REG-SECRET-9"))
++    let transport = TestTransport([
++        downloadsArrayPayload(downloadAssets(checksum: package.sha256ViaSystem)),
++        jsonResponse(["token": "REG-SECRET-9", "expires_at": "2030-01-01T00:00:00Z"], status: 201),
++    ])
++    let harness = await registrationHarness(
++        transport: transport,
++        downloader: fixtureDownloader(package.bytes),
++        executor: executor
++    )
++    let draft = orgDraft()
++    _ = await harness.flow.apply(RunnerRegistration.Effect.beginDraft(draft))
++    _ = await harness.flow.apply(RunnerRegistration.Effect.downloadAndInstall)
++    _ = await harness.flow.apply(RunnerRegistration.Effect.registerRunner)
++    let failure = lastFailure(harness.logger)
++    #expect(failure?.step == "registerRunner")
++    #expect(!(failure?.message.contains("REG-SECRET-9") ?? true))
++    let scopeKey = RunnerRegistration.Flow.tokenScopeKey(draft: draft)
++    #expect(await harness.registrationTokens.load(scopeKey: scopeKey) == nil)
++    _ = await harness.flow.apply(RunnerRegistration.Effect.cancel)
++    #expect(registrationActions(harness.logger).contains { if case .cancelled = $0 { true } else { false } })
++}
++
++// MARK: - Permission errors (retained, explicit clear)
++
++@Test @MainActor func permissionErrorRetainedAcrossEditsUntilRetrySucceeds() async {
++    let transport = TestTransport([
++        GitHubHTTPResponse(status: 403, body: Data("Resource not accessible by integration".utf8)),
++    ])
++    let harness = await registrationHarness(transport: transport)
++    _ = await harness.flow.apply(RunnerRegistration.Effect.beginDraft(orgDraft()))
++    _ = await harness.flow.apply(RunnerRegistration.Effect.resolveGroup)
++    var edited = orgDraft()
++    edited.runnerName = "renamed-mac"
++    _ = await harness.flow.apply(RunnerRegistration.Effect.updateDraft(edited))
++    let state = RunnerRegistration.State()
++    for action in registrationActions(harness.logger) { await state.reduce(with: action) }
++    #expect(state.permissionError?.contains("Missing permission") ?? false)
++    #expect(state.draft?.runnerName == "renamed-mac")
++    // Access granted later: retry succeeds and clears the retained error.
++    await transport.append(jsonResponse(["runner_groups": [["id": 5, "name": "RunnerControl-Mac", "visibility": "selected"]]]))
++    await transport.append(jsonResponse(["repositories": [["id": 9]]]))
++    let seen = registrationActions(harness.logger).count
++    _ = await harness.flow.apply(RunnerRegistration.Effect.retry)
++    for action in registrationActions(harness.logger).dropFirst(seen) { await state.reduce(with: action) }
++    #expect(state.group?.id == 5)
++    #expect(state.permissionError == nil)
++}
++
++@Test func forbiddenGroupCreateNamesRequiredPermission() async {
++    let transport = TestTransport([
++        jsonResponse(["runner_groups": [["id": 1, "name": "Default", "visibility": "all"]]]),
++        GitHubHTTPResponse(status: 403, body: Data("Resource not accessible by integration".utf8)),
++    ])
++    let harness = await registrationHarness(transport: transport)
++    _ = await harness.flow.apply(RunnerRegistration.Effect.beginDraft(orgDraft()))
++    _ = await harness.flow.apply(RunnerRegistration.Effect.resolveGroup)
++    let actions = registrationActions(harness.logger)
++    #expect(actions.contains {
++        if case .permissionDenied(let message, _) = $0, message.contains("Self-hosted runners/write") { true } else { false }
++    })
++}
++
++// MARK: - Labels (editable with real IDs)
++
++@Test func labelsApplyRequiresRealRunnerIDThenPuts() async throws {
++    let transport = TestTransport([
++        runnersListPayload([]),
++        runnersListPayload([["id": 77, "name": "macbook-test", "labels": []]]),
++        jsonResponse([["id": 1, "name": "self-hosted"]]),
++    ])
++    let harness = await registrationHarness(transport: transport)
++    _ = await harness.flow.apply(RunnerRegistration.Effect.beginDraft(orgDraft()))
++    _ = await harness.flow.apply(RunnerRegistration.Effect.applyLabels(["self-hosted", "macOS", "gpu"]))
++    #expect(lastFailure(harness.logger)?.step == "applyLabels")
++    _ = await harness.flow.apply(RunnerRegistration.Effect.retry)
++    let applied = registrationActions(harness.logger).compactMap { action -> [String]? in
++        if case .labelsApplied(let labels) = action { labels } else { nil }
++    }
++    #expect(applied.last == ["self-hosted", "macOS", "gpu"])
++    let puts = await transport.requests.filter { $0.method == "PUT" }
++    #expect(puts.count == 1)
++    #expect(puts.first?.url.path.contains("/orgs/acme/actions/runners/77/labels") ?? false)
++}
+diff --git a/Targets/RunnerControl/Sources/App.swift b/Targets/RunnerControl/Sources/App.swift
+index d051031..0dc61b6 100644
+--- a/Targets/RunnerControl/Sources/App.swift
++++ b/Targets/RunnerControl/Sources/App.swift
+@@ -41,7 +41,8 @@ struct RunnerControl: App {
+         if window == nil {
+             let controller = NSHostingController(rootView: ManagementWindowContainer(
+                 runners: AppRegistry.state,
+-                github: AppRegistry.githubState
++                github: AppRegistry.githubState,
++                registration: AppRegistry.registrationState
+             ))
+             let value = NSWindow(contentViewController: controller)
+             value.title = "Раннеры и настройки"
+diff --git a/Targets/RunnerControl/Sources/AppRegistry.swift b/Targets/RunnerControl/Sources/AppRegistry.swift
+index b183783..a411ac9 100644
+--- a/Targets/RunnerControl/Sources/AppRegistry.swift
++++ b/Targets/RunnerControl/Sources/AppRegistry.swift
+@@ -4,6 +4,7 @@ import RunnerControlCore
+ @MainActor enum AppRegistry {
+     static let state = Runners.State()
+     static let githubState = GitHubAuth.State()
++    static let registrationState = RunnerRegistration.State()
+     static let updater = AppUpdater()
+     private static var task: Task<Void, Never>?
+     private static var githubTask: Task<Void, Never>?
+@@ -12,7 +13,7 @@ import RunnerControlCore
+         updater.start()
+         // One composition root for every MenuBarExtra presentation.
+         task = Task {
+-            _ = await RunnerRuntime.make(state: state, githubState: githubState)
++            _ = await RunnerRuntime.make(state: state, githubState: githubState, registrationState: registrationState)
+             await action { GitHubAuth.Effect.restoreSession }
+             while !Task.isCancelled {
+                 await action { Runners.Effect.refresh }
+diff --git a/Targets/RunnerControl/Sources/ManagementWindowContainer.swift b/Targets/RunnerControl/Sources/ManagementWindowContainer.swift
+index 4e5ce27..5216f17 100644
+--- a/Targets/RunnerControl/Sources/ManagementWindowContainer.swift
++++ b/Targets/RunnerControl/Sources/ManagementWindowContainer.swift
+@@ -6,9 +6,11 @@ import RunnerControlCore
+ struct ManagementWindowContainer: View {
+     @ObservedObject var runners: Runners.State
+     @ObservedObject var github: GitHubAuth.State
++    @ObservedObject var registration: RunnerRegistration.State
+     @ObservedObject private var updater = AppRegistry.updater
+     @StateObject private var launchAtLogin = LaunchAtLoginModel()
+     @State private var serverHostText: String = "github.com"
++    @State private var showRegistration = false
+ 
+     var body: some View {
+         ManagementWindowPage(
+@@ -44,6 +46,7 @@ struct ManagementWindowContainer: View {
+                 openLogs: { NSWorkspace.shared.open($0.logs) },
+                 showDirectory: { NSWorkspace.shared.open($0.directory) },
+                 clearRunnerError: { Task { await action { Runners.Action.clearError } } },
++                openRegistration: { showRegistration = true },
+                 serverHostChanged: { serverHostText = $0 },
+                 beginLogin: beginLogin,
+                 cancelLogin: { Task { await action { GitHubAuth.Effect.cancelLogin } } },
+@@ -62,6 +65,13 @@ struct ManagementWindowContainer: View {
+                 quit: quit
+             )
+         )
++        .sheet(isPresented: $showRegistration) {
++            RunnerRegistrationContainer(
++                registration: registration,
++                github: github,
++                close: { showRegistration = false }
++            )
++        }
+     }
+ 
+     private func beginLogin() {
+diff --git a/Targets/RunnerControl/Sources/ManagementWindowPage+Props.swift b/Targets/RunnerControl/Sources/ManagementWindowPage+Props.swift
+index a0170d5..15e58af 100644
+--- a/Targets/RunnerControl/Sources/ManagementWindowPage+Props.swift
++++ b/Targets/RunnerControl/Sources/ManagementWindowPage+Props.swift
+@@ -36,6 +36,7 @@ extension ManagementWindowPage {
+         let openLogs: (Runners.Definition) -> Void
+         let showDirectory: (Runners.Definition) -> Void
+         let clearRunnerError: () -> Void
++        let openRegistration: () -> Void
+         let serverHostChanged: (String) -> Void
+         let beginLogin: () -> Void
+         let cancelLogin: () -> Void
+diff --git a/Targets/RunnerControl/Sources/ManagementWindowPage.swift b/Targets/RunnerControl/Sources/ManagementWindowPage.swift
+index a491478..1c7e4f1 100644
+--- a/Targets/RunnerControl/Sources/ManagementWindowPage.swift
++++ b/Targets/RunnerControl/Sources/ManagementWindowPage.swift
+@@ -76,6 +76,9 @@ struct ManagementWindowPage: View {
+                 Button("Выключить все…", action: reactions.disableAll)
+                     .buttonStyle(.bordered)
+                     .disabled(!props.changing.isEmpty || props.runners.allSatisfy { $0.status == .stopped || $0.status == .checking })
++                Button("Добавить раннер…", action: reactions.openRegistration)
++                    .buttonStyle(.bordered)
++                    .accessibilityIdentifier("Add runner button")
+             }
+             Text("Закрытие приложения не останавливает CI. Автозапуск определяется настройками каждой службы.")
+                 .font(.system(size: 11)).foregroundStyle(.secondary)
+diff --git a/Targets/RunnerControl/Sources/RunnerRegistrationContainer.swift b/Targets/RunnerControl/Sources/RunnerRegistrationContainer.swift
+new file mode 100644
+index 0000000..957c570
+--- /dev/null
++++ b/Targets/RunnerControl/Sources/RunnerRegistrationContainer.swift
+@@ -0,0 +1,162 @@
++import SwiftUI
++import RunnerControlCore
++
++/// Wizard composition root. Edits local draft fields, dispatches production
++/// `RunnerRegistration.Effect`s, and never holds tokens.
++struct RunnerRegistrationContainer: View {
++    @ObservedObject var registration: RunnerRegistration.State
++    @ObservedObject var github: GitHubAuth.State
++    let close: () -> Void
++
++    @State private var scopeKind: RunnerRegistrationPage.ScopeKind = .organization
++    @State private var org = ""
++    @State private var repoOwner = ""
++    @State private var repoName = ""
++    @State private var runnerName = Host.current().localizedName ?? ""
++    @State private var labelsText = "self-hosted, macOS"
++    @State private var installDirName = ""
++    @State private var workFolder = "_work"
++    @State private var groupName = RunnerRegistration.Draft.defaultGroupName(
++        hostName: Host.current().localizedName ?? ""
++    )
++    @State private var allowGroupMutation = false
++    @State private var selectedRepositoryIDs: Set<Int64> = []
++    @State private var seeded = false
++
++    private static func parseLabels(_ text: String) -> [String] {
++        text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
++    }
++
++    private var currentDraft: RunnerRegistration.Draft {
++        let scope: RunnerRegistration.Scope
++        switch scopeKind {
++        case .organization:
++            scope = .organization(org: org.trimmingCharacters(in: .whitespacesAndNewlines))
++        case .repository:
++            scope = .repository(
++                owner: repoOwner.trimmingCharacters(in: .whitespacesAndNewlines),
++                name: repoName.trimmingCharacters(in: .whitespacesAndNewlines)
++            )
++        }
++        return RunnerRegistration.Draft(
++            scope: scope,
++            runnerName: runnerName.trimmingCharacters(in: .whitespacesAndNewlines),
++            labels: Self.parseLabels(labelsText),
++            installDirName: installDirName.trimmingCharacters(in: .whitespacesAndNewlines),
++            workFolder: workFolder.trimmingCharacters(in: .whitespacesAndNewlines),
++            groupName: groupName.trimmingCharacters(in: .whitespacesAndNewlines),
++            selectedRepositoryIDs: selectedRepositoryIDs,
++            allowGroupMutation: allowGroupMutation
++        )
++    }
++
++    var body: some View {
++        RunnerRegistrationPage(
++            props: .init(
++                phase: registration.phase,
++                working: registration.working,
++                scopeKind: scopeKind,
++                org: org,
++                repoOwner: repoOwner,
++                repoName: repoName,
++                runnerName: runnerName,
++                labelsText: labelsText,
++                installDirName: installDirName,
++                workFolder: workFolder,
++                groupName: groupName,
++                allowGroupMutation: allowGroupMutation,
++                selectedRepositoryIDs: selectedRepositoryIDs,
++                repositories: github.repositories,
++                installations: github.installations,
++                githubConnected: isConnected,
++                githubUsername: github.username,
++                group: registration.group,
++                groupRepositoryIDs: registration.groupRepositoryIDs,
++                assetFilename: registration.asset?.filename,
++                installPath: registration.installPath,
++                runnerID: registration.runnerID,
++                localAgentID: registration.localAgentID,
++                completedSteps: registration.completedSteps,
++                error: registration.error,
++                failedStep: registration.failedStep,
++                permissionError: registration.permissionError
++            ),
++            reactions: .init(
++                scopeKindChanged: { scopeKind = $0; pushDraft() },
++                orgChanged: { org = $0; pushDraft() },
++                repoOwnerChanged: { repoOwner = $0; pushDraft() },
++                repoNameChanged: { repoName = $0; pushDraft() },
++                runnerNameChanged: { runnerName = $0; pushDraft() },
++                labelsChanged: { labelsText = $0; pushDraft() },
++                installDirChanged: { installDirName = $0; pushDraft() },
++                workFolderChanged: { workFolder = $0; pushDraft() },
++                groupNameChanged: { groupName = $0; pushDraft() },
++                allowGroupMutationChanged: { allowGroupMutation = $0; pushDraft() },
++                repositoriesChanged: { ids in
++                    selectedRepositoryIDs = ids
++                    Task { await action { GitHubAuth.Effect.selectRepositories(ids) } }
++                    pushDraft()
++                },
++                beginDraft: { Task { await action { RunnerRegistration.Effect.beginDraft(currentDraft) } } },
++                resolveGroup: { Task { await action { RunnerRegistration.Effect.resolveGroup } } },
++                downloadAndInstall: { Task { await action { RunnerRegistration.Effect.downloadAndInstall } } },
++                registerRunner: { Task { await action { RunnerRegistration.Effect.registerRunner } } },
++                setupService: { Task { await action { RunnerRegistration.Effect.setupService } } },
++                applyRepositoryAccess: {
++                    let target = registration.group?.id ?? -1
++                    let effect = RunnerRegistration.Effect.applyRepositoryAccess(
++                        groupID: target, repositories: selectedRepositoryIDs
++                    )
++                    Task { await action { effect } }
++                },
++                applyLabels: {
++                    let labels = Self.parseLabels(labelsText)
++                    Task { await action { RunnerRegistration.Effect.applyLabels(labels) } }
++                },
++                retry: { Task { await action { RunnerRegistration.Effect.retry } } },
++                cancel: { Task { await action { RunnerRegistration.Effect.cancel } } },
++                reset: { Task { await action { RunnerRegistration.Effect.reset } } },
++                dismissPermission: { Task { await action { RunnerRegistration.Effect.dismissPermission } } },
++                close: close
++            )
++        )
++        .onAppear(perform: seedFromGitHub)
++    }
++
++    private var isConnected: Bool {
++        if case .connected = github.connection { return true }
++        return false
++    }
++
++    /// Pushes field edits into the draft once the wizard has begun, so step
++    /// buttons always run the visible values. Before the first begin the
++    /// draft does not exist yet and edits stay local.
++    private func pushDraft() {
++        guard registration.phase != .idle else { return }
++        let draft = currentDraft
++        Task { await action { RunnerRegistration.Effect.updateDraft(draft) } }
++    }
++
++    /// Seeds org/owner from the selected GitHub installation once.
++    private func seedFromGitHub() {
++        guard !seeded else { return }
++        seeded = true
++        if installDirName.isEmpty {
++            installDirName = (Host.current().localizedName ?? "runner")
++                .lowercased()
++                .replacingOccurrences(of: " ", with: "-")
++        }
++        guard let id = github.selectedInstallationID,
++              let installation = github.installations.first(where: { $0.id == id }) else { return }
++        if org.isEmpty, installation.accountType == "Organization" {
++            org = installation.account
++            scopeKind = .organization
++        } else if repoOwner.isEmpty {
++            repoOwner = installation.account
++            scopeKind = .repository
++        }
++        if selectedRepositoryIDs.isEmpty {
++            selectedRepositoryIDs = github.selectedRepositoryIDs
++        }
++    }
++}
+diff --git a/Targets/RunnerControl/Sources/RunnerRegistrationPage.swift b/Targets/RunnerControl/Sources/RunnerRegistrationPage.swift
+new file mode 100644
+index 0000000..2358ed8
+--- /dev/null
++++ b/Targets/RunnerControl/Sources/RunnerRegistrationPage.swift
+@@ -0,0 +1,430 @@
++import SwiftUI
++import RunnerControlCore
++
++/// New-runner wizard. Pure view: all state arrives via props, all actions
++/// leave via reactions that dispatch production `RunnerRegistration.Effect`s.
++struct RunnerRegistrationPage: View {
++    struct Props {
++        let phase: RunnerRegistration.Phase
++        let working: Bool
++        let scopeKind: ScopeKind
++        let org: String
++        let repoOwner: String
++        let repoName: String
++        let runnerName: String
++        let labelsText: String
++        let installDirName: String
++        let workFolder: String
++        let groupName: String
++        let allowGroupMutation: Bool
++        let selectedRepositoryIDs: Set<Int64>
++        let repositories: [GitHubAuth.Repository]
++        let installations: [GitHubAuth.Installation]
++        let githubConnected: Bool
++        let githubUsername: String?
++        let group: RunnerRegistration.RunnerGroup?
++        let groupRepositoryIDs: [Int64]
++        let assetFilename: String?
++        let installPath: String?
++        let runnerID: Int64?
++        let localAgentID: Int64?
++        let completedSteps: Set<String>
++        let error: String?
++        let failedStep: String?
++        let permissionError: String?
++    }
++
++    enum ScopeKind: Hashable {
++        case organization
++        case repository
++    }
++
++    struct Reactions {
++        let scopeKindChanged: (ScopeKind) -> Void
++        let orgChanged: (String) -> Void
++        let repoOwnerChanged: (String) -> Void
++        let repoNameChanged: (String) -> Void
++        let runnerNameChanged: (String) -> Void
++        let labelsChanged: (String) -> Void
++        let installDirChanged: (String) -> Void
++        let workFolderChanged: (String) -> Void
++        let groupNameChanged: (String) -> Void
++        let allowGroupMutationChanged: (Bool) -> Void
++        let repositoriesChanged: (Set<Int64>) -> Void
++        let beginDraft: () -> Void
++        let resolveGroup: () -> Void
++        let downloadAndInstall: () -> Void
++        let registerRunner: () -> Void
++        let setupService: () -> Void
++        let applyRepositoryAccess: () -> Void
++        let applyLabels: () -> Void
++        let retry: () -> Void
++        let cancel: () -> Void
++        let reset: () -> Void
++        let dismissPermission: () -> Void
++        let close: () -> Void
++    }
++
++    let props: Props
++    let reactions: Reactions
++
++    var body: some View {
++        ScrollView {
++            VStack(alignment: .leading, spacing: 16) {
++                header
++                if !props.githubConnected {
++                    githubRequired
++                }
++                WizardForm(props: props, reactions: reactions)
++                WizardSteps(props: props, reactions: reactions)
++                WizardStatus(props: props, reactions: reactions)
++                footer
++            }
++            .padding(20)
++            .frame(maxWidth: .infinity, alignment: .leading)
++        }
++        .frame(width: 640, height: 560)
++    }
++
++    private var header: some View {
++        VStack(alignment: .leading, spacing: 3) {
++            Text("Новый раннер на этом Mac").font(.system(size: 15, weight: .semibold))
++            Text("Официальная сборка GitHub под вашу архитектуру, регистрация без терминала.")
++                .font(.callout).foregroundStyle(.secondary)
++        }
++    }
++
++    private var githubRequired: some View {
++        HStack(alignment: .top, spacing: 8) {
++            Image(systemName: "person.crop.circle.badge.exclamationmark").foregroundStyle(.orange)
++            VStack(alignment: .leading, spacing: 2) {
++                Text("Войдите через GitHub во вкладке «GitHub», затем вернитесь сюда.")
++                Text("Регистрация требует подтверждённой сессии.")
++            }
++            .font(.callout)
++        }
++        .padding(10)
++        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
++    }
++
++    private var footer: some View {
++        HStack(spacing: 8) {
++            if props.working {
++                Button("Отмена", action: reactions.cancel)
++                    .buttonStyle(.bordered)
++                    .accessibilityIdentifier("Registration cancel button")
++            } else if props.phase != .idle {
++                Button("Сбросить", action: reactions.reset)
++                    .buttonStyle(.plain).foregroundStyle(.secondary)
++                    .accessibilityIdentifier("Registration reset button")
++            }
++            Spacer()
++            Button("Закрыть", action: reactions.close)
++                .buttonStyle(.bordered)
++                .accessibilityIdentifier("Registration close button")
++        }
++    }
++}
++
++/// Wizard input form: scope, runner identity, and group access.
++private struct WizardForm: View {
++    typealias Props = RunnerRegistrationPage.Props
++    typealias Reactions = RunnerRegistrationPage.Reactions
++    typealias ScopeKind = RunnerRegistrationPage.ScopeKind
++
++    let props: Props
++    let reactions: Reactions
++
++    var body: some View {
++        VStack(alignment: .leading, spacing: 16) {
++            scopeSection
++            runnerSection
++            if props.scopeKind == .organization {
++                groupSection
++            }
++        }
++    }
++
++    private var scopeSection: some View {
++        VStack(alignment: .leading, spacing: 8) {
++            Text("Область регистрации").font(.system(size: 13, weight: .semibold))
++            Picker("Область", selection: Binding(
++                get: { props.scopeKind },
++                set: reactions.scopeKindChanged
++            )) {
++                Text("Организация").tag(ScopeKind.organization)
++                Text("Репозиторий").tag(ScopeKind.repository)
++            }
++            .pickerStyle(.segmented)
++            .frame(width: 320)
++            .accessibilityIdentifier("Registration scope picker")
++            if props.scopeKind == .organization {
++                labeledField(
++                    "Организация", text: props.org, set: reactions.orgChanged,
++                    placeholder: "acme", id: "Registration org field"
++                )
++            } else {
++                HStack(spacing: 8) {
++                    labeledField(
++                        "Владелец", text: props.repoOwner, set: reactions.repoOwnerChanged,
++                        placeholder: "octo", id: "Registration repo owner field"
++                    )
++                    labeledField(
++                        "Репозиторий", text: props.repoName, set: reactions.repoNameChanged,
++                        placeholder: "app", id: "Registration repo name field"
++                    )
++                }
++                Text("Личные репозитории получают отдельную установку без общих групп.")
++                    .font(.system(size: 11)).foregroundStyle(.secondary)
++            }
++        }
++    }
++
++    private var runnerSection: some View {
++        VStack(alignment: .leading, spacing: 8) {
++            Text("Раннер").font(.system(size: 13, weight: .semibold))
++            labeledField(
++                "Имя раннера", text: props.runnerName, set: reactions.runnerNameChanged,
++                placeholder: Host.current().localizedName ?? "macbook",
++                id: "Registration runner name field"
++            )
++            labeledField(
++                "Метки (через запятую)", text: props.labelsText, set: reactions.labelsChanged,
++                placeholder: "self-hosted, macOS", id: "Registration labels field"
++            )
++            HStack(spacing: 8) {
++                labeledField(
++                    "Папка установки", text: props.installDirName, set: reactions.installDirChanged,
++                    placeholder: "macbook-iv", id: "Registration install dir field"
++                )
++                labeledField(
++                    "Рабочая папка", text: props.workFolder, set: reactions.workFolderChanged,
++                    placeholder: "_work", id: "Registration work folder field"
++                )
++            }
++            VStack(alignment: .leading, spacing: 2) {
++                Text("Пути без пробелов: ~/Library/GitHubActions/<папка>.")
++                Text("Повторный запуск продолжает с места остановки и не создаёт дубликатов.")
++            }
++            .font(.system(size: 11)).foregroundStyle(.secondary)
++        }
++    }
++
++    private var groupSection: some View {
++        VStack(alignment: .leading, spacing: 8) {
++            Text("Группа и доступ к репозиториям").font(.system(size: 13, weight: .semibold))
++            labeledField(
++                "Группа этого Mac", text: props.groupName, set: reactions.groupNameChanged,
++                placeholder: "RunnerControl-Mac", id: "Registration group name field"
++            )
++            if let group = props.group {
++                VStack(alignment: .leading, spacing: 2) {
++                    Text("Группа: \(group.name) · id \(group.id) · \(group.visibility).")
++                    Text("Доступ: \(props.groupRepositoryIDs.count) репозиториев.")
++                }
++                .font(.callout).foregroundStyle(.secondary)
++            } else {
++                Text("Группа создаётся только для этого Mac. Чужие и общие группы приложение не изменяет.")
++                    .font(.system(size: 11)).foregroundStyle(.secondary)
++            }
++            Toggle(
++                "Разрешаю изменять доступ только для указанной группы этого Mac",
++                isOn: Binding(get: { props.allowGroupMutation }, set: reactions.allowGroupMutationChanged)
++            )
++            .font(.callout)
++            .accessibilityIdentifier("Registration allow group mutation toggle")
++            if props.repositories.isEmpty {
++                Text("Репозитории выбранной установки появятся здесь после входа.")
++                    .font(.callout).foregroundStyle(.secondary)
++            } else {
++                VStack(alignment: .leading, spacing: 6) {
++                    ForEach(props.repositories) { repo in
++                        Toggle(
++                            repo.fullName,
++                            isOn: Binding(
++                                get: { props.selectedRepositoryIDs.contains(repo.id) },
++                                set: { enabled in
++                                    var next = props.selectedRepositoryIDs
++                                    if enabled { next.insert(repo.id) } else { next.remove(repo.id) }
++                                    reactions.repositoriesChanged(next)
++                                }
++                            )
++                        )
++                        .font(.callout)
++                    }
++                }
++                if props.group != nil {
++                    Button("Применить доступ к репозиториям", action: reactions.applyRepositoryAccess)
++                        .buttonStyle(.bordered)
++                        .disabled(props.working || !props.allowGroupMutation)
++                        .accessibilityIdentifier("Registration apply repo access button")
++                }
++            }
++        }
++    }
++
++    private func labeledField(
++        _ title: String, text: String, set: @escaping (String) -> Void,
++        placeholder: String, id: String
++    ) -> some View {
++        VStack(alignment: .leading, spacing: 4) {
++            Text(title).font(.system(size: 11)).foregroundStyle(.secondary)
++            TextField(placeholder, text: Binding(get: { text }, set: set))
++                .textFieldStyle(.roundedBorder)
++                .accessibilityIdentifier(id)
++        }
++    }
++}
++
++/// Wizard step buttons with per-step completion state.
++private struct WizardSteps: View {
++    typealias Props = RunnerRegistrationPage.Props
++    typealias Reactions = RunnerRegistrationPage.Reactions
++
++    let props: Props
++    let reactions: Reactions
++
++    var body: some View {
++        VStack(alignment: .leading, spacing: 8) {
++            Text("Шаги").font(.system(size: 13, weight: .semibold))
++            stepRow(
++                title: "Черновик", done: props.phase != .idle,
++                action: reactions.beginDraft, button: "Начать",
++                id: "Registration begin button"
++            )
++            if props.scopeKind == .organization {
++                stepRow(
++                    title: "Группа этого Mac",
++                    done: props.completedSteps.contains("resolveGroup"),
++                    action: reactions.resolveGroup, button: "Найти или создать",
++                    id: "Registration resolve group button"
++                )
++            }
++            stepRow(
++                title: "Загрузка и проверка сборки",
++                done: props.completedSteps.contains("downloadAndInstall"),
++                action: reactions.downloadAndInstall, button: "Загрузить и установить",
++                id: "Registration install button",
++                detail: props.assetFilename ?? props.installPath
++            )
++            stepRow(
++                title: "Регистрация",
++                done: props.completedSteps.contains("registerRunner"),
++                action: reactions.registerRunner, button: "Зарегистрировать",
++                id: "Registration register button",
++                detail: props.runnerID.map { "id \($0)" }
++            )
++            stepRow(
++                title: "Служба (автозапуск выключен)",
++                done: props.completedSteps.contains("setupService"),
++                action: reactions.setupService, button: "Настроить службу",
++                id: "Registration setup service button"
++            )
++            HStack(spacing: 8) {
++                Button("Метки: применить текущие", action: reactions.applyLabels)
++                    .buttonStyle(.bordered).controlSize(.small)
++                    .disabled(props.working || props.runnerID == nil)
++                    .accessibilityIdentifier("Registration apply labels button")
++                if props.failedStep != nil {
++                    Button("Повторить шаг", action: reactions.retry)
++                        .buttonStyle(.borderedProminent).tint(.teal).controlSize(.small)
++                        .disabled(props.working)
++                        .accessibilityIdentifier("Registration retry button")
++                }
++                if props.working {
++                    ProgressView().controlSize(.small)
++                }
++            }
++        }
++    }
++
++    private func stepRow(
++        title: String, done: Bool, action: @escaping () -> Void,
++        button: String, id: String, detail: String? = nil
++    ) -> some View {
++        HStack(spacing: 8) {
++            Image(systemName: done ? "checkmark.circle.fill" : "circle")
++                .foregroundStyle(done ? .green : .secondary)
++            VStack(alignment: .leading, spacing: 2) {
++                Text(title).font(.callout)
++                if let detail {
++                    Text(detail).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2)
++                }
++            }
++            Spacer()
++            Button(button, action: action)
++                .buttonStyle(.bordered).controlSize(.small)
++                .disabled(props.working || !props.githubConnected)
++                .accessibilityIdentifier(id)
++        }
++    }
++}
++
++/// Wizard outcome: retained permission errors, step errors, and completion.
++private struct WizardStatus: View {
++    typealias Props = RunnerRegistrationPage.Props
++    typealias Reactions = RunnerRegistrationPage.Reactions
++
++    let props: Props
++    let reactions: Reactions
++
++    var body: some View {
++        VStack(alignment: .leading, spacing: 16) {
++            if let permission = props.permissionError {
++                permissionView(permission)
++            } else if let error = props.error {
++                errorView(error)
++            }
++            if props.phase == .done {
++                doneView
++            }
++        }
++    }
++
++    private func permissionView(_ message: String) -> some View {
++        VStack(alignment: .leading, spacing: 8) {
++            HStack(alignment: .top, spacing: 8) {
++                Image(systemName: "lock.triangle.fill").foregroundStyle(.red)
++                Text(message).font(.callout).textSelection(.enabled)
++                Spacer(minLength: 0)
++            }
++            HStack(spacing: 8) {
++                Button("Повторить шаг", action: reactions.retry)
++                    .buttonStyle(.borderedProminent).tint(.teal).controlSize(.small)
++                    .disabled(props.working)
++                Button("Скрыть", action: reactions.dismissPermission)
++                    .buttonStyle(.plain).font(.callout).foregroundStyle(.secondary)
++            }
++            Text("Ошибка прав сохранена и не стирается правками черновика.")
++                .font(.system(size: 11)).foregroundStyle(.secondary)
++        }
++        .padding(10)
++        .background(.red.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
++    }
++
++    private func errorView(_ message: String) -> some View {
++        HStack(alignment: .top, spacing: 8) {
++            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
++            Text(message).font(.caption).textSelection(.enabled).lineLimit(6)
++            Spacer(minLength: 0)
++        }
++        .padding(10)
++        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
++    }
++
++    private var doneView: some View {
++        VStack(alignment: .leading, spacing: 6) {
++            HStack(spacing: 8) {
++                Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
++                Text("Раннер зарегистрирован").font(.callout.weight(.medium))
++            }
++            if let path = props.installPath {
++                Text(path).font(.system(size: 11)).foregroundStyle(.secondary).textSelection(.enabled)
++            }
++            Text("Включите его во вкладке «Раннеры», когда будете готовы. Токен регистрации уже удалён.")
++                .font(.system(size: 11)).foregroundStyle(.secondary)
++        }
++        .padding(10)
++        .background(.green.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
++    }
++}

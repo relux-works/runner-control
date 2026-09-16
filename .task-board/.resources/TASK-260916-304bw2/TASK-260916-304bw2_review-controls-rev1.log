@@ -1,0 +1,22 @@
+$ swift test --package-path /tmp/TASK-260916-304bw2-review/Packages/RunnerControlCore --skip-build --filter unregisterRefusesRunningService|applyGroupAccessRefusesStaleGroup|catalogKeepsSameNameDifferentScopesAsTwoRunners|migrationPreservesPoliciesWithoutTouchingServices
+[0/1] Planning build
+Test Suite 'Selected tests' started at 2026-09-16 13:19:59.109.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 13:19:59.123.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 13:19:59.123.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 13:19:59.123.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.014) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test applyGroupAccessRefusesStaleGroup() started.
+􀟈  Test migrationPreservesPoliciesWithoutTouchingServices() started.
+􀟈  Test catalogKeepsSameNameDifferentScopesAsTwoRunners() started.
+􀟈  Test unregisterRefusesRunningService() started.
+􁁛  Test unregisterRefusesRunningService() passed after 0.013 seconds.
+􁁛  Test applyGroupAccessRefusesStaleGroup() passed after 0.014 seconds.
+􁁛  Test catalogKeepsSameNameDifferentScopesAsTwoRunners() passed after 0.014 seconds.
+􁁛  Test migrationPreservesPoliciesWithoutTouchingServices() passed after 0.021 seconds.
+􁁛  Test run with 4 tests in 0 suites passed after 0.022 seconds.
+
+EXIT 0

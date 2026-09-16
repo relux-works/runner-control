@@ -1,0 +1,3 @@
+# Reviewer logbook — revision 5
+
+Exact previous unregister and Load/Apply session invalidation probes now pass. Remaining same-class cleanup defect: dropping the per-editor counter on catalog removal permits ABA reuse when the same label is re-imported. An old Load clears a newer pending Load's busy flag and publishes its stale catalog-change error. Independently reproduced through one production Flow and actual reducer (2 failures); 12 maintained controls pass. Request focused non-reusable operation ownership and exact regression/narrowing mutant. No repository or production runner mutations. Verdict R5-F1 repeats revision 4 / R4-F2.

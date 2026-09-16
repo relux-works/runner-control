@@ -1,0 +1,34 @@
+[0/1] Planning build
+Building for debugging...
+[0/4] Write sources
+[1/4] Write swift-version--58304C5D6DBC2206.txt
+[3/6] Emitting module RunnerControlCoreTests
+[4/6] Compiling RunnerControlCoreTests RunnerCatalogLifecycleTests.swift
+[5/7] Compiling RunnerControlCoreTests RunnerRegistrationTests.swift
+[6/9] Emitting module RunnerControlCorePackageTests
+[7/9] Compiling RunnerControlCorePackageTests runner.swift
+[7/9] Write Objects.LinkFileList
+[8/9] Linking RunnerControlCorePackageTests
+Build complete! (70.06s)
+Test Suite 'Selected tests' started at 2026-09-16 15:04:23.749.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 15:04:23.784.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 15:04:23.784.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 15:04:23.784.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.036) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test reviewR4LogoutDuringFinalStoppedInspectionMustRefuseRemoval() started.
+􀟈  Test reviewR4SessionInvalidationMustReleaseEditorLoading(apply:) started.
+􀟈  Test case passing 1 argument apply → false to reviewR4SessionInvalidationMustReleaseEditorLoading(apply:) started.
+􀟈  Test case passing 1 argument apply → true to reviewR4SessionInvalidationMustReleaseEditorLoading(apply:) started.
+􀢄  Test reviewR4SessionInvalidationMustReleaseEditorLoading(apply:) recorded an issue with 1 argument apply → false at RunnerCatalogLifecycleTests.swift:2032:5: Expectation failed: (state.groupAccess[label]?.loading → true) != true
+􀢄  Test reviewR4SessionInvalidationMustReleaseEditorLoading(apply:) recorded an issue with 1 argument apply → true at RunnerCatalogLifecycleTests.swift:2032:5: Expectation failed: (state.groupAccess[label]?.loading → true) != true
+􀢄  Test reviewR4SessionInvalidationMustReleaseEditorLoading(apply:) with 2 test cases failed after 0.092 seconds with 2 issues.
+􀢄  Test reviewR4LogoutDuringFinalStoppedInspectionMustRefuseRemoval() recorded an issue at RunnerCatalogLifecycleTests.swift:2009:5: Expectation failed: await h.installerExecutor.calls.isEmpty
+􀢄  Test reviewR4LogoutDuringFinalStoppedInspectionMustRefuseRemoval() recorded an issue at RunnerCatalogLifecycleTests.swift:2010:5: Expectation failed: await h.catalog.load().first?.remoteAgentID == 42
+􀢄  Test reviewR4LogoutDuringFinalStoppedInspectionMustRefuseRemoval() failed after 0.104 seconds with 2 issues.
+􀢄  Test run with 2 tests in 0 suites failed after 0.104 seconds with 4 issues.
+
+[exit 1]

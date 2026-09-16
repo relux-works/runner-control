@@ -1,0 +1,27 @@
+RUN timeout=240.0s: swift test --package-path Packages/RunnerControlCore --filter secondInstallForAnyDirectoryRefusedWhileInstallerBusy
+[0/1] Planning build
+Building for debugging...
+[0/3] Write sources
+[1/3] Write swift-version--58304C5D6DBC2206.txt
+[3/5] Emitting module RunnerControlCore
+[4/5] Compiling RunnerControlCore RunnerInstallerService.swift
+[4/6] Write Objects.LinkFileList
+[5/6] Linking RunnerControlCorePackageTests
+Build complete! (4.14s)
+Test Suite 'Selected tests' started at 2026-09-16 12:05:49.551.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 12:05:49.565.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 12:05:49.565.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 12:05:49.565.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.014) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test secondInstallForAnyDirectoryRefusedWhileInstallerBusy() started.
+􀢄  Test secondInstallForAnyDirectoryRefusedWhileInstallerBusy() recorded an issue at RunnerRegistrationTests.swift:2813:5: Expectation failed: await downloads.calls == 1
+􀄵  Second install for any directory must be refused while the installer is busy
+􀢄  Test secondInstallForAnyDirectoryRefusedWhileInstallerBusy() recorded an issue at RunnerRegistrationTests.swift:2814:5: Expectation failed: (lastFailure(harness.logger)?.step → nil) == "downloadAndInstall"
+􀢄  Test secondInstallForAnyDirectoryRefusedWhileInstallerBusy() recorded an issue at RunnerRegistrationTests.swift:2815:5: Expectation failed: (lastFailure(harness.logger)?.message.contains("busy") → nil) ?? false
+􀢄  Test secondInstallForAnyDirectoryRefusedWhileInstallerBusy() failed after 0.283 seconds with 3 issues.
+􀢄  Test run with 1 test in 0 suites failed after 0.283 seconds with 3 issues.
+EXIT:1

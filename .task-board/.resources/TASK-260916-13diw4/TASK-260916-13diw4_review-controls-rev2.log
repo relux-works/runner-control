@@ -1,0 +1,29 @@
+[0/1] Planning build
+Building for debugging...
+[0/2] Write swift-version--58304C5D6DBC2206.txt
+Build complete! (0.25s)
+Test Suite 'Selected tests' started at 2026-09-16 08:57:11.995.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 08:57:12.002.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 08:57:12.002.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 08:57:12.002.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.007) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test downloadRefusesMissingChecksum() started.
+􀟈  Test orgResolveGroupCreatesWithSelectedRepos() started.
+􀟈  Test existingGroupNameWithoutTakeoverIsRefused() started.
+􀟈  Test repoAccessAppliesAndConfirmsRealIDs() started.
+􀟈  Test resolvePatchesDeniedPublicReposOnOwnedGroup() started.
+􀟈  Test postConfigAPIFailureDeletesTokenAndReportsError() started.
+􀟈  Test remoteDuplicateWithoutReplaceIsRefusedBeforeToken() started.
+􁁛  Test existingGroupNameWithoutTakeoverIsRefused() passed after 0.009 seconds.
+􁁛  Test resolvePatchesDeniedPublicReposOnOwnedGroup() passed after 0.023 seconds.
+􁁛  Test repoAccessAppliesAndConfirmsRealIDs() passed after 0.023 seconds.
+􁁛  Test orgResolveGroupCreatesWithSelectedRepos() passed after 0.024 seconds.
+􁁛  Test downloadRefusesMissingChecksum() passed after 0.129 seconds.
+􁁛  Test remoteDuplicateWithoutReplaceIsRefusedBeforeToken() passed after 0.174 seconds.
+􁁛  Test postConfigAPIFailureDeletesTokenAndReportsError() passed after 0.178 seconds.
+􁁛  Test run with 7 tests in 0 suites passed after 0.178 seconds.
+[exit 0]

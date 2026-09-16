@@ -1,0 +1,114 @@
+Fetching https://github.com/relux-works/swift-relux.git from cache
+Fetched https://github.com/relux-works/swift-relux.git from cache (0.02s)
+Creating working copy for https://github.com/relux-works/swift-relux.git
+Working copy of https://github.com/relux-works/swift-relux.git resolved at 9.2.0
+Building for debugging...
+[0/8] Write sources
+[2/8] /private/tmp/TASK-260916-13diw4-review4/Packages/RunnerControlCore/.build/arm64-apple-macosx/debug/RunnerControlCorePackageTests.derived/runner.swift
+[3/8] Write sources
+[5/8] Write swift-version--58304C5D6DBC2206.txt
+[7/38] Emitting module Relux
+[8/42] Compiling Relux Relux+Logger+EnumReflectible.swift
+[9/42] Compiling Relux Relux+Logger.swift
+[10/42] Compiling Relux Relux+Module.swift
+[11/42] Compiling Relux Relux+Navigation.swift
+[12/42] Compiling Relux Relux+Testing+MockModule+Saga.swift
+[13/42] Compiling Relux Relux+Testing+MockModule+State.swift
+[14/42] Compiling Relux Relux+Testing+MockModule.swift
+[15/42] Compiling Relux Relux+Testing.swift
+[16/42] Compiling Relux TypeKeyable.swift
+[17/42] Compiling Relux timestamp.swift
+[18/42] Compiling Relux Relux+ExecutionType.swift
+[19/42] Compiling Relux Seconds.swift
+[20/42] Compiling Relux Relux+Subscriber.swift
+[21/42] Compiling Relux Sequence+AsSet.swift
+[22/42] Compiling Relux AsyncLock.swift
+[23/42] Compiling Relux AsyncUtils.swift
+[24/42] Compiling Relux Optional+isNil.swift
+[25/42] Compiling Relux Relux+Action.swift
+[26/42] Compiling Relux Relux+ActionResult+Reduced.swift
+[27/42] Compiling Relux Relux+ActionResult.swift
+[28/42] Compiling Relux Relux+ActionResultBuilder.swift
+[29/42] Compiling Relux Relux+Flow.swift
+[30/42] Compiling Relux Relux+RootSaga.swift
+[31/42] Compiling Relux Relux+Saga.swift
+[32/42] Compiling Relux Relux+State.swift
+[33/42] Compiling Relux Relux.Effect.swift
+[34/42] Compiling Relux Relux+Dispatcher+Global.swift
+[35/42] Compiling Relux Relux+Dispatcher+Interface.swift
+[36/42] Compiling Relux Relux+Dispatcher.swift
+[37/42] Compiling Relux Relux+Store.swift
+[38/42] Compiling Relux Relux.swift
+[39/42] Compiling Relux LockedState.swift
+[40/42] Compiling Relux Relux+Testing+Logger.swift
+[41/74] Emitting module RunnerControlCore
+[42/78] Compiling RunnerControlCore GitHubAuth+Module.swift
+[43/78] Compiling RunnerControlCore GitHubAuth+State+Reducer.swift
+[44/78] Compiling RunnerControlCore GitHubAuth+State.swift
+[45/78] Compiling RunnerControlCore GitHubAuth.swift
+[46/78] Compiling RunnerControlCore GitHubDeviceFlow.swift
+[47/78] Compiling RunnerControlCore Runners+Service.swift
+[48/78] Compiling RunnerControlCore Runners+State+Reducer.swift
+[49/78] Compiling RunnerControlCore Runners+State.swift
+[50/78] Compiling RunnerControlCore Runners.swift
+[51/78] Compiling RunnerControlCore RunnerRuntime.swift
+[52/78] Compiling RunnerControlCore Runners+Flow.swift
+[53/78] Compiling RunnerControlCore Runners+Models.swift
+[54/78] Compiling RunnerControlCore Runners+Module.swift
+[55/78] Compiling RunnerControlCore GitHubTransport.swift
+[56/78] Compiling RunnerControlCore RunnerControlCore.swift
+[57/78] Compiling RunnerControlCore RunnerDiscovery.swift
+[58/78] Compiling RunnerControlCore RunnerInstallerService.swift
+[59/78] Compiling RunnerControlCore GitHubKeychainStore.swift
+[60/78] Compiling RunnerControlCore GitHubRedaction.swift
+[61/78] Compiling RunnerControlCore GitHubRunnerAPIClient.swift
+[62/78] Compiling RunnerControlCore GitHubSessionIdentityStore.swift
+[63/78] Compiling RunnerControlCore GitHubTokenRefresh.swift
+[64/78] Compiling RunnerControlCore RunnerRegistration+State+Reducer.swift
+[65/78] Compiling RunnerControlCore RunnerRegistration+State.swift
+[66/78] Compiling RunnerControlCore RunnerRegistration.swift
+[67/78] Compiling RunnerControlCore RunnerRegistrationTokenStore.swift
+[68/78] Compiling RunnerControlCore CommandExecutor.swift
+[69/78] Compiling RunnerControlCore GitHubAPIClient.swift
+[70/78] Compiling RunnerControlCore GitHubAppConfig.swift
+[71/78] Compiling RunnerControlCore GitHubAuth+Flow.swift
+[72/78] Compiling RunnerControlCore GitHubAuth+Models.swift
+[73/78] Compiling RunnerControlCore RunnerRegistration+Flow.swift
+[74/78] Compiling RunnerControlCore RunnerRegistration+Gates.swift
+[75/78] Compiling RunnerControlCore RunnerRegistration+Models.swift
+[76/78] Compiling RunnerControlCore RunnerRegistration+Module.swift
+[77/85] Compiling RunnerControlCoreTests GitHubTransportTests.swift
+[78/85] Compiling RunnerControlCoreTests GitHubAuthLifecycleTests.swift
+[79/85] Compiling RunnerControlCoreTests RunnerRegistrationTests.swift
+[80/85] Compiling RunnerControlCoreTests RunnerDiscoveryTests.swift
+[81/85] Compiling RunnerControlCoreTests RunnerControlCoreTests.swift
+[82/85] Compiling RunnerControlCoreTests GitHubAuthFlowTests.swift
+[83/85] Emitting module RunnerControlCoreTests
+[84/87] Compiling RunnerControlCorePackageTests runner.swift
+[85/87] Emitting module RunnerControlCorePackageTests
+[85/87] Write Objects.LinkFileList
+[86/87] Linking RunnerControlCorePackageTests
+Build complete! (32.79s)
+Test Suite 'Selected tests' started at 2026-09-16 10:16:47.183.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 10:16:47.193.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 10:16:47.193.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 10:16:47.193.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.010) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test reviewerStaleFailureCannotUnlockNewOperation() started.
+􀟈  Test reviewerRetryCannotRunTwoConfigsInSameDirectory() started.
+􀢄  Test reviewerStaleFailureCannotUnlockNewOperation() recorded an issue at RunnerRegistrationTests.swift:2622:5: Expectation failed: (after → 2) == (before → 1)
+􀄵  Old generation's catch must not clear the current operation's working lock
+􀢄  Test reviewerStaleFailureCannotUnlockNewOperation() failed after 0.158 seconds with 1 issue.
+􀢄  Test reviewerRetryCannotRunTwoConfigsInSameDirectory() recorded an issue at RunnerRegistrationTests.swift:2568:5: Expectation failed: (callsWhileOldRuns → 2) == 1
+􀄵  An identity edit must not allow a second config.sh while the first still owns this directory
+􀢄  Test reviewerRetryCannotRunTwoConfigsInSameDirectory() recorded an issue at RunnerRegistrationTests.swift:2573:5: Expectation failed: (!state.completedSteps.contains("registerRunner") → false) || (local?.agentName == edited.runnerName → false)
+􀄵  New registration is attested complete but old in-flight config overwrites .runner afterwards
+􀢄  Test reviewerRetryCannotRunTwoConfigsInSameDirectory() failed after 0.164 seconds with 2 issues.
+􀄵  // Reviewer-only tests appended to the immutable candidate in a disposable copy.
+􀢄  Test run with 2 tests in 0 suites failed after 0.165 seconds with 3 issues.
+
+[reviewer observed process exit 1]
