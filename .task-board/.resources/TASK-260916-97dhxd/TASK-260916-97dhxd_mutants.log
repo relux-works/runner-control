@@ -1,0 +1,159 @@
+=== BATCH1 Wed Sep 16 06:32:36 +04 2026 ===
+--- M1 PAT narrow (ghp_ only), expect patGuardRejectsClassicAndFineGrainedPAT FAIL ---
+Build complete! (6.39s)
+Test Suite 'Selected tests' started at 2026-09-16 06:32:47.325.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 06:32:47.355.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 06:32:47.355.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 06:32:47.355.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.030) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test patGuardRejectsClassicAndFineGrainedPAT() started.
+􀢄  Test patGuardRejectsClassicAndFineGrainedPAT() recorded an issue at GitHubTransportTests.swift:81:25: Issue recorded
+􀄵  PATGuard admitted PAT 'github_pat_abc123'
+􀢄  Test patGuardRejectsClassicAndFineGrainedPAT() failed after 0.001 seconds with 1 issue.
+􀢄  Test run with 1 test in 0 suites failed after 0.001 seconds with 1 issue.
+M1_EXIT:1
+--- M2 REST 403 disabled, expect apiClientMaps401And403 FAIL ---
+Build complete! (4.56s)
+Test Suite 'Selected tests' started at 2026-09-16 06:32:55.125.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 06:32:55.156.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 06:32:55.156.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 06:32:55.156.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.031) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test apiClientMaps401And403() started.
+􀢄  Test apiClientMaps401And403() recorded an issue at GitHubTransportTests.swift:216:58: Issue recorded
+􀄵  Expected forbidden, got .network("GitHub request failed (HTTP 403).")
+􀢄  Test apiClientMaps401And403() failed after 0.001 seconds with 1 issue.
+􀢄  Test run with 1 test in 0 suites failed after 0.002 seconds with 1 issue.
+M2_EXIT:1
+--- M3 expired->pending, expect flowExpiredCodeFailsWithNewCode FAIL ---
+Build complete! (4.17s)
+Test Suite 'Selected tests' started at 2026-09-16 06:33:02.401.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 06:33:02.428.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 06:33:02.430.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.002) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 06:33:02.431.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.029) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test flowExpiredCodeFailsWithNewCode() started.
+􀢄  Test flowExpiredCodeFailsWithNewCode() recorded an issue at GitHubAuthFlowTests.swift:114:21: Issue recorded
+􀄵  Expected failed newCode, got [RunnerControlCore.GitHubAuth.Action.loginStarted(serverHost: "github.com"), RunnerControlCore.GitHubAuth.Action.codeReceived(userCode: "USER-1", verificationURI: https://github.com/login/device, expiresIn: 900, interval: 1), RunnerControlCore.GitHubAuth.Action.failed(message: "Network unavailable. Local runner control still works.", retry: RunnerControlCore.GitHubAuth.RetryKind.retry)]
+􀢄  Test flowExpiredCodeFailsWithNewCode() failed after 0.029 seconds with 1 issue.
+􀢄  Test run with 1 test in 0 suites failed after 0.029 seconds with 1 issue.
+M3_EXIT:1
+=== BATCH1 DONE ===
+=== BATCH2 Wed Sep 16 06:33:11 +04 2026 ===
+--- M4 slowDown ignored, expect flowSlowDownIncreasesIntervalThenSucceeds FAIL ---
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 06:33:20.301.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 06:33:20.301.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.028) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test flowSlowDownIncreasesIntervalThenSucceeds() started.
+􀢄  Test flowSlowDownIncreasesIntervalThenSucceeds() recorded an issue at GitHubAuthFlowTests.swift:155:21: Issue recorded
+􀄵  Expected pollIntervalUpdated(10), got [RunnerControlCore.GitHubAuth.Action.loginStarted(serverHost: "github.com"), RunnerControlCore.GitHubAuth.Action.codeReceived(userCode: "USER-1", verificationURI: https://github.com/login/device, expiresIn: 900, interval: 5), RunnerControlCore.GitHubAuth.Action.pollIntervalUpdated(5), RunnerControlCore.GitHubAuth.Action.accountVerified(username: "octo", userID: 42, serverHost: "github.com"), RunnerControlCore.GitHubAuth.Action.installationsLoaded([]), RunnerControlCore.GitHubAuth.Action.syncFailed(message: "GitHub App is not installed for this account. Grant access to continue."), RunnerControlCore.GitHubAuth.Action.connected(username: "octo", serverHost: "github.com", syncedAt: 2026-09-16 02:33:20 +0000)]
+􀢄  Test flowSlowDownIncreasesIntervalThenSucceeds() failed after 0.067 seconds with 1 issue.
+􀢄  Test run with 1 test in 0 suites failed after 0.067 seconds with 1 issue.
+M4_EXIT:1
+--- M5 inFlight disabled, expect refreshSavesAtomicallyAndCoalescesConcurrentCallers FAIL ---
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 06:33:26.315.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 06:33:26.315.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 06:33:26.315.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.023) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test refreshSavesAtomicallyAndCoalescesConcurrentCallers() started.
+􀢄  Test refreshSavesAtomicallyAndCoalescesConcurrentCallers() recorded an issue at GitHubTransportTests.swift:249:5: Expectation failed: await transport.requests.count == 1
+􀢄  Test refreshSavesAtomicallyAndCoalescesConcurrentCallers() failed after 0.001 seconds with 1 issue.
+􀢄  Test run with 1 test in 0 suites failed after 0.002 seconds with 1 issue.
+M5_EXIT:1
+--- M6 logout no keychain delete, expect flowLogoutClearsKeychainAndStopsSync FAIL ---
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 06:33:33.059.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 06:33:33.060.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 06:33:33.060.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.025) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test flowLogoutClearsKeychainAndStopsSync() started.
+􀢄  Test flowLogoutClearsKeychainAndStopsSync() recorded an issue at GitHubAuthFlowTests.swift:205:5: Expectation failed: await credentialStore.load(serverHost: "github.com", userID: 42, clientID: testConfig.clientID) == nil
+􀢄  Test flowLogoutClearsKeychainAndStopsSync() failed after 0.134 seconds with 1 issue.
+􀢄  Test run with 1 test in 0 suites failed after 0.134 seconds with 1 issue.
+M6_EXIT:1
+=== BATCH2 DONE ===
+=== BATCH3 Wed Sep 16 06:33:47 +04 2026 ===
+--- M7 audit secret-only, expect auditRejectsEmbeddedSecrets FAIL ---
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test auditRejectsEmbeddedSecrets() started.
+􀢄  Test auditRejectsEmbeddedSecrets() recorded an issue at GitHubTransportTests.swift:66:25: Issue recorded
+􀄵  auditNoSecrets admitted forbidden key 'AppPrivateKey'
+􀢄  Test auditRejectsEmbeddedSecrets() recorded an issue at GitHubTransportTests.swift:66:25: Issue recorded
+􀄵  auditNoSecrets admitted forbidden key 'app_private_key'
+􀢄  Test auditRejectsEmbeddedSecrets() recorded an issue at GitHubTransportTests.swift:66:25: Issue recorded
+􀄵  auditNoSecrets admitted forbidden key 'GitHubToken'
+􀢄  Test auditRejectsEmbeddedSecrets() recorded an issue at GitHubTransportTests.swift:66:25: Issue recorded
+􀄵  auditNoSecrets admitted forbidden key 'access_token_cache'
+􀢄  Test auditRejectsEmbeddedSecrets() failed after 0.001 seconds with 4 issues.
+􀢄  Test run with 1 test in 0 suites failed after 0.002 seconds with 4 issues.
+M7_EXIT:1
+--- M8 redaction drops device_code, expect redactionScrubsExactSecretsAndJSONShapes FAIL ---
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 06:34:03.144.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 06:34:03.145.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 06:34:03.145.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.025) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test redactionScrubsExactSecretsAndJSONShapes() started.
+􀢄  Test redactionScrubsExactSecretsAndJSONShapes() recorded an issue at GitHubTransportTests.swift:117:5: Expectation failed: !((clean → "{"access_token":"[REDACTED]","refresh_token":"[REDACTED]","device_code":"dev789","other":"keep"}").contains("dev789") → true)
+􀢄  Test redactionScrubsExactSecretsAndJSONShapes() failed after 0.001 seconds with 1 issue.
+􀢄  Test run with 1 test in 0 suites failed after 0.001 seconds with 1 issue.
+M8_EXIT:1
+--- M9 cancel no task-cancel, expect flowCancellationDestroysCodeAndStopsPoll FAIL ---
+[6/7] Linking RunnerControlCorePackageTests
+Build complete! (4.49s)
+Test Suite 'Selected tests' started at 2026-09-16 06:34:10.343.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 06:34:10.370.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 06:34:10.370.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 06:34:10.370.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.028) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test flowCancellationDestroysCodeAndStopsPoll() started.
+􁁛  Test flowCancellationDestroysCodeAndStopsPoll() passed after 0.003 seconds.
+􁁛  Test run with 1 test in 0 suites passed after 0.003 seconds.
+M9_EXIT:0
+=== BATCH3 DONE ===
+=== BATCH3c Wed Sep 16 06:35:23 +04 2026 ===
+--- M9d cancel always disconnects, expect flowCancelWhileConnectedRestoresConnected FAIL ---
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 06:35:32.604.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 06:35:32.604.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.024) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test flowCancelWhileConnectedRestoresConnected() started.
+􀢄  Test flowCancelWhileConnectedRestoresConnected() recorded an issue at GitHubAuthFlowTests.swift:203:21: Issue recorded
+􀄵  Cancel while connected must restore connected, got [RunnerControlCore.GitHubAuth.Action.loginStarted(serverHost: "github.com"), RunnerControlCore.GitHubAuth.Action.codeReceived(userCode: "USER-1", verificationURI: https://github.com/login/device, expiresIn: 900, interval: 1), RunnerControlCore.GitHubAuth.Action.accountVerified(username: "octo", userID: 42, serverHost: "github.com"), RunnerControlCore.GitHubAuth.Action.installationsLoaded([]), RunnerControlCore.GitHubAuth.Action.syncFailed(message: "GitHub App is not installed for this account. Grant access to continue."), RunnerControlCore.GitHubAuth.Action.connected(username: "octo", serverHost: "github.com", syncedAt: 2026-09-16 02:35:32 +0000), RunnerControlCore.GitHubAuth.Action.loginCancelled]
+􀢄  Test flowCancelWhileConnectedRestoresConnected() failed after 0.059 seconds with 1 issue.
+􀢄  Test run with 1 test in 0 suites failed after 0.060 seconds with 1 issue.
+M9d_EXIT:1
+=== BATCH3c DONE ===

@@ -1,0 +1,40 @@
+COMMAND: ['swift', 'test', '--skip-build', '--package-path', '/tmp/TASK-260916-304bw2-review-r2/Packages/RunnerControlCore', '--filter', 'reviewUnknownServiceMustRefuseUnregister|reviewRemovedLastEntryMustStayRemovedOnMigration|reviewSameNameFolderImportsMustHaveDistinctServiceIDs|reviewCrossServerGroupApplyMustRefuse|unregisterRevalidatesStoppedAtSideEffectBoundary|applyGroupAccessStopsWhenSessionChangesMidApply|applyGroupAccessStopsWhenServerSwitchesMidApply|sameNameFolderImportsControlIndependently|importRefusesConflictingManifestLabel|catalogRefusesDuplicateServiceLabel|migrationFailsClosedOnMalformedPersistence|migrationFailsClosedOnUnsupportedVersion|migrationSealsLegacyStoreWithoutTouchingEntries']
+[0/1] Planning build
+Test Suite 'Selected tests' started at 2026-09-16 14:02:08.636.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 14:02:08.660.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 14:02:08.660.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 14:02:08.660.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.023) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test migrationFailsClosedOnUnsupportedVersion() started.
+􀟈  Test applyGroupAccessStopsWhenSessionChangesMidApply() started.
+􀟈  Test applyGroupAccessStopsWhenServerSwitchesMidApply() started.
+􀟈  Test catalogRefusesDuplicateServiceLabel() started.
+􀟈  Test reviewRemovedLastEntryMustStayRemovedOnMigration() started.
+􀟈  Test importRefusesConflictingManifestLabel() started.
+􀟈  Test unregisterRevalidatesStoppedAtSideEffectBoundary() started.
+􀟈  Test migrationSealsLegacyStoreWithoutTouchingEntries() started.
+􀟈  Test migrationFailsClosedOnMalformedPersistence() started.
+􀟈  Test reviewUnknownServiceMustRefuseUnregister() started.
+􀟈  Test reviewSameNameFolderImportsMustHaveDistinctServiceIDs() started.
+􀟈  Test reviewCrossServerGroupApplyMustRefuse() started.
+􀟈  Test sameNameFolderImportsControlIndependently() started.
+􁁛  Test migrationFailsClosedOnUnsupportedVersion() passed after 0.027 seconds.
+􁁛  Test catalogRefusesDuplicateServiceLabel() passed after 0.027 seconds.
+􁁛  Test migrationFailsClosedOnMalformedPersistence() passed after 0.027 seconds.
+􁁛  Test migrationSealsLegacyStoreWithoutTouchingEntries() passed after 0.027 seconds.
+􁁛  Test applyGroupAccessStopsWhenServerSwitchesMidApply() passed after 0.027 seconds.
+􁁛  Test applyGroupAccessStopsWhenSessionChangesMidApply() passed after 0.027 seconds.
+􁁛  Test reviewCrossServerGroupApplyMustRefuse() passed after 0.035 seconds.
+􁁛  Test reviewUnknownServiceMustRefuseUnregister() passed after 0.035 seconds.
+􁁛  Test reviewRemovedLastEntryMustStayRemovedOnMigration() passed after 0.038 seconds.
+􁁛  Test unregisterRevalidatesStoppedAtSideEffectBoundary() passed after 0.040 seconds.
+􁁛  Test importRefusesConflictingManifestLabel() passed after 0.062 seconds.
+􁁛  Test reviewSameNameFolderImportsMustHaveDistinctServiceIDs() passed after 0.086 seconds.
+􁁛  Test sameNameFolderImportsControlIndependently() passed after 0.111 seconds.
+􁁛  Test run with 13 tests in 0 suites passed after 0.112 seconds.
+
+EXIT: 0

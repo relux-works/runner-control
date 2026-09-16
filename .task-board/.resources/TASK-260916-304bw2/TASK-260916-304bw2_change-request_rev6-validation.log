@@ -1,0 +1,570 @@
+$ swift test --package-path Packages/RunnerControlCore --scratch-path .temp/landing-core-tests
+Building for debugging...
+[0/4] Write sources
+[2/4] Write swift-version--58304C5D6DBC2206.txt
+[4/6] Compiling RunnerControlCore Runners+Flow.swift
+[5/6] Emitting module RunnerControlCore
+[6/8] Compiling RunnerControlCore Runners+Module.swift
+[7/8] Compiling RunnerControlCore RunnerRuntime.swift
+[8/12] Compiling RunnerControlCoreTests RunnerControlCoreTests.swift
+[9/12] Compiling RunnerControlCoreTests RunnerCatalogLifecycleTests.swift
+[10/12] Emitting module RunnerControlCoreTests
+[11/13] Compiling RunnerControlCoreTests RunnerRegistrationTests.swift
+[11/13] Write Objects.LinkFileList
+[12/13] Linking RunnerControlCorePackageTests
+Build complete! (30.93s)
+Test Suite 'All tests' started at 2026-09-16 15:58:33.409.
+Test Suite 'All tests' passed at 2026-09-16 15:58:33.422.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.013) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test scopeChangeClearsCompletedStepsInState() started.
+􀟈  Test groupChangeRefusesOldConfiguredSuccess() started.
+􀟈  Test bulkPowerReportsPartialFailuresPerRow() started.
+􀟈  Test existingRegistrationBlocksFreshInstall() started.
+􀟈  Test flowLogoutClearsKeychainAndStopsSync() started.
+􀟈  Test groupOwnershipIsScopedToServer() started.
+􀟈  Test orgWizardEndToEndDeletesTokenAndLeaksNothing() started.
+􀟈  Test reviewR2LogoutDuringRemoveTokenMustRefuseSideEffect() started.
+􀟈  Test beginDraftRefusesSpacesBeforeAnyNetwork(dir:work:) started.
+􀟈  Test reviewerUnicodeCaseAliasCannotBypassDirectoryLease() started.
+􀟈  Test refreshFailsClosedWithoutRefreshToken() started.
+􀟈  Test unregisterRefusesRunningService() started.
+􀟈  Test serverChangeBetweenStepsInvalidatesGroupAndRunner() started.
+􀟈  Test flowRestoreWithFailedRefreshThen401KeepsTokensAndStaysStale() started.
+􀟈  Test flowRefreshInstallationsRefreshesExpiringTokenViaProductionPath() started.
+􀟈  Test reviewR2LogoutDuringPutMustNotPublishAccess() started.
+􀟈  Test permissionErrorRetainedAcrossEditsUntilRetrySucceeds() started.
+􀟈  Test reviewerInFlightInstallCannotRepopulateChangedDraft() started.
+􀟈  Test standardManifestShowsActualPolicy() started.
+􀟈  Test reviewUnknownServiceMustRefuseUnregister() started.
+􀟈  Test stopWorksDespiteMissingRunnerStartBlockedOnBadManifest() started.
+􀟈  Test orgResolveGroupFindsExistingWithoutCreating() started.
+􀟈  Test unauthenticatedWizardFailsClosedWithoutNetwork() started.
+􀟈  Test applyGroupAccessConfirmsExactRepos() started.
+􀟈  Test changedScopeMustNotReuseRegistrationOrRemoteID() started.
+􀟈  Test unregisterRefusesLogoutBetweenFinalInspectionAndConfigRemove() started.
+􀟈  Test nonIdentityEditDuringInstallDoesNotCancel() started.
+􀟈  Test runConfigScrubsTokenFromFailure() started.
+􀟈  Test runConfigOmitsReplaceByDefault() started.
+􀟈  Test inFlightLabelsCannotWriteForEditedDraft() started.
+􀟈  Test devicePollMapsAllTerminalBodiesOnHTTP200() started.
+􀟈  Test retryAfterScopeChangeIsNoop() started.
+􀟈  Test downloadRefusesTamperedBytes() started.
+􀟈  Test devicePollRejectsPATShapedToken() started.
+􀟈  Test refreshCancelInFlightNeverSavesRefreshedRecord() started.
+􀟈  Test groupAccessRefusesRepoScope() started.
+􀟈  Test inFlightGroupCannotResolveForEditedDraft() started.
+􀟈  Test repoAccessAppliesAndConfirmsRealIDs() started.
+􀟈  Test relinkRequiresSameAgent() started.
+􀟈  Test aliasDoesNotChangeIdentity() started.
+􀟈  Test deviceCodeRequestDecodesAndPostsClientID() started.
+􀟈  Test githubReducerCoversLoginLifecycleAndIgnoresForeignActions() started.
+􀟈  Test apiClientDecodesInstallationsAndRepositories() started.
+􀟈  Test manualToggleRefusesForeignPlist() started.
+􀟈  Test reviewR3SameAccountReloginDuringPutMustNotPublishAccess() started.
+􀟈  Test migrationFailsClosedOnMalformedPersistence() started.
+􀟈  Test refreshMapsInvalidGrantToRevoked() started.
+􀟈  Test applyGroupAccessRequiresTakeoverForShared() started.
+􀟈  Test commandExecutorHandlesLargeOutputAndExitStatus() started.
+􀟈  Test patGuardRejectsClassicAndFineGrainedPAT() started.
+􀟈  Test flowRefreshInstallationsWithInvalidGrantDuringRefreshRequiresRelogin() started.
+􀟈  Test relinkRefusesChangedScopeAndRequiresReload() started.
+􀟈  Test reviewerLogoutDuringRestoreDoesNotReviveSession() started.
+􀟈  Test scopeURLsAndKeysAreExact() started.
+􀟈  Test registrationModuleRegistersStateAndFlow() started.
+􀟈  Test apiClientSendsBearerAndDecodesUser() started.
+􀟈  Test orgResolveGroupCreatesWithSelectedRepos() started.
+􀟈  Test observerRefusesContradictionAndForeignName() started.
+􀟈  Test reviewR2ScopeEditAfterLoadMustNotRetargetApply() started.
+􀟈  Test editorRetryAfterSessionInvalidationSucceedsOnSameFlow() started.
+􀟈  Test labelsRefusePlantedUnconfiguredRegistration() started.
+􀟈  Test repoAccessToForeignGroupIsRefused() started.
+􀟈  Test resetDuringDownloadKeepsDirectoryLeaseUntilSettled() started.
+􀟈  Test startWaitsForRunningState() started.
+􀟈  Test scopeEditThenReAddReverifiesGroupApply() started.
+􀟈  Test repoWizardOmitsRunnerGroup() started.
+􀟈  Test installDirChangeKeepsGroupButRequiresFreshInstall() started.
+􀟈  Test reviewR3SiblingLoadDuringReloginMustNotPublishAccess() started.
+􀟈  Test unregisterRevalidatesStoppedAtSideEffectBoundary() started.
+􀟈  Test flowCancelWhileConnectedRestoresConnected() started.
+􀟈  Test migrationPreservesPoliciesWithoutTouchingServices() started.
+􀟈  Test retryResumesFailedDownloadWithoutDuplicates() started.
+􀟈  Test importRefusesSpacedPathWithoutMoving() started.
+􀟈  Test cancelDuringConfigKeepsLeaseAndRecoversAfterSettle() started.
+􀟈  Test sameNameFolderImportsControlIndependently() started.
+􀟈  Test case passing 2 arguments dir → "bad dir", work → "_work" to beginDraftRefusesSpacesBeforeAnyNetwork(dir:work:) started.
+􀟈  Test case passing 2 arguments dir → "gooddir", work → "bad work" to beginDraftRefusesSpacesBeforeAnyNetwork(dir:work:) started.
+􀟈  Test refreshRemoteKeepsLocalOnOffline() started.
+􀟈  Test reviewRemovedLastEntryMustStayRemovedOnMigration() started.
+􀟈  Test scopeChangeRefreshesDownloadAsset() started.
+􀟈  Test permissionErrorsNeverTriggerBootstrap() started.
+􀟈  Test catalogPersistsAndDedupesCanonicalViaSymlink() started.
+􀟈  Test flowCancellationDestroysCodeAndStopsPoll() started.
+􀟈  Test applySucceedsAfterTokenRefreshWithinSameLogin() started.
+􀟈  Test downloadVerifiesIntegrityAgainstSystemShasum() started.
+􀟈  Test configInvocationOmitsReplaceWithoutExplicitConsent() started.
+􀟈  Test labelsWithoutLocalRegistrationAreRefused() started.
+􀟈  Test editorOverlappingLoadSuppressesStaleCompletion() started.
+􀟈  Test remoteDuplicateWithoutReplaceIsRefusedBeforeToken() started.
+􀟈  Test offlineLocalControlWithoutToken() started.
+􀟈  Test orgListRequestsUseQueryNotEncodedPath() started.
+􀟈  Test flowLoginSuccessDrivesProductionEffectsToConnected() started.
+􀟈  Test groupListFollowsPagination() started.
+􀟈  Test reviewerLoginDuringRestoreIsNotClobberedByRestore() started.
+􀟈  Test importRefusesConflictingManifestLabel() started.
+􀟈  Test flowRestoreSessionWithRevokedTokenRequiresReloginAndClearsStorage() started.
+􀟈  Test groupAccessUsesFreshAPIMembershipNotStalePool() started.
+􀟈  Test setupServiceWritesManualPlistFoundByDiscovery() started.
+􀟈  Test unregisterRefusesNameWithoutVerifiedAgentID() started.
+􀟈  Test registrationReducerRetainsPermissionErrorAcrossDraftEdits() started.
+􀟈  Test manualToggleOffUnregistersLoginWithoutStopping() started.
+􀟈  Test loadGroupAccessStopsPublishingAfterMidLoadLogout() started.
+􀟈  Test applyGroupAccessRefusesStaleGroup() started.
+􀟈  Test inFlightAccessAbandonedWhenRepositoriesEdited() started.
+􀟈  Test secondInstallForAnyDirectoryRefusedWhileInstallerBusy() started.
+􀟈  Test refreshRejectsFineGrainedPATWithoutSaving() started.
+􀟈  Test importRefusesUnsupportedWithoutSecondProcess() started.
+􀟈  Test distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test staleRegisterFailureDoesNotOverwriteBusyFailure() started.
+􀟈  Test prepareDownloadRefusesSubstituteArch() started.
+􀟈  Test reviewR4LogoutDuringFinalStoppedInspectionMustRefuseRemoval() started.
+􀟈  Test ownedGroupResolvesWithoutRetakeover() started.
+􀟈  Test downloadRefusesMissingChecksum() started.
+􀟈  Test forbiddenGroupCreateNamesRequiredPermission() started.
+􀟈  Test reviewR3SameAccountReloginDuringRemoveTokenMustRefuseSideEffect() started.
+􀟈  Test manualToggleOnRegistersLoginWithoutChangingLiveState() started.
+􀟈  Test flowDeniedFailsWithNewCode() started.
+􀟈  Test remoteDuplicateWithReplaceProceedsWithFlag() started.
+􀟈  Test flowLoginPersistsSessionIdentityForLaterRestore() started.
+􀟈  Test githubReducerRestoreStartedShowsVerifyingAccount() started.
+􀟈  Test labelsWithMismatchedRemoteIdentityAreRefused() started.
+􀟈  Test runConfigExecutesRealScript() started.
+􀟈  Test reviewSameNameFolderImportsMustHaveDistinctServiceIDs() started.
+􀟈  Test runConfigUsesExactInvocation() started.
+􀟈  Test registerReportsNilWhenAgentNotYetListed() started.
+􀟈  Test apiClientMaps401And403() started.
+􀟈  Test unsupportedShowsStateButRefusesControl() started.
+􀟈  Test reviewerStaleFailureCannotUnlockNewOperation() started.
+􀟈  Test runnerListFollowsPaginationForDuplicateGuard() started.
+􀟈  Test missingDiscoveryRootsReturnEmpty() started.
+􀟈  Test installerRefusesSpacesWithoutDownloading() started.
+􀙟  Test realLaunchAgentLifecycleWithoutGitHubJobs() skipped.
+􀟈  Test reviewCrossServerGroupApplyMustRefuse() started.
+􀟈  Test unregisterRefusesWrongConfirmationWithoutAPICall() started.
+􀟈  Test reducerPreservesUnrelatedActionsAndCleansState() started.
+􀟈  Test enterpriseGroupDoesNotReuseGithubOwnership() started.
+􀟈  Test applyGroupAccessStopsWhenSessionChangesMidApply() started.
+􀟈  Test unregisterRetryInNewIncarnationSucceeds() started.
+􀟈  Test beginDraftDuringDownloadKeepsDirectoryLease() started.
+􀟈  Test registerIsIdempotentAcrossRetries() started.
+􀟈  Test takeoverRecordsOwnershipForRetries() started.
+􀟈  Test inFlightRegistrationCannotAttributeOldConfigToNewDraft() started.
+􀟈  Test auditRejectsEmbeddedSecrets() started.
+􀟈  Test keychainRoundTripsAndDeletesScopedRecords() started.
+􀟈  Test redactionScrubsExactSecretsAndJSONShapes() started.
+􀟈  Test standardPolicyChangePreservesManifestAndSkipsLaunchctl() started.
+􀟈  Test flowRestoreSessionConnectsFromPersistedIdentityThenLogoutClearsBoth() started.
+􀟈  Test manualExternalRunAtLoadTrueDisplaysLoginOff() started.
+􀟈  Test catalogKeepsSameNameDifferentScopesAsTwoRunners() started.
+􀟈  Test configReportsExactMissingBinding() started.
+􀟈  Test reviewR4SessionInvalidationMustReleaseEditorLoading(apply:) started.
+􀟈  Test serviceLabelCarriesDiscoveryPrefixAndSanitizes() started.
+􀟈  Test flow403DuringRefreshKeepsConnectedWithStaleError() started.
+􀟈  Test flowLoginPhase401DuringInstallationsRequiresRelogin() started.
+􀟈  Test unregisterRemovesRemoteKeepsFilesAndEntry() started.
+􀟈  Test boundRemoteRunnerIDBindsByID() started.
+􀟈  Test keychainDeleteAllSweepsOnlyMatchingClient() started.
+􀟈  Test repoAccessWithoutExplicitScopeIsRefused() started.
+􀟈  Test observerMatchesByIDNeverByName() started.
+􀟈  Test migrationSealsLegacyStoreWithoutTouchingEntries() started.
+􀟈  Test finderAliasInstallFolderIsRefusedBeforeDownload() started.
+􀟈  Test beginDraftRequiresNameAndLabels() started.
+􀟈  Test flowConcurrentRefreshAndSelectCoalesceToSingleRefresh() started.
+􀟈  Test staleBusyFalseIsNotIdleProof() started.
+􀟈  Test discoveryFindsManualAndStandardWithoutLaunching() started.
+􀟈  Test flowExpiredCodeFailsWithNewCode() started.
+􀟈  Test applyGroupAccessStopsWhenServerSwitchesMidApply() started.
+􀟈  Test repositoryConfirmationFollowsPagination() started.
+􀟈  Test reviewerChangedWorkFolderCannotReuseConfiguredSuccess() started.
+􀟈  Test groupNameChangeInvalidatesResolvedGroup() started.
+􀟈  Test recoverPartialInstallRefusesWorkingRunner() started.
+􀟈  Test unregisterRefusesStoredIDMismatchAndCrossServer() started.
+􀟈  Test startIsIdempotentAndStopUsesServiceIdentity() started.
+􀟈  Test verifiedLocalAgentIDRefusesEachMismatchClass() started.
+􀟈  Test flowRestoreSessionWithoutIdentityIsNoop() started.
+􀟈  Test prepareDownloadSelectsArchMatchedAsset() started.
+􀟈  Test importGateRefusesSpacedPathDirectly() started.
+􀟈  Test repositoryConfirmationMismatchIsRefused() started.
+􀟈  Test unregisterReleasesOperationStateAfterSessionLoss() started.
+􀟈  Test userDefaultsSessionIdentityStoreRoundTrips() started.
+􀟈  Test reviewerLogoutDuringRefreshDoesNotEmitSyncAfterLoggedOut() started.
+􀟈  Test reviewR3RelinkMustNotRebindLoadedEditorToOtherOrg() started.
+􀟈  Test registerRefusesMismatchedRemoteIdentity() started.
+􀟈  Test repoScopeRefusesGroupResolution() started.
+􀟈  Test snapshotsPreserveRunningDespiteMissingRunner() started.
+􀟈  Test diagnosticsResolvesManifestPathsAndRedacts() started.
+􀟈  Test runConfigRefusesWorkFolderMismatchOnResume() started.
+􀟈  Test flowIgnoresForeignEffectsAndSelectsRepositories() started.
+􀟈  Test reviewerLogoutDuringRefreshLeavesNoTokensBehind() started.
+􀟈  Test realKeychainBackendRoundTripsUniqueRecord() started.
+􀟈  Test serviceRefusesMismatchedLocalRegistration() started.
+􀟈  Test serviceCannotClaimDoneBeforeRegistration() started.
+􀟈  Test restMapperSeparatesUnauthorizedForbiddenSSORateLimit() started.
+􀟈  Test registrationTokenStoreExpiresShortLivedToken() started.
+􀟈  Test flowSlowDownIncreasesIntervalThenSucceeds() started.
+􀟈  Test reviewerRetryCannotRunTwoConfigsInSameDirectory() started.
+􀟈  Test catalogRefusesDuplicateServiceLabel() started.
+􀟈  Test existingGroupNameWithoutTakeoverIsRefused() started.
+􀟈  Test flowSelectInstallationWithRevokedTokenRequiresRelogin() started.
+􀟈  Test importPreservesServiceAndRunAtLoad() started.
+􀟈  Test reviewR5RemoveReimportMustNotReviveOldEditorOwner() started.
+􀟈  Test flowPublishesFailureAndClearsPendingState() started.
+􀟈  Test importRefusesMissingBinariesAndRegistration() started.
+􀟈  Test removeDeletesOnlyEntryAndWarnsWhenRunning() started.
+􀟈  Test reviewerSymlinkAliasCannotBypassDirectoryLease() started.
+􀟈  Test installerLeaseSerializesUnregisterAndInstall() started.
+􀟈  Test repoRunnerListRequestUsesQueryNotEncodedPath() started.
+􀟈  Test apiClientRefusesPATWithoutNetwork() started.
+􀟈  Test reviewerForeignServerIdentityCannotAuthorizeLabels() started.
+􀟈  Test discoversManualAndStandardServicesWithoutMachineNames() started.
+􀟈  Test resolveSkipsPatchWhenPublicReposAllowed() started.
+􀟈  Test rejectsSpacesBeforeLaunching(inWorkFolder:) started.
+􀟈  Test configAuditRunsThroughCurrentBundle() started.
+􀟈  Test configInvocationIsExactAndOrdered() started.
+􀟈  Test flow401DuringRefreshRequiresRelogin() started.
+􀟈  Test failedConfigDeletesTokenAndReportsScrubbedError() started.
+􀟈  Test postConfigAPIFailureDeletesTokenAndReportsError() started.
+􀟈  Test relinkSameIdentityMoveRequiresReload() started.
+􀟈  Test canStopAfterRegistrationIsDeleted() started.
+􀟈  Test downloadRefusesMalformedChecksum() started.
+􀟈  Test githubModuleRegistersStateAndFlow() started.
+􀟈  Test reviewerCaseAliasMissingLeafCannotBypassDirectoryLease() started.
+􀟈  Test operationIdentityNormalizationAndChangeDetection() started.
+􀟈  Test resolvePatchesDeniedPublicReposOnOwnedGroup() started.
+􀟈  Test labelsApplyRequiresRealRunnerIDThenPuts() started.
+􀟈  Test slowDownAddsFiveSeconds() started.
+􀟈  Test inFlightLabelsAbandonedWhenLabelsEdited() started.
+􀟈  Test enterpriseConfigUsesHostScopedEndpoints() started.
+􀟈  Test flowMissingClientIDFailsWithExactBinding() started.
+􀟈  Test repositorySecondPageFailurePreservesUnknown() started.
+􀟈  Test refreshSavesAtomicallyAndCoalescesConcurrentCallers() started.
+􀟈  Test migrationFailsClosedOnUnsupportedVersion() started.
+􁁛  Test beginDraftRefusesSpacesBeforeAnyNetwork(dir:work:) with 2 test cases passed after 0.091 seconds.
+􁁛  Test refreshFailsClosedWithoutRefreshToken() passed after 0.093 seconds.
+􁁛  Test groupOwnershipIsScopedToServer() passed after 0.096 seconds.
+􁁛  Test serverChangeBetweenStepsInvalidatesGroupAndRunner() passed after 0.106 seconds.
+􁁛  Test unregisterRefusesRunningService() passed after 0.133 seconds.
+􁁛  Test unauthenticatedWizardFailsClosedWithoutNetwork() passed after 0.143 seconds.
+􁁛  Test orgResolveGroupFindsExistingWithoutCreating() passed after 0.143 seconds.
+􁁛  Test reviewUnknownServiceMustRefuseUnregister() passed after 0.151 seconds.
+􁁛  Test standardManifestShowsActualPolicy() passed after 0.151 seconds.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 0, output: "state = running\npid = 23"), RunnerControlCore.Runners.Status.running) to distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 0, output: "state = exited"), RunnerControlCore.Runners.Status.failed) to distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 113, output: "Could not find service foo"), RunnerControlCore.Runners.Status.stopped) to distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 1, output: "Operation not permitted"), RunnerControlCore.Runners.Status.unknown) to distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 113, output: "Could not find domain"), RunnerControlCore.Runners.Status.unknown) to distinguishesStoppedFromPermissionFailure(value:) started.
+􁁛  Test stopWorksDespiteMissingRunnerStartBlockedOnBadManifest() passed after 0.162 seconds.
+􁁛  Test reviewR2LogoutDuringPutMustNotPublishAccess() passed after 0.167 seconds.
+􁁛  Test devicePollMapsAllTerminalBodiesOnHTTP200() passed after 0.167 seconds.
+􁁛  Test applyGroupAccessConfirmsExactRepos() passed after 0.167 seconds.
+􁁛  Test reviewR2LogoutDuringRemoveTokenMustRefuseSideEffect() passed after 0.168 seconds.
+􁁛  Test devicePollRejectsPATShapedToken() passed after 0.170 seconds.
+􁁛  Test deviceCodeRequestDecodesAndPostsClientID() passed after 0.212 seconds.
+􀟈  Test case passing 1 argument apply → false to reviewR4SessionInvalidationMustReleaseEditorLoading(apply:) started.
+􀟈  Test case passing 1 argument apply → true to reviewR4SessionInvalidationMustReleaseEditorLoading(apply:) started.
+􁁛  Test groupAccessRefusesRepoScope() passed after 0.219 seconds.
+􁁛  Test apiClientDecodesInstallationsAndRepositories() passed after 0.219 seconds.
+􁁛  Test repoAccessAppliesAndConfirmsRealIDs() passed after 0.221 seconds.
+􁁛  Test migrationFailsClosedOnMalformedPersistence() passed after 0.241 seconds.
+􁁛  Test patGuardRejectsClassicAndFineGrainedPAT() passed after 0.259 seconds.
+􁁛  Test relinkRequiresSameAgent() passed after 0.266 seconds.
+􁁛  Test manualToggleRefusesForeignPlist() passed after 0.271 seconds.
+􁁛  Test scopeURLsAndKeysAreExact() passed after 0.274 seconds.
+􀟈  Test case passing 1 argument inWorkFolder → false to rejectsSpacesBeforeLaunching(inWorkFolder:) started.
+􀟈  Test case passing 1 argument inWorkFolder → true to rejectsSpacesBeforeLaunching(inWorkFolder:) started.
+􁁛  Test aliasDoesNotChangeIdentity() passed after 0.293 seconds.
+􁁛  Test apiClientSendsBearerAndDecodesUser() passed after 0.300 seconds.
+􁁛  Test observerRefusesContradictionAndForeignName() passed after 0.307 seconds.
+􁁛  Test unregisterRefusesLogoutBetweenFinalInspectionAndConfigRemove() passed after 0.309 seconds.
+􁁛  Test bulkPowerReportsPartialFailuresPerRow() passed after 0.310 seconds.
+􁁛  Test orgResolveGroupCreatesWithSelectedRepos() passed after 0.308 seconds.
+􁁛  Test repoAccessToForeignGroupIsRefused() passed after 0.309 seconds.
+􁁛  Test applyGroupAccessRequiresTakeoverForShared() passed after 0.309 seconds.
+􁁛  Test startWaitsForRunningState() passed after 0.308 seconds.
+􁁛  Test reviewR2ScopeEditAfterLoadMustNotRetargetApply() passed after 0.309 seconds.
+􁁛  Test unregisterRevalidatesStoppedAtSideEffectBoundary() passed after 0.308 seconds.
+􁁛  Test scopeChangeClearsCompletedStepsInState() passed after 0.312 seconds.
+􁁛  Test importRefusesSpacedPathWithoutMoving() passed after 0.309 seconds.
+􁁛  Test relinkRefusesChangedScopeAndRequiresReload() passed after 0.311 seconds.
+􁁛  Test catalogPersistsAndDedupesCanonicalViaSymlink() passed after 0.305 seconds.
+􁁛  Test configInvocationOmitsReplaceWithoutExplicitConsent() passed after 0.305 seconds.
+􁁛  Test labelsWithoutLocalRegistrationAreRefused() passed after 0.305 seconds.
+􁁛  Test refreshRemoteKeepsLocalOnOffline() passed after 0.312 seconds.
+􁁛  Test reviewRemovedLastEntryMustStayRemovedOnMigration() passed after 0.312 seconds.
+􁁛  Test migrationPreservesPoliciesWithoutTouchingServices() passed after 0.315 seconds.
+􁁛  Test flowRestoreSessionWithRevokedTokenRequiresReloginAndClearsStorage() passed after 0.305 seconds.
+􁁛  Test scopeEditThenReAddReverifiesGroupApply() passed after 0.315 seconds.
+􁁛  Test groupAccessUsesFreshAPIMembershipNotStalePool() passed after 0.304 seconds.
+􁁛  Test offlineLocalControlWithoutToken() passed after 0.305 seconds.
+􁁛  Test permissionErrorsNeverTriggerBootstrap() passed after 0.302 seconds.
+􁁛  Test flowCancellationDestroysCodeAndStopsPoll() passed after 0.302 seconds.
+􁁛  Test importRefusesUnsupportedWithoutSecondProcess() passed after 0.303 seconds.
+􁁛  Test distinguishesStoppedFromPermissionFailure(value:) with 5 test cases passed after 0.294 seconds.
+􁁛  Test groupListFollowsPagination() passed after 0.306 seconds.
+􁁛  Test prepareDownloadRefusesSubstituteArch() passed after 0.293 seconds.
+􁁛  Test unregisterRefusesNameWithoutVerifiedAgentID() passed after 0.306 seconds.
+􁁛  Test ownedGroupResolvesWithoutRetakeover() passed after 0.290 seconds.
+􁁛  Test applyGroupAccessRefusesStaleGroup() passed after 0.305 seconds.
+􁁛  Test forbiddenGroupCreateNamesRequiredPermission() passed after 0.290 seconds.
+􁁛  Test loadGroupAccessStopsPublishingAfterMidLoadLogout() passed after 0.305 seconds.
+􁁛  Test reviewR4LogoutDuringFinalStoppedInspectionMustRefuseRemoval() passed after 0.294 seconds.
+􁁛  Test manualToggleOnRegistersLoginWithoutChangingLiveState() passed after 0.290 seconds.
+􁁛  Test apiClientMaps401And403() passed after 0.287 seconds.
+􁁛  Test missingDiscoveryRootsReturnEmpty() passed after 0.286 seconds.
+􁁛  Test installerRefusesSpacesWithoutDownloading() passed after 0.286 seconds.
+􁁛  Test importRefusesConflictingManifestLabel() passed after 0.308 seconds.
+􁁛  Test unsupportedShowsStateButRefusesControl() passed after 0.287 seconds.
+􁁛  Test enterpriseGroupDoesNotReuseGithubOwnership() passed after 0.284 seconds.
+􁁛  Test takeoverRecordsOwnershipForRetries() passed after 0.283 seconds.
+􁁛  Test unregisterRefusesWrongConfirmationWithoutAPICall() passed after 0.284 seconds.
+􁁛  Test auditRejectsEmbeddedSecrets() passed after 0.282 seconds.
+􁁛  Test keychainRoundTripsAndDeletesScopedRecords() passed after 0.282 seconds.
+􁁛  Test sameNameFolderImportsControlIndependently() passed after 0.318 seconds.
+􁁛  Test manualToggleOffUnregistersLoginWithoutStopping() passed after 0.308 seconds.
+􁁛  Test flowRestoreSessionConnectsFromPersistedIdentityThenLogoutClearsBoth() passed after 0.284 seconds.
+􁁛  Test reviewCrossServerGroupApplyMustRefuse() passed after 0.286 seconds.
+􁁛  Test configReportsExactMissingBinding() passed after 0.283 seconds.
+􁁛  Test redactionScrubsExactSecretsAndJSONShapes() passed after 0.282 seconds.
+􁁛  Test applyGroupAccessStopsWhenSessionChangesMidApply() passed after 0.287 seconds.
+􁁛  Test githubReducerCoversLoginLifecycleAndIgnoresForeignActions() passed after 0.323 seconds.
+􁁛  Test boundRemoteRunnerIDBindsByID() passed after 0.283 seconds.
+􁁛  Test keychainDeleteAllSweepsOnlyMatchingClient() passed after 0.282 seconds.
+􁁛  Test serviceLabelCarriesDiscoveryPrefixAndSanitizes() passed after 0.285 seconds.
+􁁛  Test observerMatchesByIDNeverByName() passed after 0.282 seconds.
+􁁛  Test beginDraftRequiresNameAndLabels() passed after 0.281 seconds.
+􁁛  Test staleBusyFalseIsNotIdleProof() passed after 0.281 seconds.
+􁁛  Test repoAccessWithoutExplicitScopeIsRefused() passed after 0.285 seconds.
+􁁛  Test manualExternalRunAtLoadTrueDisplaysLoginOff() passed after 0.288 seconds.
+􁁛  Test unregisterRemovesRemoteKeepsFilesAndEntry() passed after 0.287 seconds.
+􁁛  Test migrationSealsLegacyStoreWithoutTouchingEntries() passed after 0.284 seconds.
+􁁛  Test standardPolicyChangePreservesManifestAndSkipsLaunchctl() passed after 0.289 seconds.
+􁁛  Test groupNameChangeInvalidatesResolvedGroup() passed after 0.282 seconds.
+􁁛  Test repositoryConfirmationFollowsPagination() passed after 0.283 seconds.
+􁁛  Test recoverPartialInstallRefusesWorkingRunner() passed after 0.282 seconds.
+􁁛  Test verifiedLocalAgentIDRefusesEachMismatchClass() passed after 0.277 seconds.
+􁁛  Test importGateRefusesSpacedPathDirectly() passed after 0.277 seconds.
+􁁛  Test applyGroupAccessStopsWhenServerSwitchesMidApply() passed after 0.283 seconds.
+􁁛  Test catalogKeepsSameNameDifferentScopesAsTwoRunners() passed after 0.289 seconds.
+􁁛  Test prepareDownloadSelectsArchMatchedAsset() passed after 0.277 seconds.
+􁁛  Test startIsIdempotentAndStopUsesServiceIdentity() passed after 0.283 seconds.
+􁁛  Test userDefaultsSessionIdentityStoreRoundTrips() passed after 0.277 seconds.
+􁁛  Test repositoryConfirmationMismatchIsRefused() passed after 0.277 seconds.
+􁁛  Test repoScopeRefusesGroupResolution() passed after 0.276 seconds.
+􁁛  Test flowIgnoresForeignEffectsAndSelectsRepositories() passed after 0.276 seconds.
+􁁛  Test unregisterReleasesOperationStateAfterSessionLoss() passed after 0.277 seconds.
+􁁛  Test discoveryFindsManualAndStandardWithoutLaunching() passed after 0.284 seconds.
+􁁛  Test diagnosticsResolvesManifestPathsAndRedacts() passed after 0.282 seconds.
+􁁛  Test restMapperSeparatesUnauthorizedForbiddenSSORateLimit() passed after 0.278 seconds.
+􁁛  Test registrationTokenStoreExpiresShortLivedToken() passed after 0.279 seconds.
+􁁛  Test snapshotsPreserveRunningDespiteMissingRunner() passed after 0.282 seconds.
+􁁛  Test reviewR3RelinkMustNotRebindLoadedEditorToOtherOrg() passed after 0.283 seconds.
+􁁛  Test existingGroupNameWithoutTakeoverIsRefused() passed after 0.279 seconds.
+􁁛  Test unregisterRefusesStoredIDMismatchAndCrossServer() passed after 0.290 seconds.
+􁁛  Test importRefusesMissingBinariesAndRegistration() passed after 0.280 seconds.
+􁁛  Test apiClientRefusesPATWithoutNetwork() passed after 0.279 seconds.
+􁁛  Test catalogRefusesDuplicateServiceLabel() passed after 0.281 seconds.
+􁁛  Test resolveSkipsPatchWhenPublicReposAllowed() passed after 0.280 seconds.
+􁁛  Test removeDeletesOnlyEntryAndWarnsWhenRunning() passed after 0.280 seconds.
+􁁛  Test reviewSameNameFolderImportsMustHaveDistinctServiceIDs() passed after 0.304 seconds.
+􁁛  Test configInvocationIsExactAndOrdered() passed after 0.280 seconds.
+􁁛  Test rejectsSpacesBeforeLaunching(inWorkFolder:) with 2 test cases passed after 0.282 seconds.
+􁁛  Test configAuditRunsThroughCurrentBundle() passed after 0.281 seconds.
+􁁛  Test canStopAfterRegistrationIsDeleted() passed after 0.280 seconds.
+􁁛  Test operationIdentityNormalizationAndChangeDetection() passed after 0.280 seconds.
+􁁛  Test slowDownAddsFiveSeconds() passed after 0.280 seconds.
+􁁛  Test resolvePatchesDeniedPublicReposOnOwnedGroup() passed after 0.280 seconds.
+􁁛  Test flowMissingClientIDFailsWithExactBinding() passed after 0.279 seconds.
+􁁛  Test enterpriseConfigUsesHostScopedEndpoints() passed after 0.281 seconds.
+􁁛  Test repositorySecondPageFailurePreservesUnknown() passed after 0.282 seconds.
+􁁛  Test discoversManualAndStandardServicesWithoutMachineNames() passed after 0.282 seconds.
+􁁛  Test registrationReducerRetainsPermissionErrorAcrossDraftEdits() passed after 0.358 seconds.
+􁁛  Test githubReducerRestoreStartedShowsVerifyingAccount() passed after 0.346 seconds.
+􁁛  Test migrationFailsClosedOnUnsupportedVersion() passed after 0.327 seconds.
+􁁛  Test reducerPreservesUnrelatedActionsAndCleansState() passed after 0.353 seconds.
+􁁛  Test refreshMapsInvalidGrantToRevoked() passed after 0.420 seconds.
+􁁛  Test importPreservesServiceAndRunAtLoad() passed after 0.388 seconds.
+􁁛  Test registrationModuleRegistersStateAndFlow() passed after 0.453 seconds.
+􁁛  Test reviewR3SameAccountReloginDuringPutMustNotPublishAccess() passed after 0.532 seconds.
+􁁛  Test relinkSameIdentityMoveRequiresReload() passed after 0.475 seconds.
+􁁛  Test flowCancelWhileConnectedRestoresConnected() passed after 0.531 seconds.
+􁁛  Test reviewR3SiblingLoadDuringReloginMustNotPublishAccess() passed after 0.537 seconds.
+􁁛  Test flowLoginSuccessDrivesProductionEffectsToConnected() passed after 0.528 seconds.
+􁁛  Test refreshRejectsFineGrainedPATWithoutSaving() passed after 0.526 seconds.
+􁁛  Test applySucceedsAfterTokenRefreshWithinSameLogin() passed after 0.530 seconds.
+􁁛  Test flowDeniedFailsWithNewCode() passed after 0.512 seconds.
+􁁛  Test flowLoginPersistsSessionIdentityForLaterRestore() passed after 0.511 seconds.
+􁁛  Test flowLoginPhase401DuringInstallationsRequiresRelogin() passed after 0.503 seconds.
+􁁛  Test flowExpiredCodeFailsWithNewCode() passed after 0.498 seconds.
+􁁛  Test flowSlowDownIncreasesIntervalThenSucceeds() passed after 0.489 seconds.
+􁁛  Test reviewR3SameAccountReloginDuringRemoveTokenMustRefuseSideEffect() passed after 0.516 seconds.
+􁁛  Test unregisterRetryInNewIncarnationSucceeds() passed after 0.508 seconds.
+􁁛  Test flow401DuringRefreshRequiresRelogin() passed after 0.517 seconds.
+􁁛  Test githubModuleRegistersStateAndFlow() passed after 0.522 seconds.
+􁁛  Test flowRefreshInstallationsRefreshesExpiringTokenViaProductionPath() passed after 0.650 seconds.
+Heuristic sequence: ["restoreStarted", "connected", "syncFailed"]
+􁁛  Test flowRestoreSessionWithoutIdentityIsNoop() passed after 0.756 seconds.
+􁁛  Test flowRefreshInstallationsWithInvalidGrantDuringRefreshRequiresRelogin() passed after 0.807 seconds.
+􁁛  Test existingRegistrationBlocksFreshInstall() passed after 0.811 seconds.
+􁁛  Test downloadRefusesTamperedBytes() passed after 0.810 seconds.
+􁁛  Test commandExecutorHandlesLargeOutputAndExitStatus() passed after 0.811 seconds.
+􁁛  Test flowLogoutClearsKeychainAndStopsSync() passed after 0.812 seconds.
+􁁛  Test flowRestoreWithFailedRefreshThen401KeepsTokensAndStaysStale() passed after 0.819 seconds.
+􁁛  Test refreshSavesAtomicallyAndCoalescesConcurrentCallers() passed after 0.759 seconds.
+􁁛  Test downloadRefusesMissingChecksum() passed after 0.795 seconds.
+􁁛  Test refreshCancelInFlightNeverSavesRefreshedRecord() passed after 0.823 seconds.
+􁁛  Test flowPublishesFailureAndClearsPendingState() passed after 0.852 seconds.
+􁁛  Test flowConcurrentRefreshAndSelectCoalesceToSingleRefresh() passed after 0.869 seconds.
+􁁛  Test downloadRefusesMalformedChecksum() passed after 0.857 seconds.
+􁁛  Test installerLeaseSerializesUnregisterAndInstall() passed after 0.863 seconds.
+􁁛  Test retryAfterScopeChangeIsNoop() passed after 0.923 seconds.
+􁁛  Test runConfigScrubsTokenFromFailure() passed after 0.924 seconds.
+􁁛  Test labelsRefusePlantedUnconfiguredRegistration() passed after 0.934 seconds.
+􁁛  Test runConfigOmitsReplaceByDefault() passed after 0.942 seconds.
+􁁛  Test groupChangeRefusesOldConfiguredSuccess() passed after 0.958 seconds.
+􁁛  Test retryResumesFailedDownloadWithoutDuplicates() passed after 0.958 seconds.
+􁁛  Test repoWizardOmitsRunnerGroup() passed after 0.963 seconds.
+􁁛  Test scopeChangeRefreshesDownloadAsset() passed after 0.960 seconds.
+􁁛  Test setupServiceWritesManualPlistFoundByDiscovery() passed after 0.952 seconds.
+􁁛  Test orgListRequestsUseQueryNotEncodedPath() passed after 0.953 seconds.
+􁁛  Test remoteDuplicateWithReplaceProceedsWithFlag() passed after 0.935 seconds.
+􁁛  Test changedScopeMustNotReuseRegistrationOrRemoteID() passed after 0.965 seconds.
+􁁛  Test permissionErrorRetainedAcrossEditsUntilRetrySucceeds() passed after 0.966 seconds.
+􁁛  Test realKeychainBackendRoundTripsUniqueRecord() passed after 0.921 seconds.
+􁁛  Test runConfigUsesExactInvocation() passed after 0.941 seconds.
+􁁛  Test downloadVerifiesIntegrityAgainstSystemShasum() passed after 0.975 seconds.
+􁁛  Test installDirChangeKeepsGroupButRequiresFreshInstall() passed after 0.985 seconds.
+􁁛  Test labelsWithMismatchedRemoteIdentityAreRefused() passed after 0.954 seconds.
+􁁛  Test remoteDuplicateWithoutReplaceIsRefusedBeforeToken() passed after 0.976 seconds.
+􁁛  Test serviceCannotClaimDoneBeforeRegistration() passed after 0.947 seconds.
+􁁛  Test runnerListFollowsPaginationForDuplicateGuard() passed after 0.969 seconds.
+􁁛  Test registerReportsNilWhenAgentNotYetListed() passed after 0.970 seconds.
+􁁛  Test inFlightGroupCannotResolveForEditedDraft() passed after 1.003 seconds.
+􁁛  Test registerIsIdempotentAcrossRetries() passed after 0.967 seconds.
+􁁛  Test registerRefusesMismatchedRemoteIdentity() passed after 0.953 seconds.
+􁁛  Test serviceRefusesMismatchedLocalRegistration() passed after 0.952 seconds.
+􁁛  Test reviewerChangedWorkFolderCannotReuseConfiguredSuccess() passed after 0.960 seconds.
+􁁛  Test failedConfigDeletesTokenAndReportsScrubbedError() passed after 0.948 seconds.
+􁁛  Test postConfigAPIFailureDeletesTokenAndReportsError() passed after 0.948 seconds.
+􁁛  Test runConfigRefusesWorkFolderMismatchOnResume() passed after 0.953 seconds.
+􁁛  Test reviewerForeignServerIdentityCannotAuthorizeLabels() passed after 0.950 seconds.
+􁁛  Test labelsApplyRequiresRealRunnerIDThenPuts() passed after 0.952 seconds.
+􁁛  Test reviewR4SessionInvalidationMustReleaseEditorLoading(apply:) with 2 test cases passed after 0.974 seconds.
+􁁛  Test finderAliasInstallFolderIsRefusedBeforeDownload() passed after 0.971 seconds.
+􁁛  Test flow403DuringRefreshKeepsConnectedWithStaleError() passed after 0.982 seconds.
+􁁛  Test repoRunnerListRequestUsesQueryNotEncodedPath() passed after 0.967 seconds.
+􁁛  Test inFlightAccessAbandonedWhenRepositoriesEdited() passed after 1.010 seconds.
+􁁛  Test orgWizardEndToEndDeletesTokenAndLeaksNothing() passed after 1.025 seconds.
+􁁛  Test flowSelectInstallationWithRevokedTokenRequiresRelogin() passed after 0.977 seconds.
+􁁛  Test editorOverlappingLoadSuppressesStaleCompletion() passed after 1.021 seconds.
+􁁛  Test editorRetryAfterSessionInvalidationSucceedsOnSameFlow() passed after 1.033 seconds.
+􁁛  Test inFlightLabelsCannotWriteForEditedDraft() passed after 1.048 seconds.
+􁁛  Test inFlightRegistrationCannotAttributeOldConfigToNewDraft() passed after 1.021 seconds.
+􁁛  Test cancelDuringConfigKeepsLeaseAndRecoversAfterSettle() passed after 1.062 seconds.
+􁁛  Test nonIdentityEditDuringInstallDoesNotCancel() passed after 1.069 seconds.
+􁁛  Test reviewerInFlightInstallCannotRepopulateChangedDraft() passed after 1.072 seconds.
+􁁛  Test reviewR5RemoveReimportMustNotReviveOldEditorOwner() passed after 1.021 seconds.
+􁁛  Test inFlightLabelsAbandonedWhenLabelsEdited() passed after 1.023 seconds.
+􁁛  Test reviewerRetryCannotRunTwoConfigsInSameDirectory() passed after 1.030 seconds.
+􁁛  Test beginDraftDuringDownloadKeepsDirectoryLease() passed after 1.052 seconds.
+􁁛  Test resetDuringDownloadKeepsDirectoryLeaseUntilSettled() passed after 1.089 seconds.
+case-alias evidence: calls=1, lowerInode=Optional(462087458), upperInode=Optional(462087458)
+case-alias evidence: calls=1, lowerInode=Optional(462087474), upperInode=Optional(462087474)
+􁁛  Test reviewerUnicodeCaseAliasCannotBypassDirectoryLease() passed after 1.097 seconds.
+􁁛  Test reviewerCaseAliasMissingLeafCannotBypassDirectoryLease() passed after 1.042 seconds.
+􁁛  Test staleRegisterFailureDoesNotOverwriteBusyFailure() passed after 1.083 seconds.
+RA1 sequence: ["restoreStarted", "loggedOut"]
+􁁛  Test reviewerSymlinkAliasCannotBypassDirectoryLease() passed after 1.056 seconds.
+􁁛  Test reviewerStaleFailureCannotUnlockNewOperation() passed after 1.086 seconds.
+􁁛  Test secondInstallForAnyDirectoryRefusedWhileInstallerBusy() passed after 1.132 seconds.
+􁁛  Test reviewerLogoutDuringRestoreDoesNotReviveSession() passed after 1.216 seconds.
+􁁛  Test runConfigExecutesRealScript() passed after 1.269 seconds.
+RA3 sequence: ["restoreStarted", "loginStarted", "codeReceived", "failed"]
+􁁛  Test reviewerLoginDuringRestoreIsNotClobberedByRestore() passed after 1.419 seconds.
+RA4 sequence: ["loginStarted", "codeReceived", "accountVerified", "installationsLoaded", "syncFailed", "connected", "loggedOut"]
+􁁛  Test reviewerLogoutDuringRefreshLeavesNoTokensBehind() passed after 1.512 seconds.
+RA2 sequence: ["loginStarted", "codeReceived", "accountVerified", "installationsLoaded", "syncFailed", "connected", "loggedOut"]
+􁁛  Test reviewerLogoutDuringRefreshDoesNotEmitSyncAfterLoggedOut() passed after 1.539 seconds.
+􁁛  Test run with 230 tests in 0 suites passed after 1.592 seconds.
+[exit 0]
+$ python3 -m unittest discover -s Scripts/tests -v
+test_docs_contain_no_secret_material (test_release_docs.ReleaseDocsTests.test_docs_contain_no_secret_material) ... ok
+test_docs_name_signing_team_profile_and_account (test_release_docs.ReleaseDocsTests.test_docs_name_signing_team_profile_and_account) ... ok
+test_docs_name_sparkle_tool_pin (test_release_docs.ReleaseDocsTests.test_docs_name_sparkle_tool_pin) ... ok
+test_docs_name_toolchain_pins (test_release_docs.ReleaseDocsTests.test_docs_name_toolchain_pins) ... ok
+test_docs_state_notarization_gates_and_diagnostic_handling (test_release_docs.ReleaseDocsTests.test_docs_state_notarization_gates_and_diagnostic_handling) ... ok
+test_documented_run_attempt_bounds_match_code (test_release_docs.ReleaseDocsTests.test_documented_run_attempt_bounds_match_code) ... ok
+test_accepts_run_attempt_at_exact_limits (test_release_metadata.ReleaseMetadataTests.test_accepts_run_attempt_at_exact_limits) ... ok
+test_appcast_archive_binding (test_release_metadata.ReleaseMetadataTests.test_appcast_archive_binding) ... ok
+test_builds_increase_between_attempts_and_runs (test_release_metadata.ReleaseMetadataTests.test_builds_increase_between_attempts_and_runs) ... ok
+test_malformed_appcast_fails_closed (test_release_metadata.ReleaseMetadataTests.test_malformed_appcast_fails_closed) ... ok
+test_rejects_bad_signature (test_release_metadata.ReleaseMetadataTests.test_rejects_bad_signature) ... ok
+test_rejects_bad_sparkle_pubkey (test_release_metadata.ReleaseMetadataTests.test_rejects_bad_sparkle_pubkey) ... ok
+test_rejects_bundle_id_mismatch (test_release_metadata.ReleaseMetadataTests.test_rejects_bundle_id_mismatch) ... ok
+test_rejects_invalid_run_attempt_bounds (test_release_metadata.ReleaseMetadataTests.test_rejects_invalid_run_attempt_bounds) ... ok
+test_rejects_missing_enclosure_and_minimum (test_release_metadata.ReleaseMetadataTests.test_rejects_missing_enclosure_and_minimum) ... ok
+test_rejects_short_tag_even_when_marketing_matches (test_release_metadata.ReleaseMetadataTests.test_rejects_short_tag_even_when_marketing_matches) ... ok
+test_rejects_short_version_mismatch (test_release_metadata.ReleaseMetadataTests.test_rejects_short_version_mismatch) ... ok
+test_rejects_wrong_feed (test_release_metadata.ReleaseMetadataTests.test_rejects_wrong_feed) ... ok
+test_rejects_wrong_item_count (test_release_metadata.ReleaseMetadataTests.test_rejects_wrong_item_count) ... ok
+test_rejects_wrong_tag_or_identity (test_release_metadata.ReleaseMetadataTests.test_rejects_wrong_tag_or_identity) ... ok
+test_release_signs_dmg_with_resolved_team_identity (test_release_metadata.ReleaseWiringTests.test_release_signs_dmg_with_resolved_team_identity) ... ok
+test_rejects_apple_development_only (test_release_metadata.SigningIdentityTests.test_rejects_apple_development_only) ... ok
+test_rejects_missing_team_identity (test_release_metadata.SigningIdentityTests.test_rejects_missing_team_identity) ... ok
+test_rejects_multiple_team_identities (test_release_metadata.SigningIdentityTests.test_rejects_multiple_team_identities) ... ok
+test_rejects_near_match_team (test_release_metadata.SigningIdentityTests.test_rejects_near_match_team) ... ok
+test_rejects_same_team_apple_development (test_release_metadata.SigningIdentityTests.test_rejects_same_team_apple_development) ... ok
+test_returns_team_identity_ignoring_other_teams (test_release_metadata.SigningIdentityTests.test_returns_team_identity_ignoring_other_teams) ... ok
+test_appcast_tamper_prevents_publish (test_release_packaging.ReleasePackagingTests.test_appcast_tamper_prevents_publish) ... ok
+test_boundary_run_attempt_accepted (test_release_packaging.ReleasePackagingTests.test_boundary_run_attempt_accepted) ... ok
+test_codesign_team_mismatch_prevents_packaging (test_release_packaging.ReleasePackagingTests.test_codesign_team_mismatch_prevents_packaging) ... ok
+test_invalid_run_number_prevents_packaging (test_release_packaging.ReleasePackagingTests.test_invalid_run_number_prevents_packaging) ... ok
+test_malformed_identity_hash_prevents_signing (test_release_packaging.ReleasePackagingTests.test_malformed_identity_hash_prevents_signing) ... ok
+test_multiple_identities_prevents_packaging_and_output (test_release_packaging.ReleasePackagingTests.test_multiple_identities_prevents_packaging_and_output) ... ok
+test_notarization_rejection_prevents_publish (test_release_packaging.ReleasePackagingTests.test_notarization_rejection_prevents_publish) ... ok
+test_release_signs_dmg_with_resolved_team_identity (test_release_packaging.ReleasePackagingTests.test_release_signs_dmg_with_resolved_team_identity) ... ok
+test_retry_attempt_signs_with_resolved_team_identity (test_release_packaging.ReleasePackagingTests.test_retry_attempt_signs_with_resolved_team_identity) ... ok
+test_tag_marketing_mismatch_prevents_packaging (test_release_packaging.ReleasePackagingTests.test_tag_marketing_mismatch_prevents_packaging) ... ok
+test_zero_identities_prevents_packaging_and_output (test_release_packaging.ReleasePackagingTests.test_zero_identities_prevents_packaging_and_output) ... ok
+test_apple_development_same_team_rejected (test_release_preflight.ReleasePreflightTests.test_apple_development_same_team_rejected) ... ok
+test_failed_identity_read_with_empty_output_is_unknown_not_missing (test_release_preflight.ReleasePreflightTests.test_failed_identity_read_with_empty_output_is_unknown_not_missing) ... ok
+test_failed_identity_read_with_partial_output_is_not_verified (test_release_preflight.ReleasePreflightTests.test_failed_identity_read_with_partial_output_is_not_verified) ... ok
+test_locked_keychain_fails_with_unlock_guidance (test_release_preflight.ReleasePreflightTests.test_locked_keychain_fails_with_unlock_guidance) ... ok
+test_missing_identity_rejected (test_release_preflight.ReleasePreflightTests.test_missing_identity_rejected) ... ok
+test_missing_profile_names_profile_without_locked_guidance (test_release_preflight.ReleasePreflightTests.test_missing_profile_names_profile_without_locked_guidance) ... ok
+test_missing_tool_rejected (test_release_preflight.ReleasePreflightTests.test_missing_tool_rejected) ... ok
+test_multiple_team_identities_rejected (test_release_preflight.ReleasePreflightTests.test_multiple_team_identities_rejected) ... ok
+test_preflight_passes_with_valid_credentials (test_release_preflight.ReleasePreflightTests.test_preflight_passes_with_valid_credentials) ... ok
+test_sparkle_key_mismatch_rejected (test_release_preflight.ReleasePreflightTests.test_sparkle_key_mismatch_rejected) ... ok
+test_unknown_notary_error_reports_profile (test_release_preflight.ReleasePreflightTests.test_unknown_notary_error_reports_profile) ... ok
+test_existing_release_refused (test_release_workflow.ReleaseTagTrustBehaviorTests.test_existing_release_refused) ... ok
+test_gh_empty_error_fails_closed (test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_empty_error_fails_closed) ... ok
+test_gh_lookup_failure_fails_closed_not_absent (test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_lookup_failure_fails_closed_not_absent) ... ok
+test_head_tag_mismatch_refused (test_release_workflow.ReleaseTagTrustBehaviorTests.test_head_tag_mismatch_refused) ... ok
+test_malformed_tags_refused_before_any_git_work (test_release_workflow.ReleaseTagTrustBehaviorTests.test_malformed_tags_refused_before_any_git_work) ... ok
+test_missing_release_tag_refused (test_release_workflow.ReleaseTagTrustBehaviorTests.test_missing_release_tag_refused) ... ok
+test_non_main_ancestry_refused (test_release_workflow.ReleaseTagTrustBehaviorTests.test_non_main_ancestry_refused) ... ok
+test_trusted_tag_accepted (test_release_workflow.ReleaseTagTrustBehaviorTests.test_trusted_tag_accepted) ... ok
+test_workflow_trust_step_accepts_trusted_tag (test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_accepts_trusted_tag) ... ok
+test_workflow_trust_step_refuses_non_main_ancestry (test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_refuses_non_main_ancestry) ... ok
+test_gates_precede_packaging_precedes_publish (test_release_workflow.ReleaseWorkflowTests.test_gates_precede_packaging_precedes_publish) ... ok
+test_only_log_preservation_overrides_success_gating (test_release_workflow.ReleaseWorkflowTests.test_only_log_preservation_overrides_success_gating) ... ok
+test_workflow_invokes_trust_script_before_any_work (test_release_workflow.ReleaseWorkflowTests.test_workflow_invokes_trust_script_before_any_work) ... ok
+
+----------------------------------------------------------------------
+Ran 62 tests in 20.141s
+
+OK
+[exit 0]
+coverage_unit=exact_command_shard required=2 green=2 failed=0 missing=0 test_case_coverage=unknown

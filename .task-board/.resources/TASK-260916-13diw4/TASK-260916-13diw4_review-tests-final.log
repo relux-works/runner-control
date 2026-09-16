@@ -1,0 +1,49 @@
+[0/1] Planning build
+Building for debugging...
+[0/3] Write sources
+[1/3] Write swift-version--58304C5D6DBC2206.txt
+[3/5] Emitting module RunnerControlCoreTests
+[4/5] Compiling RunnerControlCoreTests RunnerRegistrationTests.swift
+[4/6] Write Objects.LinkFileList
+[5/6] Linking RunnerControlCorePackageTests
+Build complete! (5.34s)
+Test Suite 'Selected tests' started at 2026-09-16 08:26:31.460.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 08:26:31.468.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 08:26:31.468.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 08:26:31.468.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.008) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test reviewPostConfigFailureMustDeleteTokenAndNeverReplace() started.
+􀟈  Test reviewerLoginDuringRestoreIsNotClobberedByRestore() started.
+􀟈  Test reviewerLogoutDuringRestoreDoesNotReviveSession() started.
+􀟈  Test reviewerLogoutDuringRefreshLeavesNoTokensBehind() started.
+􀟈  Test reviewerLogoutDuringRefreshDoesNotEmitSyncAfterLoggedOut() started.
+􀟈  Test reviewReal204RepositoryUpdateMustSucceed() started.
+􀟈  Test reviewUnownedMatchingGroupMustNotBeMutated() started.
+􀟈  Test reviewMissingChecksumMustRefuse() started.
+􀟈  Test reviewPublicRepositoriesMustBeEnabled() started.
+􀢄  Test reviewUnownedMatchingGroupMustNotBeMutated() recorded an issue at RunnerRegistrationTests.swift:1027:5: Expectation failed: await harness.transport.requests.filter { $0.method == "PUT" }.isEmpty
+􀢄  Test reviewPublicRepositoriesMustBeEnabled() recorded an issue at RunnerRegistrationTests.swift:1042:5: Expectation failed: (body["allows_public_repositories"] as? Bool → nil) == true
+􀢄  Test reviewPublicRepositoriesMustBeEnabled() failed after 0.010 seconds with 1 issue.
+􀢄  Test reviewReal204RepositoryUpdateMustSucceed() recorded an issue at RunnerRegistrationTests.swift:1017:5: Expectation failed: (lastFailure(harness.logger) → (message: "GitHub request failed (HTTP 204).", step: "applyRepositoryAccess")) == nil
+􀢄  Test reviewReal204RepositoryUpdateMustSucceed() recorded an issue at RunnerRegistrationTests.swift:1018:5: Expectation failed: registrationActions(harness.logger).contains { if case .repositoryAccessApplied = $0 { true } else { false } }
+􀢄  Test reviewUnownedMatchingGroupMustNotBeMutated() failed after 0.010 seconds with 1 issue.
+􀢄  Test reviewReal204RepositoryUpdateMustSucceed() failed after 0.011 seconds with 2 issues.
+􀢄  Test reviewMissingChecksumMustRefuse() recorded an issue at RunnerRegistrationTests.swift:1007:21: Issue recorded
+􀄵  ABSENT EVIDENCE ADMITTED: archive installed without checksum
+􀢄  Test reviewMissingChecksumMustRefuse() failed after 0.220 seconds with 1 issue.
+􀢄  Test reviewPostConfigFailureMustDeleteTokenAndNeverReplace() recorded an issue at RunnerRegistrationTests.swift:1059:5: Expectation failed: await harness.registrationTokens.load(scopeKey: RunnerRegistration.Flow.tokenScopeKey(draft: draft)) == nil
+􀢄  Test reviewPostConfigFailureMustDeleteTokenAndNeverReplace() recorded an issue at RunnerRegistrationTests.swift:1060:5: Expectation failed: await executor.configCalls.allSatisfy { !$0.contains("--replace") }
+􀢄  Test reviewPostConfigFailureMustDeleteTokenAndNeverReplace() failed after 0.248 seconds with 2 issues.
+RA1 sequence: ["restoreStarted", "loggedOut"]
+􁁛  Test reviewerLogoutDuringRestoreDoesNotReviveSession() passed after 0.626 seconds.
+RA4 sequence: ["loginStarted", "codeReceived", "accountVerified", "installationsLoaded", "syncFailed", "connected", "loggedOut"]
+􁁛  Test reviewerLogoutDuringRefreshLeavesNoTokensBehind() passed after 0.810 seconds.
+􁁛  Test reviewerLoginDuringRestoreIsNotClobberedByRestore() passed after 0.893 seconds.
+RA3 sequence: ["restoreStarted", "loginStarted", "codeReceived", "failed"]
+RA2 sequence: ["loginStarted", "codeReceived", "accountVerified", "installationsLoaded", "syncFailed", "connected", "loggedOut"]
+􁁛  Test reviewerLogoutDuringRefreshDoesNotEmitSyncAfterLoggedOut() passed after 0.893 seconds.
+􀢄  Test run with 9 tests in 0 suites failed after 0.893 seconds with 7 issues.

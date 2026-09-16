@@ -1,0 +1,34 @@
+COMMAND: ['swift', 'test', '--package-path', '/tmp/TASK-260916-304bw2-review-r2/Packages/RunnerControlCore', '--filter', 'reviewR2']
+[0/1] Planning build
+Building for debugging...
+[0/3] Write sources
+[1/3] Write swift-version--58304C5D6DBC2206.txt
+[3/5] Compiling RunnerControlCoreTests RunnerCatalogLifecycleTests.swift
+[4/5] Emitting module RunnerControlCoreTests
+[5/6] Compiling RunnerControlCoreTests RunnerRegistrationTests.swift
+[5/7] Write Objects.LinkFileList
+[6/7] Linking RunnerControlCorePackageTests
+Build complete! (39.91s)
+Test Suite 'Selected tests' started at 2026-09-16 14:01:40.007.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 14:01:40.032.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 14:01:40.032.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 14:01:40.032.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.025) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test reviewR2ScopeEditAfterLoadMustNotRetargetApply() started.
+􀟈  Test reviewR2LogoutDuringRemoveTokenMustRefuseSideEffect() started.
+􀟈  Test reviewR2LogoutDuringPutMustNotPublishAccess() started.
+􀢄  Test reviewR2ScopeEditAfterLoadMustNotRetargetApply() recorded an issue at RunnerCatalogLifecycleTests.swift:1621:5: Expectation failed: await h.transport.requests.filter { $0.method == "PUT" }.isEmpty
+􀢄  Test reviewR2ScopeEditAfterLoadMustNotRetargetApply() failed after 0.027 seconds with 1 issue.
+􀢄  Test reviewR2LogoutDuringRemoveTokenMustRefuseSideEffect() recorded an issue at RunnerCatalogLifecycleTests.swift:1601:5: Expectation failed: await h.installerExecutor.calls.isEmpty
+􀢄  Test reviewR2LogoutDuringRemoveTokenMustRefuseSideEffect() recorded an issue at RunnerCatalogLifecycleTests.swift:1602:5: Expectation failed: await h.catalog.load().first?.remoteAgentID == 42
+􀢄  Test reviewR2LogoutDuringRemoveTokenMustRefuseSideEffect() failed after 0.038 seconds with 2 issues.
+􀢄  Test reviewR2LogoutDuringPutMustNotPublishAccess() recorded an issue at RunnerCatalogLifecycleTests.swift:1586:5: Expectation failed: (loadedGroupAccess(h.logger, id: label) → GroupAccess(group: Optional(RunnerControlCore.RunnerRegistration.RunnerGroup(id: 4, name: "g", visibility: "selected", allowsPublicRepositories: true)), repoIDs: [1], updatedAt: Optional(2026-09-16 10:01:40 +0000), owned: true, loading: false, error: nil)) == nil
+􀢄  Test reviewR2LogoutDuringPutMustNotPublishAccess() recorded an issue at RunnerCatalogLifecycleTests.swift:1587:5: Expectation failed: await h.transport.requests.count == 3
+􀢄  Test reviewR2LogoutDuringPutMustNotPublishAccess() failed after 0.062 seconds with 2 issues.
+􀢄  Test run with 3 tests in 0 suites failed after 0.063 seconds with 5 issues.
+
+EXIT: 1

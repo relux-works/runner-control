@@ -1,0 +1,2951 @@
+diff --git a/.spec/README.md b/.spec/README.md
+new file mode 100644
+index 0000000..7ede1ad
+--- /dev/null
++++ b/.spec/README.md
+@@ -0,0 +1,14 @@
++# RunnerControl specs
++
++Materialized from approved-design.md for STORY-260916-36d1jg. Registration and
++removal are in scope for this release (promoted from "next stage" in §2).
++
++- `github-login-device-flow.md` — GitHub App Device Flow, Keychain, refresh, installations/repos.
++- `management-window.md` — native 760×540 window, tabs, menu coexistence.
++- `runner-registration.md` — new-runner wizard (implements TASK-260916-13diw4 contract).
++- `runner-removal.md` — remove-from-app vs delete-from-GitHub boundary.
++- `offline-local-control.md` — offline/401/403/rate-limit behavior.
++
++Conventions: Relux actor services, state/reducer/flow, Container+Page. No UI
++tests. Generator input (`ios-app-manager.json`) owns scaffold output; never
++hand-edit `Project.swift`/`Package.swift`.
+diff --git a/.spec/github-login-device-flow.md b/.spec/github-login-device-flow.md
+new file mode 100644
+index 0000000..f8fe36a
+--- /dev/null
++++ b/.spec/github-login-device-flow.md
+@@ -0,0 +1,67 @@
++# GitHub login — Device Flow
++
++## Goal
++
++Connect GitHub without manual PAT. Public `client_id` only in the app; no
++client secret, App private key, or token in binary, resources, state, or logs.
++
++## Config
++
++- Source: `Info.plist[GitHubAppClientID]` via `ios-app-manager.json →
++  macos.info_plist.GitHubAppClientID` (coordinator-provisioned).
++- Missing/empty → `GitHubAuth.Action.failed` with exact binding
++  `Info.plist[GitHubAppClientID] (scaffold input ios-app-manager.json →
++  macos.info_plist.GitHubAppClientID, coordinator-provisioned public
++  client_id)`. Local control unaffected.
++- Enterprise host uses `https://<host>/login/...` and `https://<host>/api/v3`;
++  requires its own App registration. Until configured, show concrete limit.
++
++## Endpoints
++
++- `POST {server}/login/device/code` `{client_id}` → `device_code`,
++  `user_code`, `verification_uri`, `expires_in`, `interval`.
++- `POST {server}/login/oauth/access_token`
++  `{client_id, device_code, grant_type: urn:ietf:params:oauth:grant-type:device_code}`
++  polled at `interval`; `slow_down` adds 5s. HTTP 200 with `error` body is not
++  success: `authorization_pending` / `slow_down` / `access_denied` /
++  `expired_token`.
++- Refresh: `POST {server}/login/oauth/access_token`
++  `{client_id, grant_type: refresh_token, refresh_token}` — no client secret.
++- `GET {api}/user`, `GET {api}/user/installations`,
++  `GET {api}/user/installations/{id}/repositories` with
++  `Accept: application/vnd.github+json`, `Authorization: Bearer ghu_…`.
++
++## States
++
++`disconnected → requestingCode → awaitingUser → verifyingAccount →
++verifyingInstallations → connected`. Terminal failures: `denied`,
++`codeExpired` (new code), `cancelled` (device_code destroyed, poll stopped),
++`network` (retry), `needsInstallation`/`needsApproval` (grant access), `sso`,
++`revoked`/`unauthorized` (relogin), `rateLimited` (stale + local works).
++
++## Storage
++
++- Keychain service `works.relux.runnercontrol.github-token`, account
++  `<serverHost>:<userID>:<clientID>`, JSON `{accessToken, refreshToken?,
++  expiresAt?}`. Atomic save; `deleteAll` sweeps by prefix/suffix.
++- Relux state holds username, IDs, hosts, timestamps only. `device_code`,
++  access/refresh tokens live in Flow actor privates + Keychain.
++- `GitHubRedaction.sanitize` scrubs exact secrets plus
++  `"access_token"/"refresh_token"/"device_code"` JSON shapes.
++
++## Refresh
++
++`GitHubTokenRefresh.refresh` is an actor: concurrent callers with the same
++`current` coalesce to one HTTP refresh (second caller sees the new store
++value and returns without network). Missing refresh token →
++`tokenRefreshFailed`; `invalid_grant` → `revoked`.
++
++## Guards
++
++- `PATGuard` rejects `ghp_*` / `github_pat_*` with `patNotSupported`. No PAT
++  UI exists; injected PATs fail closed.
++- `RESTMapper`: 401 → `unauthorized`; 403 inspects body for SSO/rate-limit,
++  else `forbidden`; 429 → `rateLimited`. Login-phase 401/revoked → relogin;
++  connected-phase 403/offline/rate-limit → `syncFailed` (stale, local works).
++- `AppConfig.auditNoSecrets` rejects plist keys containing `secret`,
++  `private_key`/`privatekey`, `token` (except `GitHubAppClientID`).
+diff --git a/.spec/management-window.md b/.spec/management-window.md
+new file mode 100644
+index 0000000..c37e427
+--- /dev/null
++++ b/.spec/management-window.md
+@@ -0,0 +1,36 @@
++# Management window
++
++## Goal
++
++Native 760×540 "Раннеры и настройки" window alongside the existing ~400pt menu.
++Menu stays fully functional; window adds GitHub + settings depth.
++
++## Entry
++
++- Reopen app (`applicationShouldHandleReopen`) and menu button "Раннеры и
++  настройки…" open the window via `Notification openManagementWindow`
++  (no new app delegate).
++- First launch shows the window once (`hasShownWelcome`).
++
++## Tabs
++
++- **Раннеры**: Mac name + `N из M включено`, `RunnerCard` list in scroll,
++  per-row errors, "Включить все" / "Выключить все…", offline note. Reuses
++  `Runners.State` and `RunnerCard`; no GitHub-gated controls.
++- **GitHub**: disconnected (server field + "Войти через GitHub" + Keychain
++  note), requesting/verifying (progress), awaitingUser (large code +
++  Copy/Open/Cancel + expiry/interval), connected (`@user`, host, last sync,
++  Refresh/Logout/Revoke, installations picker, repo checklist, grant-access),
++  failed (message + retry per `RetryKind` + offline note). Drives production
++  `GitHubAuth.Effect` via `ManagementWindowContainer`.
++- **Основные**: launch-at-login (`SMAppService.mainApp`, distinct from CI),
++  version + Sparkle check/auto toggles, quit (warns if CI running, never
++  stops CI).
++
++## Rules
++
++- Container maps state → props/reactions; Page is pure. Local `@State`
++  only for server-host text and tab selection.
++- GitHub failures never disable local toggles. Stale data is labeled with
++  last-sync time; `busy=false` older than 60s is not proof of idle.
++- Stop always confirms; per-row `changing` blocks only that row.
+diff --git a/.spec/offline-local-control.md b/.spec/offline-local-control.md
+new file mode 100644
+index 0000000..a905915
+--- /dev/null
++++ b/.spec/offline-local-control.md
+@@ -0,0 +1,28 @@
++# Offline and degraded GitHub
++
++## Invariants
++
++- Local `Runners` inspect/start/stop never depends on GitHub reachability,
++  401/403, rate limits, or token state.
++- `LocalState`, `RemoteState`, `OperationState`, observation time stay
++  separate. Offline never renders a running service as stopped; missing
++  registration never hides a running service or its Stop.
++- Contradictions show both facts (e.g. "Служба выключена · GitHub: данные
++  обновляются").
++
++## Mapping
++
++- Offline/transport error → `AuthError.network`, `syncFailed`, stale label +
++  last-success time + retry. Poll loop fails with `.retry`, not infinite.
++- 401/`invalid_grant`/missing token → `unauthorized`/`revoked` → relogin.
++  Connected-phase 401 fails the sync, not local runners.
++- 403 → body-inspected: SSO → `ssoRequired`; rate-limit text →
++  `rateLimited`; else `forbidden` (grant/approve). All keep local enabled.
++- 429 → `rateLimited` with backoff; menu poll ~30s, local poll 3s menu /
++  slower background, immediate after command and wake.
++
++## Freshness
++
++- Older than 60s → explicit "данные устарели". Stale `busy=false` is not
++  idle proof. Stop of a running service always confirms; unknown/stale busy
++  warns "may interrupt a job".
+diff --git a/.spec/runner-registration.md b/.spec/runner-registration.md
+new file mode 100644
+index 0000000..8268310
+--- /dev/null
++++ b/.spec/runner-registration.md
+@@ -0,0 +1,31 @@
++# Runner registration (in scope for this release)
++
++Promoted from §2 "next stage" into this release. Implemented by
++TASK-260916-13diw4; this slice provides login + installation/repo selection
++that the wizard consumes.
++
++## Scope
++
++- Wizard downloads the architecture-matched official runner, verifies
++  integrity, installs to a no-space path, obtains a scoped short-lived
++  registration token, runs exact `config.sh` invocation, sets up
++  `runsvc.sh` + manual LaunchAgent, retries idempotently with recovery.
++- Org registration uses a dedicated per-Mac group + selected repo access;
++  personal repos get separate installations. Repo access and labels remain
++  editable; real IDs are fetched; permission errors are retained.
++- Never mutates unrelated/shared groups without explicit UI scope.
++
++## Preconditions (this slice)
++
++- `GitHubAuth` connected with installations + selected repos.
++- Required elevation (later): Self-hosted runners/write (org) or
++  Administration/write (repo) + matching user rights. Absence blocks the
++  wizard step with the concrete missing permission, not a generic error.
++
++## Safety
++
++- No auto-transfer of a running runner; relocation is a separate stopped
++  operation with restore.
++- No second controlling process; validate manifest + `.runner` + binaries +
++  no-space paths immediately before action.
++- Registration tokens are short-lived, Keychain-only, never logged.
+diff --git a/.spec/runner-removal.md b/.spec/runner-removal.md
+new file mode 100644
+index 0000000..7a555c1
+--- /dev/null
++++ b/.spec/runner-removal.md
+@@ -0,0 +1,20 @@
++# Runner removal (in scope for this release)
++
++## Two operations (never confused)
++
++1. **Убрать из приложения**: deletes only the catalog entry (directory
++   record). Warns if the service keeps running. Deletes no files, no GitHub
++   registration, no certificates. Implemented with the catalog slice
++   (TASK-260916-304bw2).
++2. **Удалить runner из GitHub**: separate future scenario using
++   registration/remove tokens. Not the same button; requires explicit scope
++   and confirmation.
++
++## Rules
++
++- Removing from the app never stops, unregisters, or deletes the working
++  installation.
++- A removed-then-readded directory reuses discovery validation
++  (canonical path dedupe, no double import via symlink).
++- UI copy must name which operation runs; destructive GitHub removal needs
++  typed confirmation and shows the exact scope/registration ID.
+diff --git a/Packages/RunnerControlCore/Sources/GitHubAPIClient.swift b/Packages/RunnerControlCore/Sources/GitHubAPIClient.swift
+new file mode 100644
+index 0000000..fc4b49d
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/GitHubAPIClient.swift
+@@ -0,0 +1,69 @@
++import Foundation
++
++/// GitHub REST client for user/installation/repository reads. Takes tokens explicitly; never stores them.
++public actor GitHubAPIClient {
++    private let transport: any GitHubHTTPTransport
++
++    public init(transport: any GitHubHTTPTransport) {
++        self.transport = transport
++    }
++
++    private func get(config: GitHubAuth.AppConfig, path: String, token: String) async throws -> GitHubHTTPResponse {
++        let header: String
++        do {
++            header = try GitHubAuth.PATGuard.authorizationHeader(token: token)
++        } catch {
++            throw GitHubAuth.AuthError.patNotSupported
++        }
++        let url = config.apiBaseURL.appendingPathComponent(path)
++        let request = GitHubHTTPRequest(
++            method: "GET",
++            url: url,
++            headers: ["Accept": "application/vnd.github+json", "Authorization": header]
++        )
++        let response: GitHubHTTPResponse
++        do {
++            response = try await transport.send(request)
++        } catch {
++            throw GitHubAuth.AuthError.network(GitHubTransportError.offline.localizedDescription)
++        }
++        if response.status == 200 { return response }
++        if let mapped = GitHubAuth.RESTMapper.map(status: response.status, body: response.body) {
++            throw mapped
++        }
++        throw GitHubAuth.AuthError.network("GitHub request failed (HTTP \(response.status)).")
++    }
++
++    public func fetchUser(config: GitHubAuth.AppConfig, token: String) async throws -> GitHubAuth.UserResponse {
++        let response = try await get(config: config, path: "user", token: token)
++        do {
++            return try JSONDecoder().decode(GitHubAuth.UserResponse.self, from: response.body)
++        } catch {
++            throw GitHubAuth.AuthError.network(GitHubTransportError.invalidResponse.localizedDescription)
++        }
++    }
++
++    public func fetchInstallations(config: GitHubAuth.AppConfig, token: String) async throws -> [GitHubAuth.Installation] {
++        let response = try await get(config: config, path: "user/installations", token: token)
++        do {
++            let decoded = try JSONDecoder().decode(GitHubAuth.InstallationsResponse.self, from: response.body)
++            return decoded.installations.map { GitHubAuth.Installation(id: $0.id, account: $0.account.login, accountType: $0.account.type) }
++        } catch let error as GitHubAuth.AuthError {
++            throw error
++        } catch {
++            throw GitHubAuth.AuthError.network(GitHubTransportError.invalidResponse.localizedDescription)
++        }
++    }
++
++    public func fetchRepositories(config: GitHubAuth.AppConfig, token: String, installationID: Int64) async throws -> [GitHubAuth.Repository] {
++        let response = try await get(config: config, path: "user/installations/\(installationID)/repositories", token: token)
++        do {
++            let decoded = try JSONDecoder().decode(GitHubAuth.RepositoriesResponse.self, from: response.body)
++            return decoded.repositories.map { GitHubAuth.Repository(id: $0.id, fullName: $0.full_name, isPrivate: $0.private) }
++        } catch let error as GitHubAuth.AuthError {
++            throw error
++        } catch {
++            throw GitHubAuth.AuthError.network(GitHubTransportError.invalidResponse.localizedDescription)
++        }
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/GitHubAppConfig.swift b/Packages/RunnerControlCore/Sources/GitHubAppConfig.swift
+new file mode 100644
+index 0000000..251122c
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/GitHubAppConfig.swift
+@@ -0,0 +1,68 @@
++import Foundation
++
++extension GitHubAuth {
++    /// Public GitHub App configuration. Only the public client_id lives here.
++    /// Client secrets and private keys are never embedded (see auditNoSecrets).
++    public struct AppConfig: Sendable, Equatable {
++        public let clientID: String
++        public let serverHost: String
++        public let deviceAuthorizationURL: URL
++        public let tokenURL: URL
++        public let apiBaseURL: URL
++
++        public init(clientID: String, serverHost: String = "github.com") {
++            self.clientID = clientID
++            self.serverHost = serverHost
++            if serverHost == "github.com" || serverHost == "www.github.com" {
++                self.deviceAuthorizationURL = URL(string: "https://github.com/login/device/code")!
++                self.tokenURL = URL(string: "https://github.com/login/oauth/access_token")!
++                self.apiBaseURL = URL(string: "https://api.github.com")!
++            } else {
++                self.deviceAuthorizationURL = URL(string: "https://\(serverHost)/login/device/code")!
++                self.tokenURL = URL(string: "https://\(serverHost)/login/oauth/access_token")!
++                self.apiBaseURL = URL(string: "https://\(serverHost)/api/v3")!
++            }
++        }
++
++        /// Exact scaffold binding the coordinator must provision.
++        public static let missingBindingHelp = "Info.plist[GitHubAppClientID] (scaffold input ios-app-manager.json → macos.info_plist.GitHubAppClientID, coordinator-provisioned public client_id)"
++
++        public static func current(bundle: Bundle = .main, serverHost: String = "github.com") throws -> Self {
++            let raw = bundle.object(forInfoDictionaryKey: "GitHubAppClientID") as? String
++            let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
++            guard !trimmed.isEmpty else {
++                throw ConfigError.missingClientID(binding: missingBindingHelp)
++            }
++            return Self(clientID: trimmed, serverHost: serverHost)
++        }
++
++        /// Fail-closed audit: Info.plist must not carry secrets or private keys.
++        public static func auditNoSecrets(in dictionary: [String: Any]) throws {
++            let forbidden = ["secret", "private_key", "privatekey", "token"]
++            for key in dictionary.keys {
++                let lowered = key.lowercased()
++                for token in forbidden where lowered.contains(token) {
++                    if key == "GitHubAppClientID" { continue }
++                    throw ConfigError.embeddedSecret(key: key)
++                }
++            }
++        }
++    }
++
++    public enum ConfigError: LocalizedError, Sendable, Equatable {
++        case missingClientID(binding: String)
++        case embeddedSecret(key: String)
++        case unsupportedEnterprise(host: String)
++
++        public var errorDescription: String? {
++            switch self {
++            case .missingClientID(let binding):
++                "GitHub App client_id is not provisioned. Missing binding: \(binding)."
++            case .embeddedSecret(let key):
++                "Refusing to load embedded secret '\(key)'. Secrets must stay in Keychain, never in plist/state/logs."
++            case .unsupportedEnterprise(let host):
++                "GitHub Enterprise Server '\(host)' needs its own App registration and Device Flow support check. Local control remains available offline."
++            }
++        }
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/GitHubAuth+Flow.swift b/Packages/RunnerControlCore/Sources/GitHubAuth+Flow.swift
+new file mode 100644
+index 0000000..1b11b7f
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/GitHubAuth+Flow.swift
+@@ -0,0 +1,356 @@
++import Foundation
++import Relux
++
++extension GitHubAuth {
++    public protocol IFlow: Relux.Flow {}
++    public struct Session: Sendable {
++        let userID: Int64
++        let username: String
++        let serverHost: String
++        let config: AppConfig
++    }
++
++    public actor Flow {
++        public let dispatcher: Relux.Dispatcher
++        private let deviceFlow: GitHubDeviceFlow
++        private let api: GitHubAPIClient
++        private let refresher: GitHubTokenRefresh
++        private let store: any GitHubCredentialStoring
++        private let configProvider: @Sendable (String?) throws -> GitHubAuth.AppConfig
++        private let sleeper: @Sendable (UInt64) async throws -> Void
++        private let now: @Sendable () -> Date
++
++        private var deviceCode: String?
++        private var generation = 0
++        private var pollTask: Task<Void, Never>?
++        private var session: Session?
++
++        public init(
++            deviceFlow: GitHubDeviceFlow,
++            api: GitHubAPIClient,
++            refresher: GitHubTokenRefresh,
++            store: any GitHubCredentialStoring,
++            configProvider: (@Sendable (String?) throws -> GitHubAuth.AppConfig)? = nil,
++            sleeper: (@Sendable (UInt64) async throws -> Void)? = nil,
++            now: (@Sendable () -> Date)? = nil,
++            dispatcher: Relux.Dispatcher? = nil
++        ) async {
++            self.deviceFlow = deviceFlow
++            self.api = api
++            self.refresher = refresher
++            self.store = store
++            self.configProvider = configProvider ?? { host in try GitHubAuth.AppConfig.current(serverHost: host ?? "github.com") }
++            self.sleeper = sleeper ?? { try await Task.sleep(nanoseconds: $0) }
++            self.now = now ?? Date.init
++            self.dispatcher = if let dispatcher { dispatcher } else { await Self.defaultDispatcher }
++        }
++    }
++}
++
++extension GitHubAuth.Flow: GitHubAuth.IFlow {
++    public func apply(_ effect: any Relux.Effect) async -> Relux.ActionResult {
++        guard let effect = effect as? GitHubAuth.Effect else { return .success }
++        switch effect {
++        case .beginLogin(let host): await beginLogin(serverHost: host)
++        case .cancelLogin: await cancelLogin()
++        case .logout: await logout()
++        case .refreshInstallations: await refreshInstallations()
++        case .selectInstallation(let id): await selectInstallation(id)
++        case .selectRepositories(let ids): await action { GitHubAuth.Action.repositoriesSelected(ids) }
++        }
++        return .success
++    }
++
++    private func beginLogin(serverHost: String?) async {
++        generation += 1
++        let gen = generation
++        pollTask?.cancel()
++        pollTask = nil
++        deviceCode = nil
++        let config: GitHubAuth.AppConfig
++        do {
++            config = try configProvider(serverHost)
++        } catch let error as GitHubAuth.ConfigError {
++            if case .missingClientID(let binding) = error {
++                await action { GitHubAuth.Action.failed(message: GitHubAuth.AuthError.missingClientID(binding: binding).localizedDescription, retry: .none) }
++            } else {
++                await action { GitHubAuth.Action.failed(message: error.localizedDescription, retry: .none) }
++            }
++            return
++        } catch {
++            await action { GitHubAuth.Action.failed(message: error.localizedDescription, retry: .none) }
++            return
++        }
++        await action { GitHubAuth.Action.loginStarted(serverHost: config.serverHost) }
++        let response: GitHubAuth.DeviceCodeResponse
++        do {
++            response = try await deviceFlow.requestCode(config: config)
++        } catch let error as GitHubAuth.AuthError {
++            await action { GitHubAuth.Action.failed(message: error.localizedDescription, retry: Self.retryKind(for: error)) }
++            return
++        } catch {
++            await action { GitHubAuth.Action.failed(message: error.localizedDescription, retry: .retry) }
++            return
++        }
++        guard generation == gen else { return }
++        deviceCode = response.device_code
++        guard let uri = URL(string: response.verification_uri) else {
++            await action { GitHubAuth.Action.failed(message: GitHubTransportError.invalidResponse.localizedDescription, retry: .newCode) }
++            deviceCode = nil
++            return
++        }
++        await action { GitHubAuth.Action.codeReceived(userCode: response.user_code, verificationURI: uri, expiresIn: response.expires_in, interval: response.interval) }
++        pollTask = Task { [weak self] in
++            guard let self else { return }
++            await self.pollLoop(generation: gen, config: config, interval: response.interval, expiresIn: response.expires_in)
++        }
++    }
++
++    private func pollLoop(generation gen: Int, config: GitHubAuth.AppConfig, interval: Int, expiresIn: Int) async {
++        var currentInterval = interval
++        let deadline = now().addingTimeInterval(TimeInterval(expiresIn))
++        while generation == gen {
++            do {
++                try await sleeper(UInt64(currentInterval) * 1_000_000_000)
++            } catch {
++                return
++            }
++            guard generation == gen else { return }
++            if now() >= deadline {
++                deviceCode = nil
++                await action { GitHubAuth.Action.failed(message: GitHubAuth.AuthError.codeExpired.localizedDescription, retry: .newCode) }
++                return
++            }
++            guard let code = deviceCode else { return }
++            let result: GitHubAuth.PollResult
++            do {
++                result = try await deviceFlow.pollOnce(config: config, deviceCode: code)
++            } catch let error as GitHubAuth.AuthError {
++                guard generation == gen else { return }
++                deviceCode = nil
++                await action { GitHubAuth.Action.failed(message: error.localizedDescription, retry: Self.retryKind(for: error)) }
++                return
++            } catch {
++                guard generation == gen else { return }
++                deviceCode = nil
++                await action { GitHubAuth.Action.failed(message: error.localizedDescription, retry: .retry) }
++                return
++            }
++            guard generation == gen else { return }
++            switch result {
++            case .pending:
++                continue
++            case .slowDown:
++                currentInterval = GitHubDeviceFlow.nextInterval(current: currentInterval, after: .slowDown)
++                let updatedInterval = currentInterval
++                await action { GitHubAuth.Action.pollIntervalUpdated(updatedInterval) }
++            case .denied:
++                deviceCode = nil
++                await action { GitHubAuth.Action.failed(message: GitHubAuth.AuthError.denied.localizedDescription, retry: .newCode) }
++                return
++            case .expired:
++                deviceCode = nil
++                await action { GitHubAuth.Action.failed(message: GitHubAuth.AuthError.codeExpired.localizedDescription, retry: .newCode) }
++                return
++            case .success(let accessToken, let refreshToken, let expiresIn):
++                await handlePollSuccess(
++                    generation: gen,
++                    config: config,
++                    accessToken: accessToken,
++                    refreshToken: refreshToken,
++                    expiresIn: expiresIn
++                )
++                return
++            }
++        }
++    }
++
++    private func handlePollSuccess(generation gen: Int, config: GitHubAuth.AppConfig, accessToken: String, refreshToken: String?, expiresIn: Int?) async {
++        guard generation == gen else { return }
++        let user: GitHubAuth.UserResponse
++        do {
++            user = try await api.fetchUser(config: config, token: accessToken)
++        } catch let error as GitHubAuth.AuthError {
++            guard generation == gen else { return }
++            deviceCode = nil
++            await action { GitHubAuth.Action.failed(message: error.localizedDescription, retry: Self.retryKind(for: error)) }
++            return
++        } catch {
++            guard generation == gen else { return }
++            deviceCode = nil
++            await action { GitHubAuth.Action.failed(message: error.localizedDescription, retry: .retry) }
++            return
++        }
++        guard generation == gen else { return }
++        let expiresAt: Date? = expiresIn.map { now().addingTimeInterval(TimeInterval($0)) }
++        let record = GitHubAuth.TokenRecord(accessToken: accessToken, refreshToken: refreshToken, expiresAt: expiresAt, obtainedAt: now())
++        do {
++            try await store.save(record, serverHost: config.serverHost, userID: user.id, clientID: config.clientID)
++        } catch {
++            guard generation == gen else { return }
++            deviceCode = nil
++            await action { GitHubAuth.Action.failed(message: error.localizedDescription, retry: .retry) }
++            return
++        }
++        session = GitHubAuth.Session(userID: user.id, username: user.login, serverHost: config.serverHost, config: config)
++        deviceCode = nil
++        await action { GitHubAuth.Action.accountVerified(username: user.login, userID: user.id, serverHost: config.serverHost) }
++        guard generation == gen else { return }
++        do {
++            let installations = try await api.fetchInstallations(config: config, token: accessToken)
++            guard generation == gen else { return }
++            await action { GitHubAuth.Action.installationsLoaded(installations) }
++            if let first = installations.first {
++                do {
++                    let repos = try await api.fetchRepositories(config: config, token: accessToken, installationID: first.id)
++                    guard generation == gen else { return }
++                    await action { GitHubAuth.Action.repositoriesLoaded(installationID: first.id, repositories: repos) }
++                } catch let error as GitHubAuth.AuthError {
++                    guard generation == gen else { return }
++                    await action { GitHubAuth.Action.syncFailed(message: error.localizedDescription) }
++                } catch {
++                    guard generation == gen else { return }
++                    await action { GitHubAuth.Action.syncFailed(message: error.localizedDescription) }
++                }
++            } else {
++                await action { GitHubAuth.Action.syncFailed(message: GitHubAuth.AuthError.needsInstallation.localizedDescription) }
++            }
++            await action { GitHubAuth.Action.connected(username: user.login, serverHost: config.serverHost, syncedAt: now()) }
++        } catch let error as GitHubAuth.AuthError {
++            guard generation == gen else { return }
++            switch error {
++            case .unauthorized, .revoked:
++                await action { GitHubAuth.Action.failed(message: error.localizedDescription, retry: .relogin) }
++            default:
++                await action { GitHubAuth.Action.installationsLoaded([]) }
++                await action { GitHubAuth.Action.syncFailed(message: error.localizedDescription) }
++                await action { GitHubAuth.Action.connected(username: user.login, serverHost: config.serverHost, syncedAt: now()) }
++            }
++        } catch {
++            guard generation == gen else { return }
++            await action { GitHubAuth.Action.installationsLoaded([]) }
++            await action { GitHubAuth.Action.syncFailed(message: error.localizedDescription) }
++            await action { GitHubAuth.Action.connected(username: user.login, serverHost: config.serverHost, syncedAt: now()) }
++        }
++    }
++
++    private func cancelLogin() async {
++        generation += 1
++        pollTask?.cancel()
++        pollTask = nil
++        deviceCode = nil
++        if let sess = session {
++            await action { GitHubAuth.Action.connected(username: sess.username, serverHost: sess.serverHost, syncedAt: now()) }
++        } else {
++            await action { GitHubAuth.Action.loginCancelled }
++        }
++    }
++
++    private func logout() async {
++        generation += 1
++        pollTask?.cancel()
++        pollTask = nil
++        deviceCode = nil
++        if let sess = session {
++            await store.delete(serverHost: sess.serverHost, userID: sess.userID, clientID: sess.config.clientID)
++            await store.deleteAll(serverHost: sess.serverHost, clientID: sess.config.clientID)
++        }
++        session = nil
++        await action { GitHubAuth.Action.loggedOut }
++    }
++
++    private func currentToken() async throws -> (GitHubAuth.Session, String) {
++        guard let sess = session else { throw GitHubAuth.AuthError.revoked }
++        guard var record = await store.load(serverHost: sess.serverHost, userID: sess.userID, clientID: sess.config.clientID) else {
++            throw GitHubAuth.AuthError.revoked
++        }
++        if GitHubTokenRefresh.isExpiringSoon(record, now: now()) {
++            do {
++                record = try await refresher.refresh(config: sess.config, userID: sess.userID, current: record)
++            } catch let error as GitHubAuth.AuthError {
++                switch error {
++                case .revoked, .unauthorized, .tokenRefreshFailed:
++                    throw error
++                default:
++                    break // Keep old token; report stale below.
++                }
++            }
++        }
++        return (sess, record.accessToken)
++    }
++
++    private func refreshInstallations() async {
++        guard session != nil else { return }
++        let sess: GitHubAuth.Session
++        let token: String
++        do {
++            (sess, token) = try await currentToken()
++        } catch let error as GitHubAuth.AuthError {
++            switch error {
++            case .revoked, .unauthorized, .tokenRefreshFailed:
++                await action { GitHubAuth.Action.failed(message: GitHubAuth.AuthError.revoked.localizedDescription, retry: .relogin) }
++            default:
++                await action { GitHubAuth.Action.syncFailed(message: error.localizedDescription) }
++            }
++            return
++        } catch {
++            await action { GitHubAuth.Action.syncFailed(message: error.localizedDescription) }
++            return
++        }
++        do {
++            let installations = try await api.fetchInstallations(config: sess.config, token: token)
++            await action { GitHubAuth.Action.installationsLoaded(installations) }
++            await action { GitHubAuth.Action.syncSucceeded(now()) }
++        } catch let error as GitHubAuth.AuthError {
++            switch error {
++            case .unauthorized, .revoked:
++                await action { GitHubAuth.Action.failed(message: error.localizedDescription, retry: .relogin) }
++            default:
++                await action { GitHubAuth.Action.syncFailed(message: error.localizedDescription) }
++            }
++        } catch {
++            await action { GitHubAuth.Action.syncFailed(message: error.localizedDescription) }
++        }
++    }
++
++    private func selectInstallation(_ id: Int64?) async {
++        await action { GitHubAuth.Action.installationSelected(id) }
++        guard let id, session != nil else { return }
++        let sess: GitHubAuth.Session
++        let token: String
++        do {
++            (sess, token) = try await currentToken()
++        } catch let error as GitHubAuth.AuthError {
++            await action { GitHubAuth.Action.syncFailed(message: error.localizedDescription) }
++            return
++        } catch {
++            await action { GitHubAuth.Action.syncFailed(message: error.localizedDescription) }
++            return
++        }
++        do {
++            let repos = try await api.fetchRepositories(config: sess.config, token: token, installationID: id)
++            await action { GitHubAuth.Action.repositoriesLoaded(installationID: id, repositories: repos) }
++            await action { GitHubAuth.Action.syncSucceeded(now()) }
++        } catch let error as GitHubAuth.AuthError {
++            switch error {
++            case .unauthorized, .revoked:
++                await action { GitHubAuth.Action.failed(message: error.localizedDescription, retry: .relogin) }
++            default:
++                await action { GitHubAuth.Action.syncFailed(message: error.localizedDescription) }
++            }
++        } catch {
++            await action { GitHubAuth.Action.syncFailed(message: error.localizedDescription) }
++        }
++    }
++
++    private nonisolated static func retryKind(for error: GitHubAuth.AuthError) -> GitHubAuth.RetryKind {
++        switch error {
++        case .denied, .codeExpired: .newCode
++        case .unauthorized, .revoked, .tokenRefreshFailed: .relogin
++        case .forbidden, .needsApproval, .needsInstallation: .grantAccess
++        case .ssoRequired, .missingClientID, .patNotSupported: .none
++        case .cancelled: .none
++        case .network, .rateLimited, .slowDown, .authorizationPending: .retry
++        }
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/GitHubAuth+Models.swift b/Packages/RunnerControlCore/Sources/GitHubAuth+Models.swift
+new file mode 100644
+index 0000000..37661f4
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/GitHubAuth+Models.swift
+@@ -0,0 +1,95 @@
++import Foundation
++
++extension GitHubAuth {
++    /// Token metadata kept outside Relux state. Secret values live only in Keychain.
++    public struct TokenRecord: Sendable, Equatable, Codable {
++        public let accessToken: String
++        public let refreshToken: String?
++        public let expiresAt: Date?
++        public let obtainedAt: Date
++
++        public init(accessToken: String, refreshToken: String?, expiresAt: Date?, obtainedAt: Date = Date()) {
++            self.accessToken = accessToken
++            self.refreshToken = refreshToken
++            self.expiresAt = expiresAt
++            self.obtainedAt = obtainedAt
++        }
++    }
++
++    public struct Installation: Sendable, Equatable, Identifiable {
++        public let id: Int64
++        public let account: String
++        public let accountType: String
++        public init(id: Int64, account: String, accountType: String) {
++            self.id = id; self.account = account; self.accountType = accountType
++        }
++    }
++
++    public struct Repository: Sendable, Equatable, Identifiable {
++        public let id: Int64
++        public let fullName: String
++        public let isPrivate: Bool
++        public init(id: Int64, fullName: String, isPrivate: Bool) {
++            self.id = id; self.fullName = fullName; self.isPrivate = isPrivate
++        }
++    }
++
++    /// Connection phases. No tokens, device codes, or secrets are stored here.
++    public enum Connection: Sendable, Equatable {
++        case disconnected
++        case requestingCode
++        case awaitingUser(userCode: String, verificationURI: URL, expiresIn: Int, interval: Int)
++        case verifyingAccount
++        case verifyingInstallations(username: String)
++        case connected(username: String, serverHost: String)
++        case failed(message: String, retry: RetryKind)
++    }
++
++    public enum RetryKind: Sendable, Equatable {
++        case newCode
++        case retry
++        case relogin
++        case grantAccess
++        case none
++    }
++
++    public enum AuthError: LocalizedError, Sendable, Equatable {
++        case cancelled
++        case denied
++        case codeExpired
++        case slowDown
++        case authorizationPending
++        case network(String)
++        case unauthorized
++        case forbidden(String)
++        case rateLimited(retryAfter: Int?)
++        case needsInstallation
++        case needsApproval
++        case ssoRequired
++        case revoked
++        case missingClientID(binding: String)
++        case patNotSupported
++        case tokenRefreshFailed
++
++        public var errorDescription: String? {
++            switch self {
++            case .cancelled: "Login cancelled."
++            case .denied: "Access denied on GitHub. Approve Runner Control or try again."
++            case .codeExpired: "Code expired. Get a new code."
++            case .slowDown: "Polling too fast. Backing off."
++            case .authorizationPending: "Waiting for confirmation on GitHub…"
++            case .network(let message): message
++            case .unauthorized: "Session expired or revoked (401). Sign in again."
++            case .forbidden(let message): message.isEmpty ? "Access forbidden (403). Grant the App or approve access." : message
++            case .rateLimited: "GitHub rate limit reached. Data may be stale; local control still works."
++            case .needsInstallation: "GitHub App is not installed for this account. Grant access to continue."
++            case .needsApproval: "Organization approval is required."
++            case .ssoRequired: "SSO authorization is required for this organization."
++            case .revoked: "Session was revoked. Sign in again."
++            case .missingClientID(let binding): "GitHub App client_id is not provisioned. Missing binding: \(binding)."
++            case .patNotSupported: "Personal access tokens are not supported. Use Sign in with GitHub (Device Flow)."
++            case .tokenRefreshFailed: "Token refresh failed. Sign in again."
++            }
++        }
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/GitHubAuth+Module.swift b/Packages/RunnerControlCore/Sources/GitHubAuth+Module.swift
+new file mode 100644
+index 0000000..5bb07b9
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/GitHubAuth+Module.swift
+@@ -0,0 +1,11 @@
++import Relux
++
++extension GitHubAuth {
++    @MainActor public struct Module: Relux.Module {
++        nonisolated public var states: [any Relux.AnyState] { [state] }
++        nonisolated public var sagas: [any Relux.Saga] { [flow] }
++        public let state: State
++        public let flow: Flow
++        public init(state: State, flow: Flow) { self.state = state; self.flow = flow }
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/GitHubAuth+State+Reducer.swift b/Packages/RunnerControlCore/Sources/GitHubAuth+State+Reducer.swift
+new file mode 100644
+index 0000000..3679f09
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/GitHubAuth+State+Reducer.swift
+@@ -0,0 +1,69 @@
++import Foundation
++import Relux
++
++extension GitHubAuth.State {
++    public func reduce(with action: any Relux.Action) async {
++        guard let action = action as? GitHubAuth.Action else { return }
++        switch action {
++        case .loginStarted(let host):
++            connection = .requestingCode
++            serverHost = host
++            syncError = nil
++        case .codeReceived(let userCode, let uri, let expiresIn, let interval):
++            connection = .awaitingUser(userCode: userCode, verificationURI: uri, expiresIn: expiresIn, interval: interval)
++        case .pollIntervalUpdated(let interval):
++            if case .awaitingUser(let userCode, let uri, let expiresIn, _) = connection {
++                connection = .awaitingUser(userCode: userCode, verificationURI: uri, expiresIn: expiresIn, interval: interval)
++            }
++        case .loginCancelled:
++            connection = .disconnected
++            syncError = nil
++        case .accountVerified(let username, let userID, let host):
++            self.username = username
++            self.userID = userID
++            serverHost = host
++            connection = .verifyingInstallations(username: username)
++        case .installationsLoaded(let installations):
++            self.installations = installations
++            if selectedInstallationID == nil {
++                selectedInstallationID = installations.first?.id
++            } else if let selected = selectedInstallationID, !installations.contains(where: { $0.id == selected }) {
++                selectedInstallationID = installations.first?.id
++            }
++        case .repositoriesLoaded(let installationID, let repositories):
++            if selectedInstallationID == installationID || selectedInstallationID == nil {
++                self.repositories = repositories
++            }
++        case .connected(let username, let host, let date):
++            self.username = username
++            serverHost = host
++            connection = .connected(username: username, serverHost: host)
++            lastSyncAt = date
++            syncError = nil
++        case .failed(let message, let retry):
++            connection = .failed(message: message, retry: retry)
++        case .syncFailed(let message):
++            syncError = message
++        case .syncSucceeded(let date):
++            lastSyncAt = date
++            syncError = nil
++        case .installationSelected(let id):
++            selectedInstallationID = id
++            repositories = []
++        case .repositoriesSelected(let ids):
++            selectedRepositoryIDs = ids
++        case .loggedOut:
++            connection = .disconnected
++            username = nil
++            userID = nil
++            installations = []
++            selectedInstallationID = nil
++            repositories = []
++            selectedRepositoryIDs = []
++            syncError = nil
++            lastSyncAt = nil
++        case .clearSyncError:
++            syncError = nil
++        }
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/GitHubAuth+State.swift b/Packages/RunnerControlCore/Sources/GitHubAuth+State.swift
+new file mode 100644
+index 0000000..577bb84
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/GitHubAuth+State.swift
+@@ -0,0 +1,60 @@
++import Combine
++import Foundation
++import Relux
++
++extension GitHubAuth {
++    @MainActor public final class State: ObservableObject, Relux.HybridState {
++        @Published public internal(set) var connection: Connection = .disconnected
++        @Published public internal(set) var username: String?
++        @Published public internal(set) var userID: Int64?
++        @Published public internal(set) var serverHost: String = "github.com"
++        @Published public internal(set) var installations: [Installation] = []
++        @Published public internal(set) var selectedInstallationID: Int64?
++        @Published public internal(set) var repositories: [Repository] = []
++        @Published public internal(set) var selectedRepositoryIDs: Set<Int64> = []
++        @Published public internal(set) var syncError: String?
++        @Published public internal(set) var lastSyncAt: Date?
++
++        public init() {}
++
++        public func cleanup() async {
++            connection = .disconnected
++            username = nil
++            userID = nil
++            serverHost = "github.com"
++            installations = []
++            selectedInstallationID = nil
++            repositories = []
++            selectedRepositoryIDs = []
++            syncError = nil
++            lastSyncAt = nil
++        }
++    }
++
++    public enum Action: Relux.Action {
++        case loginStarted(serverHost: String)
++        case codeReceived(userCode: String, verificationURI: URL, expiresIn: Int, interval: Int)
++        case pollIntervalUpdated(Int)
++        case loginCancelled
++        case accountVerified(username: String, userID: Int64, serverHost: String)
++        case installationsLoaded([Installation])
++        case repositoriesLoaded(installationID: Int64, repositories: [Repository])
++        case connected(username: String, serverHost: String, syncedAt: Date)
++        case failed(message: String, retry: RetryKind)
++        case syncFailed(message: String)
++        case syncSucceeded(Date)
++        case installationSelected(Int64?)
++        case repositoriesSelected(Set<Int64>)
++        case loggedOut
++        case clearSyncError
++    }
++
++    public enum Effect: Relux.Effect {
++        case beginLogin(serverHost: String?)
++        case cancelLogin
++        case logout
++        case refreshInstallations
++        case selectInstallation(Int64?)
++        case selectRepositories(Set<Int64>)
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/GitHubAuth.swift b/Packages/RunnerControlCore/Sources/GitHubAuth.swift
+new file mode 100644
+index 0000000..da35bfd
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/GitHubAuth.swift
+@@ -0,0 +1,3 @@
++@_exported import Relux
++import Foundation
++public enum GitHubAuth {}
+diff --git a/Packages/RunnerControlCore/Sources/GitHubDeviceFlow.swift b/Packages/RunnerControlCore/Sources/GitHubDeviceFlow.swift
+new file mode 100644
+index 0000000..5c2978a
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/GitHubDeviceFlow.swift
+@@ -0,0 +1,94 @@
++import Foundation
++
++extension GitHubAuth {
++    public enum PollResult: Sendable, Equatable {
++        case pending
++        case slowDown
++        case success(accessToken: String, refreshToken: String?, expiresIn: Int?)
++        case denied
++        case expired
++    }
++}
++
++/// Device Flow transport. Holds no tokens beyond the in-flight call.
++public actor GitHubDeviceFlow {
++    private let transport: any GitHubHTTPTransport
++
++    public init(transport: any GitHubHTTPTransport) {
++        self.transport = transport
++    }
++
++    public func requestCode(config: GitHubAuth.AppConfig) async throws -> GitHubAuth.DeviceCodeResponse {
++        let body = try JSONEncoder().encode(GitHubAuth.DeviceCodeRequest(client_id: config.clientID))
++        let request = GitHubHTTPRequest(
++            method: "POST",
++            url: config.deviceAuthorizationURL,
++            headers: ["Accept": "application/json", "Content-Type": "application/json"],
++            body: body
++        )
++        let response: GitHubHTTPResponse
++        do {
++            response = try await transport.send(request)
++        } catch {
++            throw GitHubAuth.AuthError.network(GitHubTransportError.offline.localizedDescription)
++        }
++        guard response.status == 200 else {
++            if let mapped = GitHubAuth.RESTMapper.map(status: response.status, body: response.body) {
++                throw mapped
++            }
++            throw GitHubAuth.AuthError.network("Device code request failed (HTTP \(response.status)).")
++        }
++        do {
++            return try JSONDecoder().decode(GitHubAuth.DeviceCodeResponse.self, from: response.body)
++        } catch {
++            throw GitHubAuth.AuthError.network(GitHubTransportError.invalidResponse.localizedDescription)
++        }
++    }
++
++    public func pollOnce(config: GitHubAuth.AppConfig, deviceCode: String) async throws -> GitHubAuth.PollResult {
++        let body = try JSONEncoder().encode(GitHubAuth.TokenPollRequest(
++            client_id: config.clientID,
++            device_code: deviceCode,
++            grant_type: "urn:ietf:params:oauth:grant-type:device_code"
++        ))
++        let request = GitHubHTTPRequest(
++            method: "POST",
++            url: config.tokenURL,
++            headers: ["Accept": "application/json", "Content-Type": "application/json"],
++            body: body
++        )
++        let response: GitHubHTTPResponse
++        do {
++            response = try await transport.send(request)
++        } catch {
++            throw GitHubAuth.AuthError.network(GitHubTransportError.offline.localizedDescription)
++        }
++        // HTTP 200 does not imply success: Device Flow reports errors in the body.
++        let decoded: GitHubAuth.TokenSuccessResponse
++        do {
++            decoded = try JSONDecoder().decode(GitHubAuth.TokenSuccessResponse.self, from: response.body)
++        } catch {
++            throw GitHubAuth.AuthError.network(GitHubTransportError.invalidResponse.localizedDescription)
++        }
++        if let token = decoded.access_token, !token.isEmpty {
++            try GitHubAuth.PATGuard.validate(token: token)
++            return .success(accessToken: token, refreshToken: decoded.refresh_token, expiresIn: decoded.expires_in)
++        }
++        switch decoded.error {
++        case "authorization_pending": return .pending
++        case "slow_down": return .slowDown
++        case "access_denied": return .denied
++        case "expired_token": return .expired
++        case .none:
++            throw GitHubAuth.AuthError.network(GitHubTransportError.invalidResponse.localizedDescription)
++        case .some(let other):
++            throw GitHubAuth.AuthError.network(decoded.error_description ?? other)
++        }
++    }
++
++    /// slow_down increases the poll interval by 5 seconds (GitHub docs).
++    public static func nextInterval(current: Int, after result: GitHubAuth.PollResult) -> Int {
++        if result == .slowDown { return current + 5 }
++        return current
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/GitHubKeychainStore.swift b/Packages/RunnerControlCore/Sources/GitHubKeychainStore.swift
+new file mode 100644
+index 0000000..a75acea
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/GitHubKeychainStore.swift
+@@ -0,0 +1,132 @@
++import Foundation
++import Security
++
++/// Keychain-backed credential store. Secret values never enter Relux state or logs.
++public protocol GitHubCredentialStoring: Sendable {
++    func save(_ record: GitHubAuth.TokenRecord, serverHost: String, userID: Int64, clientID: String) async throws
++    func load(serverHost: String, userID: Int64, clientID: String) async -> GitHubAuth.TokenRecord?
++    func delete(serverHost: String, userID: Int64, clientID: String) async
++    func deleteAll(serverHost: String, clientID: String) async
++}
++
++public actor GitHubKeychainStore: GitHubCredentialStoring {
++    private let service: String
++    private let backend: any KeychainBackend
++
++    public init(service: String = "works.relux.runnercontrol.github-token", backend: (any KeychainBackend)? = nil) {
++        self.service = service
++        self.backend = backend ?? SecurityKeychainBackend()
++    }
++
++    public static func account(serverHost: String, userID: Int64, clientID: String) -> String {
++        "\(serverHost):\(userID):\(clientID)"
++    }
++
++    private func account(serverHost: String, userID: Int64, clientID: String) -> String {
++        Self.account(serverHost: serverHost, userID: userID, clientID: clientID)
++    }
++
++    public func save(_ record: GitHubAuth.TokenRecord, serverHost: String, userID: Int64, clientID: String) async throws {
++        let data = try JSONEncoder().encode(record)
++        try backend.save(data, service: service, account: account(serverHost: serverHost, userID: userID, clientID: clientID))
++    }
++
++    public func load(serverHost: String, userID: Int64, clientID: String) async -> GitHubAuth.TokenRecord? {
++        guard let data = backend.load(service: service, account: account(serverHost: serverHost, userID: userID, clientID: clientID)) else { return nil }
++        return try? JSONDecoder().decode(GitHubAuth.TokenRecord.self, from: data)
++    }
++
++    public func delete(serverHost: String, userID: Int64, clientID: String) async {
++        backend.delete(service: service, account: account(serverHost: serverHost, userID: userID, clientID: clientID))
++    }
++
++    public func deleteAll(serverHost: String, clientID: String) async {
++        // Best-effort sweep: Keychain has no wildcard delete; callers pass known userIDs.
++        // This entry point exists so logout can clear without knowing the user when needed
++        // by enumerating via backend when supported.
++        backend.deleteMatching(service: service, accountPrefix: "\(serverHost):", accountSuffix: ":\(clientID)")
++    }
++}
++
++/// Injectable Keychain boundary for tests.
++public protocol KeychainBackend: Sendable {
++    func save(_ data: Data, service: String, account: String) throws
++    func load(service: String, account: String) -> Data?
++    func delete(service: String, account: String)
++    func deleteMatching(service: String, accountPrefix: String, accountSuffix: String)
++}
++
++public struct SecurityKeychainBackend: KeychainBackend, Sendable {
++    public init() {}
++    public func save(_ data: Data, service: String, account: String) throws {
++        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
++        SecItemDelete(query as CFDictionary)
++        var add = query
++        add[kSecValueData as String] = data
++        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
++        let status = SecItemAdd(add as CFDictionary, nil)
++        guard status == errSecSuccess else { throw GitHubKeychainError.saveFailed(status) }
++    }
++    public func load(service: String, account: String) -> Data? {
++        let query: [String: Any] = [
++            kSecClass as String: kSecClassGenericPassword,
++            kSecAttrService as String: service,
++            kSecAttrAccount as String: account,
++            kSecReturnData as String: true,
++            kSecMatchLimit as String: kSecMatchLimitOne,
++        ]
++        var item: CFTypeRef?
++        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess else { return nil }
++        return item as? Data
++    }
++    public func delete(service: String, account: String) {
++        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
++        SecItemDelete(query as CFDictionary)
++    }
++    public func deleteMatching(service: String, accountPrefix: String, accountSuffix: String) {
++        let query: [String: Any] = [
++            kSecClass as String: kSecClassGenericPassword,
++            kSecAttrService as String: service,
++            kSecReturnAttributes as String: true,
++            kSecMatchLimit as String: kSecMatchLimitAll,
++        ]
++        var items: CFTypeRef?
++        guard SecItemCopyMatching(query as CFDictionary, &items) == errSecSuccess,
++              let list = items as? [[String: Any]] else { return }
++        for entry in list {
++            if let account = entry[kSecAttrAccount as String] as? String,
++               account.hasPrefix(accountPrefix), account.hasSuffix(accountSuffix) {
++                delete(service: service, account: account)
++            }
++        }
++    }
++}
++
++public enum GitHubKeychainError: LocalizedError, Sendable, Equatable {
++    case saveFailed(OSStatus)
++    public var errorDescription: String? { "Could not save GitHub credentials in Keychain." }
++}
++
++/// In-memory backend for unit tests. Never used in production.
++public final class InMemoryKeychainBackend: KeychainBackend, @unchecked Sendable {
++    private let lock = NSLock()
++    private var storage: [String: Data] = [:]
++    public init() {}
++    private func key(service: String, account: String) -> String { "\(service)\u{0}\(account)" }
++    public func save(_ data: Data, service: String, account: String) throws {
++        lock.withLock { storage[key(service: service, account: account)] = data }
++    }
++    public func load(service: String, account: String) -> Data? {
++        lock.withLock { storage[key(service: service, account: account)] }
++    }
++    public func delete(service: String, account: String) {
++        lock.withLock { _ = storage.removeValue(forKey: key(service: service, account: account)) }
++    }
++    public func deleteMatching(service: String, accountPrefix: String, accountSuffix: String) {
++        lock.withLock {
++            for key in storage.keys where key.hasPrefix("\(service)\u{0}\(accountPrefix)") && key.hasSuffix(accountSuffix) {
++                storage.removeValue(forKey: key)
++            }
++        }
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/GitHubRedaction.swift b/Packages/RunnerControlCore/Sources/GitHubRedaction.swift
+new file mode 100644
+index 0000000..e13f1c2
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/GitHubRedaction.swift
+@@ -0,0 +1,34 @@
++import Foundation
++
++extension GitHubAuth {
++    /// Redacts secret values from diagnostics. Never logs raw tokens.
++    public enum Redaction {
++        public static func sanitize(_ text: String, secrets: [String]) -> String {
++            var result = text
++            for secret in secrets where !secret.isEmpty {
++                result = result.replacingOccurrences(of: secret, with: "[REDACTED]")
++            }
++            // Scrub common token JSON shapes even when the exact value is unknown.
++            for key in ["access_token", "refresh_token", "device_code"] {
++                result = scrubJSONValue(for: key, in: result)
++            }
++            return result
++        }
++
++        private static func scrubJSONValue(for key: String, in text: String) -> String {
++            // "key":"value" and "key": "value" shapes.
++            var result = text
++            for pattern in ["\"\(key)\":\"", "\"\(key)\": \""] {
++                var searchFrom = result.startIndex
++                while let keyRange = result.range(of: pattern, range: searchFrom..<result.endIndex) {
++                    let valueStart = keyRange.upperBound
++                    guard let valueEnd = result[valueStart...].firstIndex(of: "\"") else { break }
++                    result.replaceSubrange(valueStart..<valueEnd, with: "[REDACTED]")
++                    searchFrom = result.index(valueEnd, offsetBy: 0, limitedBy: result.endIndex) ?? result.endIndex
++                    if searchFrom >= result.endIndex { break }
++                }
++            }
++            return result
++        }
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/GitHubTokenRefresh.swift b/Packages/RunnerControlCore/Sources/GitHubTokenRefresh.swift
+new file mode 100644
+index 0000000..660c123
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/GitHubTokenRefresh.swift
+@@ -0,0 +1,100 @@
++import Foundation
++
++/// Serialized token refresh. Concurrent callers coalesce to a single network refresh.
++public actor GitHubTokenRefresh {
++    private let transport: any GitHubHTTPTransport
++    private let store: any GitHubCredentialStoring
++    private let now: @Sendable () -> Date
++    private var inFlight: Task<GitHubAuth.TokenRecord, Error>?
++
++    public init(
++        transport: any GitHubHTTPTransport,
++        store: any GitHubCredentialStoring,
++        now: @Sendable @escaping () -> Date = Date.init
++    ) {
++        self.transport = transport
++        self.store = store
++        self.now = now
++    }
++
++    public func refresh(
++        config: GitHubAuth.AppConfig,
++        userID: Int64,
++        current: GitHubAuth.TokenRecord
++    ) async throws -> GitHubAuth.TokenRecord {
++        // Fast path: another task already refreshed while we waited.
++        if let latest = await store.load(serverHost: config.serverHost, userID: userID, clientID: config.clientID),
++           latest.accessToken != current.accessToken {
++            return latest
++        }
++        if let flight = inFlight {
++            return try await flight.value
++        }
++        guard let refreshToken = current.refreshToken, !refreshToken.isEmpty else {
++            throw GitHubAuth.AuthError.tokenRefreshFailed
++        }
++        let transportCopy = transport
++        let storeCopy = store
++        let nowCopy = now
++        let task: Task<GitHubAuth.TokenRecord, Error> = Task {
++            let body = try JSONEncoder().encode(GitHubAuth.TokenRefreshRequest(
++                client_id: config.clientID,
++                grant_type: "refresh_token",
++                refresh_token: refreshToken
++            ))
++            let request = GitHubHTTPRequest(
++                method: "POST",
++                url: config.tokenURL,
++                headers: ["Accept": "application/json", "Content-Type": "application/json"],
++                body: body
++            )
++            let response: GitHubHTTPResponse
++            do {
++                response = try await transportCopy.send(request)
++            } catch {
++                throw GitHubAuth.AuthError.network(GitHubTransportError.offline.localizedDescription)
++            }
++            let decoded: GitHubAuth.TokenSuccessResponse
++            do {
++                decoded = try JSONDecoder().decode(GitHubAuth.TokenSuccessResponse.self, from: response.body)
++            } catch {
++                throw GitHubAuth.AuthError.network(GitHubTransportError.invalidResponse.localizedDescription)
++            }
++            if let token = decoded.access_token, !token.isEmpty {
++                try GitHubAuth.PATGuard.validate(token: token)
++                let expiresAt: Date?
++                if let seconds = decoded.expires_in {
++                    expiresAt = nowCopy().addingTimeInterval(TimeInterval(seconds))
++                } else {
++                    expiresAt = nil
++                }
++                let next = GitHubAuth.TokenRecord(
++                    accessToken: token,
++                    refreshToken: decoded.refresh_token ?? refreshToken,
++                    expiresAt: expiresAt,
++                    obtainedAt: nowCopy()
++                )
++                try await storeCopy.save(next, serverHost: config.serverHost, userID: userID, clientID: config.clientID)
++                return next
++            }
++            if decoded.error == "invalid_grant" {
++                throw GitHubAuth.AuthError.revoked
++            }
++            throw GitHubAuth.AuthError.tokenRefreshFailed
++        }
++        inFlight = task
++        do {
++            let value = try await task.value
++            inFlight = nil
++            return value
++        } catch {
++            inFlight = nil
++            throw error
++        }
++    }
++
++    public static func isExpiringSoon(_ record: GitHubAuth.TokenRecord, now: Date = Date(), within seconds: TimeInterval = 60) -> Bool {
++        guard let expiresAt = record.expiresAt else { return false }
++        return expiresAt.timeIntervalSince(now) <= seconds
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/GitHubTransport.swift b/Packages/RunnerControlCore/Sources/GitHubTransport.swift
+new file mode 100644
+index 0000000..ad5c2a9
+--- /dev/null
++++ b/Packages/RunnerControlCore/Sources/GitHubTransport.swift
+@@ -0,0 +1,181 @@
++import Foundation
++
++/// Minimal HTTP boundary for GitHub Device Flow and REST. Keeps URLSession out of business logic.
++public protocol GitHubHTTPTransport: Sendable {
++    func send(_ request: GitHubHTTPRequest) async throws -> GitHubHTTPResponse
++}
++
++public struct GitHubHTTPRequest: Sendable {
++    public let method: String
++    public let url: URL
++    public let headers: [String: String]
++    public let body: Data?
++    public init(method: String, url: URL, headers: [String: String] = [:], body: Data? = nil) {
++        self.method = method; self.url = url; self.headers = headers; self.body = body
++    }
++}
++
++public struct GitHubHTTPResponse: Sendable {
++    public let status: Int
++    public let headers: [String: String]
++    public let body: Data
++    public init(status: Int, headers: [String: String] = [:], body: Data = Data()) {
++        self.status = status; self.headers = headers; self.body = body
++    }
++}
++
++public enum GitHubTransportError: LocalizedError, Sendable, Equatable {
++    case offline
++    case invalidResponse
++    public var errorDescription: String? {
++        switch self {
++        case .offline: "Network unavailable. Local runner control still works."
++        case .invalidResponse: "Unexpected GitHub response."
++        }
++    }
++}
++
++extension GitHubAuth {
++    // MARK: - Device DTOs
++
++    public struct DeviceCodeRequest: Encodable, Sendable {
++        public let client_id: String
++        public init(client_id: String) { self.client_id = client_id }
++    }
++
++    public struct DeviceCodeResponse: Decodable, Sendable {
++        public let device_code: String
++        public let user_code: String
++        public let verification_uri: String
++        public let expires_in: Int
++        public let interval: Int
++        public init(device_code: String, user_code: String, verification_uri: String, expires_in: Int, interval: Int) {
++            self.device_code = device_code; self.user_code = user_code; self.verification_uri = verification_uri
++            self.expires_in = expires_in; self.interval = interval
++        }
++    }
++
++    public struct TokenPollRequest: Encodable, Sendable {
++        public let client_id: String
++        public let device_code: String
++        public let grant_type: String
++        public init(client_id: String, device_code: String, grant_type: String) {
++            self.client_id = client_id; self.device_code = device_code; self.grant_type = grant_type
++        }
++    }
++
++    public struct TokenRefreshRequest: Encodable, Sendable {
++        public let client_id: String
++        public let grant_type: String
++        public let refresh_token: String
++        public init(client_id: String, grant_type: String, refresh_token: String) {
++            self.client_id = client_id; self.grant_type = grant_type; self.refresh_token = refresh_token
++        }
++    }
++
++    public struct TokenSuccessResponse: Decodable, Sendable {
++        public let access_token: String?
++        public let refresh_token: String?
++        public let expires_in: Int?
++        public let token_type: String?
++        public let error: String?
++        public let error_description: String?
++        public let interval: Int?
++        public init(access_token: String? = nil, refresh_token: String? = nil, expires_in: Int? = nil, token_type: String? = nil, error: String? = nil, error_description: String? = nil, interval: Int? = nil) {
++            self.access_token = access_token; self.refresh_token = refresh_token; self.expires_in = expires_in
++            self.token_type = token_type; self.error = error; self.error_description = error_description; self.interval = interval
++        }
++    }
++
++    public struct UserResponse: Decodable, Sendable {
++        public let login: String
++        public let id: Int64
++        public init(login: String, id: Int64) { self.login = login; self.id = id }
++    }
++
++    public struct InstallationsResponse: Decodable, Sendable {
++        public let installations: [InstallationDTO]
++        public init(installations: [InstallationDTO]) { self.installations = installations }
++    }
++
++    public struct InstallationDTO: Decodable, Sendable {
++        public let id: Int64
++        public let account: AccountDTO
++        public init(id: Int64, account: AccountDTO) { self.id = id; self.account = account }
++    }
++
++    public struct AccountDTO: Decodable, Sendable {
++        public let login: String
++        public let type: String
++        public init(login: String, type: String) { self.login = login; self.type = type }
++    }
++
++    public struct RepositoriesResponse: Decodable, Sendable {
++        public let repositories: [RepositoryDTO]
++        public init(repositories: [RepositoryDTO]) { self.repositories = repositories }
++    }
++
++    public struct RepositoryDTO: Decodable, Sendable {
++        public let id: Int64
++        public let full_name: String
++        public let `private`: Bool
++        public init(id: Int64, full_name: String, isPrivate: Bool) { self.id = id; self.full_name = full_name; self.private = isPrivate }
++    }
++}
++
++/// Production URLSession transport. Never logs bodies (they may contain tokens).
++public actor URLSessionGitHubTransport: GitHubHTTPTransport {
++    private let session: URLSession
++    public init(session: URLSession = .shared) { self.session = session }
++    public func send(_ request: GitHubHTTPRequest) async throws -> GitHubHTTPResponse {
++        var urlRequest = URLRequest(url: request.url)
++        urlRequest.httpMethod = request.method
++        urlRequest.httpBody = request.body
++        for (key, value) in request.headers { urlRequest.setValue(value, forHTTPHeaderField: key) }
++        let (data, response): (Data, URLResponse)
++        do {
++            (data, response) = try await session.data(for: urlRequest)
++        } catch {
++            throw GitHubTransportError.offline
++        }
++        guard let http = response as? HTTPURLResponse else { throw GitHubTransportError.invalidResponse }
++        var headers: [String: String] = [:]
++        for (key, value) in http.allHeaderFields {
++            if let k = key as? String, let v = value as? String { headers[k] = v }
++        }
++        return GitHubHTTPResponse(status: http.statusCode, headers: headers, body: data)
++    }
++}
++
++extension GitHubAuth {
++    /// Maps REST status codes to typed auth errors. Local runners are never touched here.
++    public enum RESTMapper {
++        public static func map(status: Int, body: Data) -> AuthError? {
++            if status == 401 { return .unauthorized }
++            if status == 403 {
++                let text = String(decoding: body, as: UTF8.self).lowercased()
++                if text.contains("saml") || text.contains("sso") { return .ssoRequired }
++                if text.contains("rate limit") || text.contains("rate_limit") { return .rateLimited(retryAfter: nil) }
++                let message = String(decoding: body, as: UTF8.self)
++                let short = String(message.prefix(300))
++                return .forbidden(short)
++            }
++            if status == 429 { return .rateLimited(retryAfter: nil) }
++            return nil
++        }
++    }
++
++    /// Rejects personal access tokens. Only Device Flow user tokens (ghu_) are accepted.
++    public enum PATGuard {
++        public static func validate(token: String) throws {
++            if token.hasPrefix("ghp_") || token.hasPrefix("github_pat_") {
++                throw AuthError.patNotSupported
++            }
++        }
++
++        public static func authorizationHeader(token: String) throws -> String {
++            try validate(token: token)
++            return "Bearer \(token)"
++        }
++    }
++}
+diff --git a/Packages/RunnerControlCore/Sources/RunnerRuntime.swift b/Packages/RunnerControlCore/Sources/RunnerRuntime.swift
+index 23ebe39..cdaac53 100644
+--- a/Packages/RunnerControlCore/Sources/RunnerRuntime.swift
++++ b/Packages/RunnerControlCore/Sources/RunnerRuntime.swift
+@@ -8,6 +8,24 @@ import OSLog
+         runtime.register(Runners.Module(state: state, flow: flow))
+         return runtime
+     }
++
++    public static func make(
++        state: Runners.State,
++        githubState: GitHubAuth.State,
++        service: any RunnerServicing = LaunchAgentService(),
++        transport: any GitHubHTTPTransport = URLSessionGitHubTransport(),
++        store: any GitHubCredentialStoring = GitHubKeychainStore()
++    ) async -> Relux {
++        let runtime = await Relux(logger: RuntimeLogger())
++        let flow = await Runners.Flow(service: service, dispatcher: runtime.dispatcher)
++        runtime.register(Runners.Module(state: state, flow: flow))
++        let deviceFlow = GitHubDeviceFlow(transport: transport)
++        let api = GitHubAPIClient(transport: transport)
++        let refresher = GitHubTokenRefresh(transport: transport, store: store)
++        let githubFlow = await GitHubAuth.Flow(deviceFlow: deviceFlow, api: api, refresher: refresher, store: store, dispatcher: runtime.dispatcher)
++        runtime.register(GitHubAuth.Module(state: githubState, flow: githubFlow))
++        return runtime
++    }
+ }
+ struct RuntimeLogger: Relux.Logger {
+     func logAction(_ action: Relux.EnumReflectable, result: Relux.ActionResult?, startTimeInMillis: Int, privacy: Relux.OSLogPrivacy, fileID: String, functionName: String, lineNumber: Int) {
+diff --git a/Packages/RunnerControlCore/Tests/GitHubAuthFlowTests.swift b/Packages/RunnerControlCore/Tests/GitHubAuthFlowTests.swift
+new file mode 100644
+index 0000000..00cd6a9
+--- /dev/null
++++ b/Packages/RunnerControlCore/Tests/GitHubAuthFlowTests.swift
+@@ -0,0 +1,335 @@
++import Foundation
++import Testing
++import Relux
++@testable import RunnerControlCore
++
++private func githubHarness(
++    transport: TestTransport,
++    store: GitHubKeychainStore? = nil,
++    sleeper: (@Sendable (UInt64) async throws -> Void)? = nil,
++    config: GitHubAuth.AppConfig = testConfig
++) async -> (GitHubAuth.Flow, Relux.Testing.Logger, GitHubKeychainStore) {
++    let logger = Relux.Testing.Logger()
++    let dispatcher = Relux.Dispatcher(logger: logger)
++    let credentialStore = store ?? GitHubKeychainStore(backend: InMemoryKeychainBackend())
++    let flow = await GitHubAuth.Flow(
++        deviceFlow: GitHubDeviceFlow(transport: transport),
++        api: GitHubAPIClient(transport: transport),
++        refresher: GitHubTokenRefresh(transport: transport, store: credentialStore),
++        store: credentialStore,
++        configProvider: { _ in config },
++        sleeper: sleeper ?? { _ in },
++        dispatcher: dispatcher
++    )
++    return (flow, logger, credentialStore)
++}
++
++private func waitForLoggedActions(_ logger: Relux.Testing.Logger, count: Int, timeoutNanoseconds: UInt64 = 2_000_000_000) async -> Bool {
++    let deadline = ContinuousClock.now.advanced(by: .nanoseconds(Int64(timeoutNanoseconds)))
++    while ContinuousClock.now < deadline {
++        if logger.actions.count >= count { return true }
++        try? await Task.sleep(for: .milliseconds(20))
++    }
++    return logger.actions.count >= count
++}
++
++private func githubActions(_ logger: Relux.Testing.Logger) -> [GitHubAuth.Action] {
++    logger.actions.compactMap { $0 as? GitHubAuth.Action }
++}
++
++// MARK: - Reducer
++
++@Test @MainActor func githubReducerCoversLoginLifecycleAndIgnoresForeignActions() async {
++    let state = GitHubAuth.State()
++    let before = state.connection
++    await state.reduce(with: ForeignAction())
++    #expect(state.connection == before)
++    await state.reduce(with: GitHubAuth.Action.loginStarted(serverHost: "github.com"))
++    guard case .requestingCode = state.connection else { Issue.record("Expected requestingCode"); return }
++    let uri = URL(string: "https://github.com/login/device")!
++    await state.reduce(with: GitHubAuth.Action.codeReceived(userCode: "ABCD-1234", verificationURI: uri, expiresIn: 900, interval: 5))
++    guard case .awaitingUser(let code, _, _, let interval) = state.connection, code == "ABCD-1234", interval == 5 else {
++        Issue.record("Expected awaitingUser"); return
++    }
++    await state.reduce(with: GitHubAuth.Action.pollIntervalUpdated(10))
++    guard case .awaitingUser(_, _, _, let updated) = state.connection, updated == 10 else {
++        Issue.record("Expected interval 10"); return
++    }
++    await state.reduce(with: GitHubAuth.Action.accountVerified(username: "octo", userID: 42, serverHost: "github.com"))
++    #expect(state.username == "octo")
++    await state.reduce(with: GitHubAuth.Action.installationsLoaded([.init(id: 7, account: "acme", accountType: "Organization")]))
++    #expect(state.selectedInstallationID == 7)
++    await state.reduce(with: GitHubAuth.Action.repositoriesLoaded(installationID: 7, repositories: [.init(id: 9, fullName: "acme/app", isPrivate: true)]))
++    #expect(state.repositories.count == 1)
++    await state.reduce(with: GitHubAuth.Action.connected(username: "octo", serverHost: "github.com", syncedAt: Date()))
++    guard case .connected = state.connection else { Issue.record("Expected connected"); return }
++    await state.reduce(with: GitHubAuth.Action.syncFailed(message: "stale"))
++    #expect(state.syncError == "stale")
++    guard case .connected = state.connection else { Issue.record("syncFailed must preserve connected"); return }
++    await state.reduce(with: GitHubAuth.Action.installationSelected(7))
++    await state.reduce(with: GitHubAuth.Action.repositoriesSelected([9]))
++    #expect(state.selectedRepositoryIDs == [9])
++    await state.reduce(with: GitHubAuth.Action.failed(message: "denied", retry: .newCode))
++    guard case .failed(_, let retry) = state.connection, retry == .newCode else { Issue.record("Expected failed newCode"); return }
++    await state.reduce(with: GitHubAuth.Action.loggedOut)
++    guard case .disconnected = state.connection else { Issue.record("Expected disconnected"); return }
++    #expect(state.username == nil)
++    await state.cleanup()
++    #expect(state.installations.isEmpty)
++}
++
++// MARK: - Flow: success + 401/403 + logout
++
++@Test func flowLoginSuccessDrivesProductionEffectsToConnected() async throws {
++    let transport = TestTransport([
++        jsonResponse(["device_code": "dev1", "user_code": "USER-1", "verification_uri": "https://github.com/login/device", "expires_in": 900, "interval": 1]),
++        jsonResponse(["access_token": "ghu_x", "refresh_token": "ghr_y", "expires_in": 3600]),
++        jsonResponse(["login": "octo", "id": 42]),
++        jsonResponse(["installations": [["id": 7, "account": ["login": "acme", "type": "Organization"]]]]),
++        jsonResponse(["repositories": [["id": 9, "full_name": "acme/app", "private": false]]]),
++    ])
++    let (flow, logger, store) = await githubHarness(transport: transport)
++    _ = await flow.apply(GitHubAuth.Effect.beginLogin(serverHost: nil))
++    #expect(await waitForLoggedActions(logger, count: 6))
++    let actions = githubActions(logger)
++    guard case .loginStarted = actions[0], case .codeReceived = actions[1] else {
++        Issue.record("Login did not emit started/code, got \(actions)"); return
++    }
++    #expect(actions.contains { if case .connected(let user, _, _) = $0, user == "octo" { true } else { false } })
++    #expect(await store.load(serverHost: "github.com", userID: 42, clientID: testConfig.clientID)?.accessToken == "ghu_x")
++    // No Runners actions leak from the GitHub flow.
++    #expect(logger.actions.allSatisfy { $0 is GitHubAuth.Action })
++}
++
++@Test func flowExpiredCodeFailsWithNewCode() async {
++    let transport = TestTransport([
++        jsonResponse(["device_code": "dev1", "user_code": "USER-1", "verification_uri": "https://github.com/login/device", "expires_in": 900, "interval": 1]),
++        jsonResponse(["error": "expired_token"]),
++    ])
++    let (flow, logger, _) = await githubHarness(transport: transport)
++    _ = await flow.apply(GitHubAuth.Effect.beginLogin(serverHost: nil))
++    #expect(await waitForLoggedActions(logger, count: 3))
++    let actions = githubActions(logger)
++    guard case .failed(let message, let retry) = actions.last, retry == .newCode else {
++        Issue.record("Expected failed newCode, got \(actions)"); return
++    }
++    #expect(message.contains("expired"))
++}
++
++@Test func flowDeniedFailsWithNewCode() async {
++    let transport = TestTransport([
++        jsonResponse(["device_code": "dev1", "user_code": "USER-1", "verification_uri": "https://github.com/login/device", "expires_in": 900, "interval": 1]),
++        jsonResponse(["error": "access_denied"]),
++    ])
++    let (flow, logger, _) = await githubHarness(transport: transport)
++    _ = await flow.apply(GitHubAuth.Effect.beginLogin(serverHost: nil))
++    #expect(await waitForLoggedActions(logger, count: 3))
++    guard case .failed(_, let retry) = githubActions(logger).last, retry == .newCode else {
++        Issue.record("Expected denied newCode"); return
++    }
++}
++
++final class SleepRecorder: @unchecked Sendable {
++    private let lock = NSLock()
++    private var values: [UInt64] = []
++    func append(_ value: UInt64) { lock.withLock { values.append(value) } }
++    var snapshot: [UInt64] { lock.withLock { values } }
++}
++
++@Test func flowSlowDownIncreasesIntervalThenSucceeds() async throws {
++    let transport = TestTransport([
++        jsonResponse(["device_code": "dev1", "user_code": "USER-1", "verification_uri": "https://github.com/login/device", "expires_in": 900, "interval": 5]),
++        jsonResponse(["error": "slow_down"]),
++        jsonResponse(["access_token": "ghu_x", "expires_in": 3600]),
++        jsonResponse(["login": "octo", "id": 42]),
++        jsonResponse(["installations": []]),
++    ])
++    let recorder = SleepRecorder()
++    let (flow, logger, _) = await githubHarness(transport: transport, sleeper: { nanos in
++        recorder.append(nanos)
++    })
++    _ = await flow.apply(GitHubAuth.Effect.beginLogin(serverHost: nil))
++    #expect(await waitForLoggedActions(logger, count: 5))
++    let actions = githubActions(logger)
++    guard actions.contains(where: { if case .pollIntervalUpdated(let v) = $0, v == 10 { true } else { false } }) else {
++        Issue.record("Expected pollIntervalUpdated(10), got \(actions)"); return
++    }
++    let observed = recorder.snapshot
++    #expect(observed.count >= 2)
++    #expect(observed[0] == 5_000_000_000)
++    #expect(observed[1] == 10_000_000_000)
++}
++
++@Test func flowCancellationDestroysCodeAndStopsPoll() async throws {
++    // Cancel lands during the first poll sleep, so no poll consumes the queue.
++    // Queue order is therefore [code1, code2, ...second-login polls].
++    let transport = TestTransport([
++        jsonResponse(["device_code": "dev1", "user_code": "USER-1", "verification_uri": "https://github.com/login/device", "expires_in": 900, "interval": 5]),
++        jsonResponse(["device_code": "dev2", "user_code": "USER-2", "verification_uri": "https://github.com/login/device", "expires_in": 900, "interval": 60]),
++        jsonResponse(["error": "authorization_pending"]),
++        jsonResponse(["error": "authorization_pending"]),
++    ])
++    let (flow, logger, _) = await githubHarness(transport: transport, sleeper: { _ in
++        try await Task.sleep(for: .milliseconds(200))
++    })
++    _ = await flow.apply(GitHubAuth.Effect.beginLogin(serverHost: nil))
++    _ = await waitForLoggedActions(logger, count: 2)
++    _ = await flow.apply(GitHubAuth.Effect.cancelLogin)
++    _ = await waitForLoggedActions(logger, count: 3)
++    // Second login must request a fresh code (old device_code destroyed, not reused).
++    _ = await flow.apply(GitHubAuth.Effect.beginLogin(serverHost: nil))
++    #expect(await waitForLoggedActions(logger, count: 5))
++    let actions = githubActions(logger)
++    #expect(actions.contains { if case .loginCancelled = $0 { true } else { false } })
++    let codes = actions.compactMap { action -> String? in if case .codeReceived(let code, _, _, _) = action { code } else { nil } }
++    #expect(codes == ["USER-1", "USER-2"])
++    #expect(!actions.contains { if case .connected = $0 { true } else { false } })
++    _ = await flow.apply(GitHubAuth.Effect.cancelLogin)
++}
++
++@Test func flowCancelWhileConnectedRestoresConnected() async throws {
++    let transport = TestTransport([
++        jsonResponse(["device_code": "dev1", "user_code": "USER-1", "verification_uri": "https://github.com/login/device", "expires_in": 900, "interval": 1]),
++        jsonResponse(["access_token": "ghu_x", "expires_in": 3600]),
++        jsonResponse(["login": "octo", "id": 42]),
++        jsonResponse(["installations": []]),
++    ])
++    let (flow, logger, _) = await githubHarness(transport: transport)
++    _ = await flow.apply(GitHubAuth.Effect.beginLogin(serverHost: nil))
++    #expect(await waitForLoggedActions(logger, count: 5))
++    _ = await flow.apply(GitHubAuth.Effect.cancelLogin)
++    #expect(await waitForLoggedActions(logger, count: 6))
++    guard case .connected(let user, _, _) = githubActions(logger).last, user == "octo" else {
++        Issue.record("Cancel while connected must restore connected, got \(githubActions(logger))"); return
++    }
++}
++
++@Test func flowLogoutClearsKeychainAndStopsSync() async throws {
++    let store = GitHubKeychainStore(backend: InMemoryKeychainBackend())
++    let transport = TestTransport([
++        jsonResponse(["device_code": "dev1", "user_code": "USER-1", "verification_uri": "https://github.com/login/device", "expires_in": 900, "interval": 1]),
++        jsonResponse(["access_token": "ghu_x", "refresh_token": "ghr_y", "expires_in": 3600]),
++        jsonResponse(["login": "octo", "id": 42]),
++        jsonResponse(["installations": []]),
++    ])
++    let (flow, logger, credentialStore) = await githubHarness(transport: transport, store: store)
++    _ = await flow.apply(GitHubAuth.Effect.beginLogin(serverHost: nil))
++    #expect(await waitForLoggedActions(logger, count: 5))
++    #expect(await credentialStore.load(serverHost: "github.com", userID: 42, clientID: testConfig.clientID) != nil)
++    _ = await flow.apply(GitHubAuth.Effect.logout)
++    _ = await waitForLoggedActions(logger, count: 6)
++    #expect(githubActions(logger).last.map { if case .loggedOut = $0 { true } else { false } } == true)
++    #expect(await credentialStore.load(serverHost: "github.com", userID: 42, clientID: testConfig.clientID) == nil)
++    // Post-logout refresh is a no-op (background ops stopped).
++    let before = logger.actions.count
++    _ = await flow.apply(GitHubAuth.Effect.refreshInstallations)
++    try await Task.sleep(for: .milliseconds(100))
++    #expect(logger.actions.count == before)
++}
++
++@Test func flow401DuringRefreshRequiresRelogin() async {
++    let store = GitHubKeychainStore(backend: InMemoryKeychainBackend())
++    let record = GitHubAuth.TokenRecord(accessToken: "ghu_old", refreshToken: nil, expiresAt: nil)
++    await store.saveForTest(record, userID: 42)
++    let transport = TestTransport([
++        jsonResponse(["device_code": "dev1", "user_code": "USER-1", "verification_uri": "https://github.com/login/device", "expires_in": 900, "interval": 1]),
++        jsonResponse(["access_token": "ghu_x", "expires_in": 3600]),
++        jsonResponse(["login": "octo", "id": 42]),
++        jsonResponse(["installations": []]),
++        GitHubHTTPResponse(status: 401, body: Data()),
++    ])
++    let (flow, logger, _) = await githubHarness(transport: transport, store: store)
++    _ = await flow.apply(GitHubAuth.Effect.beginLogin(serverHost: nil))
++    #expect(await waitForLoggedActions(logger, count: 5))
++    _ = await flow.apply(GitHubAuth.Effect.refreshInstallations)
++    #expect(await waitForLoggedActions(logger, count: 6))
++    guard case .failed(_, let retry) = githubActions(logger).last, retry == .relogin else {
++        Issue.record("Expected 401 relogin, got \(githubActions(logger))"); return
++    }
++}
++
++@Test func flow403DuringRefreshKeepsConnectedWithStaleError() async throws {
++    let store = GitHubKeychainStore(backend: InMemoryKeychainBackend())
++    let transport = TestTransport([
++        jsonResponse(["device_code": "dev1", "user_code": "USER-1", "verification_uri": "https://github.com/login/device", "expires_in": 900, "interval": 1]),
++        jsonResponse(["access_token": "ghu_x", "expires_in": 3600]),
++        jsonResponse(["login": "octo", "id": 42]),
++        jsonResponse(["installations": []]),
++        GitHubHTTPResponse(status: 403, body: Data("forbidden".utf8)),
++    ])
++    let (flow, logger, _) = await githubHarness(transport: transport, store: store)
++    _ = await flow.apply(GitHubAuth.Effect.beginLogin(serverHost: nil))
++    #expect(await waitForLoggedActions(logger, count: 5))
++    _ = await flow.apply(GitHubAuth.Effect.refreshInstallations)
++    #expect(await waitForLoggedActions(logger, count: 6))
++    let actions = githubActions(logger)
++    guard case .syncFailed = actions.last else {
++        Issue.record("Expected syncFailed on 403, got \(actions)"); return
++    }
++    // Reducer proof: syncFailed preserves connected (local control unaffected).
++    let state = await MainActor.run { GitHubAuth.State() }
++    for action in actions { await state.reduce(with: action) }
++    let connection = await MainActor.run { state.connection }
++    guard case .connected = connection else {
++        Issue.record("403 must not disconnect"); return
++    }
++}
++
++@Test func flowMissingClientIDFailsWithExactBinding() async {
++    let logger = Relux.Testing.Logger()
++    let dispatcher = Relux.Dispatcher(logger: logger)
++    let store = GitHubKeychainStore(backend: InMemoryKeychainBackend())
++    let transport = TestTransport([])
++    let flow = await GitHubAuth.Flow(
++        deviceFlow: GitHubDeviceFlow(transport: transport),
++        api: GitHubAPIClient(transport: transport),
++        refresher: GitHubTokenRefresh(transport: transport, store: store),
++        store: store,
++        configProvider: { _ in throw GitHubAuth.ConfigError.missingClientID(binding: GitHubAuth.AppConfig.missingBindingHelp) },
++        sleeper: { _ in },
++        dispatcher: dispatcher
++    )
++    _ = await flow.apply(GitHubAuth.Effect.beginLogin(serverHost: nil))
++    #expect(await waitForLoggedActions(logger, count: 1))
++    guard case .failed(let message, let retry) = githubActions(logger).first, retry == .none else {
++        Issue.record("Expected missing-binding failure"); return
++    }
++    #expect(message.contains("ios-app-manager.json"))
++}
++
++@Test func flowIgnoresForeignEffectsAndSelectsRepositories() async {
++    let (flow, logger, _) = await githubHarness(transport: TestTransport([]))
++    let result: Relux.ActionResult = await flow.apply(ForeignEffect())
++    _ = result
++    #expect(logger.actions.isEmpty)
++    _ = await flow.apply(GitHubAuth.Effect.selectRepositories([9]))
++    #expect(await waitForLoggedActions(logger, count: 1))
++    guard case .repositoriesSelected(let ids) = githubActions(logger).first, ids == [9] else {
++        Issue.record("Expected repositoriesSelected"); return
++    }
++}
++
++@Test @MainActor func githubModuleRegistersStateAndFlow() async {
++    let state = GitHubAuth.State()
++    let store = GitHubKeychainStore(backend: InMemoryKeychainBackend())
++    let transport = TestTransport([])
++    let dispatcher = Relux.Dispatcher(logger: Relux.Testing.Logger())
++    let flow = await GitHubAuth.Flow(
++        deviceFlow: GitHubDeviceFlow(transport: transport),
++        api: GitHubAPIClient(transport: transport),
++        refresher: GitHubTokenRefresh(transport: transport, store: store),
++        store: store,
++        configProvider: { _ in testConfig },
++        sleeper: { _ in },
++        dispatcher: dispatcher
++    )
++    let module = GitHubAuth.Module(state: state, flow: flow)
++    #expect(module.states.count == 1)
++    #expect(module.sagas.count == 1)
++}
++
++private extension GitHubKeychainStore {
++    func saveForTest(_ record: GitHubAuth.TokenRecord, userID: Int64) async {
++        try? await save(record, serverHost: "github.com", userID: userID, clientID: testConfig.clientID)
++    }
++}
+diff --git a/Packages/RunnerControlCore/Tests/GitHubTransportTests.swift b/Packages/RunnerControlCore/Tests/GitHubTransportTests.swift
+new file mode 100644
+index 0000000..fa23a7c
+--- /dev/null
++++ b/Packages/RunnerControlCore/Tests/GitHubTransportTests.swift
+@@ -0,0 +1,315 @@
++import Foundation
++import Testing
++@testable import RunnerControlCore
++
++// MARK: - Shared fakes
++
++actor TestTransport: GitHubHTTPTransport {
++    private var queue: [GitHubHTTPResponse]
++    private(set) var requests: [GitHubHTTPRequest] = []
++    init(_ responses: [GitHubHTTPResponse]) { self.queue = responses }
++    func send(_ request: GitHubHTTPRequest) async throws -> GitHubHTTPResponse {
++        requests.append(request)
++        guard !queue.isEmpty else { throw GitHubTransportError.invalidResponse }
++        return queue.removeFirst()
++    }
++    func prepend(_ response: GitHubHTTPResponse) { queue.insert(response, at: 0) }
++    func append(_ response: GitHubHTTPResponse) { queue.append(response) }
++}
++
++func jsonResponse(_ object: Any, status: Int = 200) -> GitHubHTTPResponse {
++    let data = try! JSONSerialization.data(withJSONObject: object)
++    return GitHubHTTPResponse(status: status, body: data)
++}
++
++let testConfig = GitHubAuth.AppConfig(clientID: "test-client-id")
++
++// MARK: - Config
++
++@Test func configReportsExactMissingBinding() {
++    let bundle = Bundle.main
++    // Production bundle has no GitHubAppClientID until coordinator provisions it.
++    // Assert the thrown binding names the exact scaffold input.
++    let raw = bundle.object(forInfoDictionaryKey: "GitHubAppClientID") as? String
++    if let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
++        // Provisioned environment: config must load.
++        #expect((try? GitHubAuth.AppConfig.current(bundle: bundle)) != nil)
++    } else {
++        do {
++            _ = try GitHubAuth.AppConfig.current(bundle: bundle)
++            Issue.record("Expected missingClientID when plist key is absent/empty")
++        } catch let error as GitHubAuth.ConfigError {
++            guard case .missingClientID(let binding) = error else {
++                Issue.record("Wrong config error: \(error)"); return
++            }
++            #expect(binding == GitHubAuth.AppConfig.missingBindingHelp)
++            #expect(binding.contains("ios-app-manager.json"))
++            #expect(binding.contains("GitHubAppClientID"))
++        } catch {
++            Issue.record("Unexpected error: \(error)")
++        }
++    }
++}
++
++@Test func enterpriseConfigUsesHostScopedEndpoints() {
++    let config = GitHubAuth.AppConfig(clientID: "pub", serverHost: "ghe.example.com")
++    #expect(config.deviceAuthorizationURL.absoluteString == "https://ghe.example.com/login/device/code")
++    #expect(config.tokenURL.absoluteString == "https://ghe.example.com/login/oauth/access_token")
++    #expect(config.apiBaseURL.absoluteString == "https://ghe.example.com/api/v3")
++}
++
++@Test func auditRejectsEmbeddedSecrets() throws {
++    try GitHubAuth.AppConfig.auditNoSecrets(in: ["GitHubAppClientID": "pub", "CFBundleIdentifier": "x"])
++    for key in ["ClientSecret", "client_secret", "AppPrivateKey", "app_private_key", "GitHubToken", "access_token_cache"] {
++        do {
++            try GitHubAuth.AppConfig.auditNoSecrets(in: [key: "value"])
++            Issue.record("auditNoSecrets admitted forbidden key '\(key)'")
++        } catch let error as GitHubAuth.ConfigError {
++            guard case .embeddedSecret(let found) = error, found == key else {
++                Issue.record("Wrong audit error for '\(key)': \(error)"); return
++            }
++        }
++    }
++}
++
++// MARK: - PAT guard (no PAT fallback)
++
++@Test func patGuardRejectsClassicAndFineGrainedPAT() {
++    for pat in ["ghp_abc123", "github_pat_abc123"] {
++        do {
++            _ = try GitHubAuth.PATGuard.authorizationHeader(token: pat)
++            Issue.record("PATGuard admitted PAT '\(pat)'")
++        } catch let error as GitHubAuth.AuthError {
++            #expect(error == .patNotSupported)
++        } catch {
++            Issue.record("Unexpected error for '\(pat)': \(error)")
++        }
++    }
++    #expect((try? GitHubAuth.PATGuard.authorizationHeader(token: "ghu_deviceflowtoken")) == "Bearer ghu_deviceflowtoken")
++}
++
++// MARK: - REST mapper (401/403)
++
++@Test func restMapperSeparatesUnauthorizedForbiddenSSORateLimit() {
++    #expect(GitHubAuth.RESTMapper.map(status: 401, body: Data()) == .unauthorized)
++    #expect(GitHubAuth.RESTMapper.map(status: 429, body: Data()) == .rateLimited(retryAfter: nil))
++    let sso = GitHubAuth.RESTMapper.map(status: 403, body: Data("SAML SSO required".utf8))
++    #expect(sso == .ssoRequired)
++    let rate = GitHubAuth.RESTMapper.map(status: 403, body: Data("API rate limit exceeded".utf8))
++    #expect(rate == .rateLimited(retryAfter: nil))
++    let forbidden = GitHubAuth.RESTMapper.map(status: 403, body: Data("Resource not accessible".utf8))
++    guard case .forbidden = forbidden else {
++        Issue.record("Expected forbidden, got \(String(describing: forbidden))"); return
++    }
++    #expect(GitHubAuth.RESTMapper.map(status: 200, body: Data()) == nil)
++    #expect(GitHubAuth.RESTMapper.map(status: 500, body: Data()) == nil)
++}
++
++// MARK: - Redaction
++
++@Test func redactionScrubsExactSecretsAndJSONShapes() {
++    let token = "ghu_secret123"
++    let refresh = "ghr_refresh456"
++    let text = #"{"access_token":"ghu_secret123","refresh_token":"ghr_refresh456","device_code":"dev789","other":"keep"}"#
++    let clean = GitHubAuth.Redaction.sanitize(text, secrets: [token, refresh])
++    #expect(!clean.contains(token))
++    #expect(!clean.contains(refresh))
++    #expect(!clean.contains("dev789"))
++    #expect(clean.contains("keep"))
++    #expect(clean.contains("[REDACTED]"))
++    let inline = GitHubAuth.Redaction.sanitize("Bearer \(token) tail", secrets: [token])
++    #expect(inline == "Bearer [REDACTED] tail")
++}
++
++// MARK: - Device Flow transport
++
++@Test func deviceCodeRequestDecodesAndPostsClientID() async throws {
++    let transport = TestTransport([jsonResponse([
++        "device_code": "dev", "user_code": "USER-1",
++        "verification_uri": "https://github.com/login/device",
++        "expires_in": 900, "interval": 5,
++    ])])
++    let flow = GitHubDeviceFlow(transport: transport)
++    let response = try await flow.requestCode(config: testConfig)
++    #expect(response.user_code == "USER-1")
++    #expect(response.interval == 5)
++    let requests = await transport.requests
++    #expect(requests.count == 1)
++    #expect(requests[0].url == testConfig.deviceAuthorizationURL)
++    let body = try JSONDecoder().decode([String: String].self, from: requests[0].body!)
++    #expect(body["client_id"] == "test-client-id")
++    #expect(body["client_secret"] == nil)
++}
++
++@Test func devicePollMapsAllTerminalBodiesOnHTTP200() async throws {
++    for (payload, expected) in [
++        (["error": "authorization_pending"], GitHubAuth.PollResult.pending),
++        (["error": "slow_down"], GitHubAuth.PollResult.slowDown),
++        (["error": "access_denied"], GitHubAuth.PollResult.denied),
++        (["error": "expired_token"], GitHubAuth.PollResult.expired),
++    ] as [([String: String], GitHubAuth.PollResult)] {
++        let transport = TestTransport([jsonResponse(payload)])
++        let flow = GitHubDeviceFlow(transport: transport)
++        #expect(try await flow.pollOnce(config: testConfig, deviceCode: "dev") == expected)
++    }
++    let ok = TestTransport([jsonResponse(["access_token": "ghu_x", "refresh_token": "ghr_y", "expires_in": 3600])])
++    let result = try await GitHubDeviceFlow(transport: ok).pollOnce(config: testConfig, deviceCode: "dev")
++    #expect(result == .success(accessToken: "ghu_x", refreshToken: "ghr_y", expiresIn: 3600))
++}
++
++@Test func devicePollRejectsPATShapedToken() async {
++    let transport = TestTransport([jsonResponse(["access_token": "ghp_injected"])])
++    do {
++        _ = try await GitHubDeviceFlow(transport: transport).pollOnce(config: testConfig, deviceCode: "dev")
++        Issue.record("pollOnce admitted PAT-shaped token")
++    } catch let error as GitHubAuth.AuthError {
++        #expect(error == .patNotSupported)
++    } catch {
++        Issue.record("Unexpected error: \(error)")
++    }
++}
++
++@Test func slowDownAddsFiveSeconds() {
++    #expect(GitHubDeviceFlow.nextInterval(current: 5, after: .slowDown) == 10)
++    #expect(GitHubDeviceFlow.nextInterval(current: 5, after: .pending) == 5)
++    #expect(GitHubDeviceFlow.nextInterval(current: 10, after: .slowDown) == 15)
++}
++
++// MARK: - API client
++
++@Test func apiClientSendsBearerAndDecodesUser() async throws {
++    let transport = TestTransport([jsonResponse(["login": "octo", "id": 42])])
++    let user = try await GitHubAPIClient(transport: transport).fetchUser(config: testConfig, token: "ghu_x")
++    #expect(user.login == "octo")
++    #expect(user.id == 42)
++    let requests = await transport.requests
++    #expect(requests[0].headers["Authorization"] == "Bearer ghu_x")
++}
++
++@Test func apiClientRefusesPATWithoutNetwork() async {
++    let transport = TestTransport([jsonResponse(["login": "x", "id": 1])])
++    do {
++        _ = try await GitHubAPIClient(transport: transport).fetchUser(config: testConfig, token: "ghp_abc")
++        Issue.record("fetchUser admitted PAT")
++    } catch let error as GitHubAuth.AuthError {
++        #expect(error == .patNotSupported)
++    } catch {
++        Issue.record("Unexpected: \(error)")
++    }
++    #expect(await transport.requests.count == 0)
++}
++
++@Test func apiClientMaps401And403() async {
++    let unauth = TestTransport([GitHubHTTPResponse(status: 401, body: Data())])
++    do {
++        _ = try await GitHubAPIClient(transport: unauth).fetchInstallations(config: testConfig, token: "ghu_x")
++        Issue.record("Expected unauthorized")
++    } catch let error as GitHubAuth.AuthError {
++        #expect(error == .unauthorized)
++    } catch { Issue.record("Unexpected: \(error)") }
++
++    let forbidden = TestTransport([GitHubHTTPResponse(status: 403, body: Data("forbidden".utf8))])
++    do {
++        _ = try await GitHubAPIClient(transport: forbidden).fetchInstallations(config: testConfig, token: "ghu_x")
++        Issue.record("Expected forbidden")
++    } catch let error as GitHubAuth.AuthError {
++        guard case .forbidden = error else { Issue.record("Expected forbidden, got \(error)"); return }
++    } catch { Issue.record("Unexpected: \(error)") }
++}
++
++@Test func apiClientDecodesInstallationsAndRepositories() async throws {
++    let transport = TestTransport([
++        jsonResponse(["installations": [["id": 7, "account": ["login": "acme", "type": "Organization"]]]]),
++        jsonResponse(["repositories": [["id": 9, "full_name": "acme/app", "private": true]]]),
++    ])
++    let api = GitHubAPIClient(transport: transport)
++    let installs = try await api.fetchInstallations(config: testConfig, token: "ghu_x")
++    #expect(installs == [.init(id: 7, account: "acme", accountType: "Organization")])
++    let repos = try await api.fetchRepositories(config: testConfig, token: "ghu_x", installationID: 7)
++    #expect(repos == [.init(id: 9, fullName: "acme/app", isPrivate: true)])
++}
++
++// MARK: - Token refresh
++
++@Test func refreshSavesAtomicallyAndCoalescesConcurrentCallers() async throws {
++    let store = GitHubKeychainStore(backend: InMemoryKeychainBackend())
++    let current = GitHubAuth.TokenRecord(accessToken: "ghu_old", refreshToken: "ghr_old", expiresAt: Date().addingTimeInterval(-10))
++    try await store.save(current, serverHost: "github.com", userID: 1, clientID: testConfig.clientID)
++    // Two identical success payloads available; coalescing must consume exactly one.
++    let transport = TestTransport([
++        jsonResponse(["access_token": "ghu_new", "refresh_token": "ghr_new", "expires_in": 3600]),
++        jsonResponse(["access_token": "ghu_new", "refresh_token": "ghr_new", "expires_in": 3600]),
++    ])
++    let refresher = GitHubTokenRefresh(transport: transport, store: store)
++    async let first = refresher.refresh(config: testConfig, userID: 1, current: current)
++    async let second = refresher.refresh(config: testConfig, userID: 1, current: current)
++    let (a, b) = try await (first, second)
++    #expect(a.accessToken == "ghu_new")
++    #expect(b.accessToken == "ghu_new")
++    #expect(await transport.requests.count == 1)
++    let stored = await store.load(serverHost: "github.com", userID: 1, clientID: testConfig.clientID)
++    #expect(stored?.accessToken == "ghu_new")
++    #expect(stored?.refreshToken == "ghr_new")
++}
++
++@Test func refreshFailsClosedWithoutRefreshToken() async {
++    let store = GitHubKeychainStore(backend: InMemoryKeychainBackend())
++    let current = GitHubAuth.TokenRecord(accessToken: "ghu_old", refreshToken: nil, expiresAt: nil)
++    let refresher = GitHubTokenRefresh(transport: TestTransport([]), store: store)
++    do {
++        _ = try await refresher.refresh(config: testConfig, userID: 1, current: current)
++        Issue.record("Expected tokenRefreshFailed")
++    } catch let error as GitHubAuth.AuthError {
++        #expect(error == .tokenRefreshFailed)
++    } catch { Issue.record("Unexpected: \(error)") }
++}
++
++@Test func refreshMapsInvalidGrantToRevoked() async {
++    let store = GitHubKeychainStore(backend: InMemoryKeychainBackend())
++    let current = GitHubAuth.TokenRecord(accessToken: "ghu_old", refreshToken: "ghr_bad", expiresAt: nil)
++    try! await store.save(current, serverHost: "github.com", userID: 1, clientID: testConfig.clientID)
++    let transport = TestTransport([jsonResponse(["error": "invalid_grant"])])
++    do {
++        _ = try await GitHubTokenRefresh(transport: transport, store: store).refresh(config: testConfig, userID: 1, current: current)
++        Issue.record("Expected revoked")
++    } catch let error as GitHubAuth.AuthError {
++        #expect(error == .revoked)
++    } catch { Issue.record("Unexpected: \(error)") }
++}
++
++// MARK: - Keychain
++
++@Test func keychainRoundTripsAndDeletesScopedRecords() async throws {
++    let store = GitHubKeychainStore(service: "works.relux.runnercontrol.test.\(UUID().uuidString)", backend: InMemoryKeychainBackend())
++    let record = GitHubAuth.TokenRecord(accessToken: "ghu_a", refreshToken: "ghr_b", expiresAt: Date())
++    try await store.save(record, serverHost: "github.com", userID: 11, clientID: "cid")
++    #expect(await store.load(serverHost: "github.com", userID: 11, clientID: "cid") == record)
++    #expect(await store.load(serverHost: "github.com", userID: 12, clientID: "cid") == nil)
++    await store.delete(serverHost: "github.com", userID: 11, clientID: "cid")
++    #expect(await store.load(serverHost: "github.com", userID: 11, clientID: "cid") == nil)
++}
++
++@Test func keychainDeleteAllSweepsOnlyMatchingClient() async throws {
++    let store = GitHubKeychainStore(service: "works.relux.runnercontrol.test.\(UUID().uuidString)", backend: InMemoryKeychainBackend())
++    let record = GitHubAuth.TokenRecord(accessToken: "ghu_a", refreshToken: nil, expiresAt: nil)
++    try await store.save(record, serverHost: "github.com", userID: 1, clientID: "cid-a")
++    try await store.save(record, serverHost: "github.com", userID: 2, clientID: "cid-a")
++    try await store.save(record, serverHost: "github.com", userID: 1, clientID: "cid-b")
++    await store.deleteAll(serverHost: "github.com", clientID: "cid-a")
++    #expect(await store.load(serverHost: "github.com", userID: 1, clientID: "cid-a") == nil)
++    #expect(await store.load(serverHost: "github.com", userID: 2, clientID: "cid-a") == nil)
++    #expect(await store.load(serverHost: "github.com", userID: 1, clientID: "cid-b") != nil)
++}
++
++@Test func realKeychainBackendRoundTripsUniqueRecord() throws {
++    // Focused real-Security check with a unique service/account; always cleaned up.
++    let backend = SecurityKeychainBackend()
++    let service = "works.relux.runnercontrol.test.\(UUID().uuidString)"
++    let account = "github.com:999:\(UUID().uuidString)"
++    let data = Data("{\"accessToken\":\"ghu_probe\"}".utf8)
++    defer { backend.delete(service: service, account: account) }
++    try backend.save(data, service: service, account: account)
++    #expect(backend.load(service: service, account: account) == data)
++    backend.delete(service: service, account: account)
++    #expect(backend.load(service: service, account: account) == nil)
++}
+diff --git a/Targets/RunnerControl/Sources/App.swift b/Targets/RunnerControl/Sources/App.swift
+index 882e6f5..d051031 100644
+--- a/Targets/RunnerControl/Sources/App.swift
++++ b/Targets/RunnerControl/Sources/App.swift
+@@ -21,6 +21,13 @@ struct RunnerControl: App {
+     func applicationDidFinishLaunching(_ notification: Notification) {
+         NSApp.setActivationPolicy(.accessory)
+         AppRegistry.start()
++        NotificationCenter.default.addObserver(
++            forName: .openManagementWindow,
++            object: nil,
++            queue: .main
++        ) { [weak self] _ in
++            Task { @MainActor in self?.showControls() }
++        }
+         if !UserDefaults.standard.bool(forKey: "hasShownWelcome") {
+             showControls()
+             UserDefaults.standard.set(true, forKey: "hasShownWelcome")
+@@ -32,11 +39,16 @@ struct RunnerControl: App {
+     }
+     private func showControls() {
+         if window == nil {
+-            let controller = NSHostingController(rootView: RunnerContainer(state: AppRegistry.state))
++            let controller = NSHostingController(rootView: ManagementWindowContainer(
++                runners: AppRegistry.state,
++                github: AppRegistry.githubState
++            ))
+             let value = NSWindow(contentViewController: controller)
+-            value.title = "Runner Control"
+-            value.styleMask = [.titled, .closable]
++            value.title = "Раннеры и настройки"
++            value.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+             value.isReleasedWhenClosed = false
++            value.setContentSize(NSSize(width: 760, height: 540))
++            value.minSize = NSSize(width: 700, height: 480)
+             value.center()
+             window = value
+         }
+diff --git a/Targets/RunnerControl/Sources/AppRegistry.swift b/Targets/RunnerControl/Sources/AppRegistry.swift
+index 2d160d9..b4332b1 100644
+--- a/Targets/RunnerControl/Sources/AppRegistry.swift
++++ b/Targets/RunnerControl/Sources/AppRegistry.swift
+@@ -3,18 +3,40 @@ import RunnerControlCore
+ 
+ @MainActor enum AppRegistry {
+     static let state = Runners.State()
++    static let githubState = GitHubAuth.State()
+     static let updater = AppUpdater()
+     private static var task: Task<Void, Never>?
++    private static var githubTask: Task<Void, Never>?
+     static func start() {
+         guard task == nil else { return }
+         updater.start()
+         // One composition root for every MenuBarExtra presentation.
+         task = Task {
+-            _ = await RunnerRuntime.make(state: state)
++            _ = await RunnerRuntime.make(state: state, githubState: githubState)
+             while !Task.isCancelled {
+                 await action { Runners.Effect.refresh }
+                 try? await Task.sleep(for: .seconds(3))
+             }
+         }
++        githubTask = Task {
++            var ticks = 0
++            while !Task.isCancelled {
++                try? await Task.sleep(for: .seconds(30))
++                ticks += 1
++                // GitHub sync is best-effort and never blocks local control.
++                if case .connected = githubState.connection {
++                    await action { GitHubAuth.Effect.refreshInstallations }
++                }
++                _ = ticks
++            }
++        }
+     }
++
++    static func openManagementWindow() {
++        NotificationCenter.default.post(name: .openManagementWindow, object: nil)
++    }
++}
++
++extension Notification.Name {
++    static let openManagementWindow = Notification.Name("works.relux.runnercontrol.openManagementWindow")
+ }
+diff --git a/Targets/RunnerControl/Sources/LaunchAtLoginModel.swift b/Targets/RunnerControl/Sources/LaunchAtLoginModel.swift
+new file mode 100644
+index 0000000..9a1a630
+--- /dev/null
++++ b/Targets/RunnerControl/Sources/LaunchAtLoginModel.swift
+@@ -0,0 +1,22 @@
++import SwiftUI
++import ServiceManagement
++import RunnerControlCore
++
++/// Launch-at-login adapter (app to open at login, distinct from CI autostart).
++@MainActor final class LaunchAtLoginModel: ObservableObject {
++    @Published private(set) var enabled: Bool = false
++    init() {
++        enabled = SMAppService.mainApp.status == .enabled
++    }
++    func setEnabled(_ value: Bool) {
++        do {
++            if value { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
++            enabled = value
++        } catch {
++            enabled = SMAppService.mainApp.status == .enabled
++        }
++    }
++    func refresh() {
++        enabled = SMAppService.mainApp.status == .enabled
++    }
++}
+diff --git a/Targets/RunnerControl/Sources/ManagementWindowContainer.swift b/Targets/RunnerControl/Sources/ManagementWindowContainer.swift
+new file mode 100644
+index 0000000..4e5ce27
+--- /dev/null
++++ b/Targets/RunnerControl/Sources/ManagementWindowContainer.swift
+@@ -0,0 +1,105 @@
++import AppKit
++import SwiftUI
++import RunnerControlCore
++
++/// Management window composition root. Reads Relux state, dispatches production effects.
++struct ManagementWindowContainer: View {
++    @ObservedObject var runners: Runners.State
++    @ObservedObject var github: GitHubAuth.State
++    @ObservedObject private var updater = AppRegistry.updater
++    @StateObject private var launchAtLogin = LaunchAtLoginModel()
++    @State private var serverHostText: String = "github.com"
++
++    var body: some View {
++        ManagementWindowPage(
++            props: .init(
++                runners: runners.runners,
++                changing: runners.changing,
++                runnerError: runners.lastError,
++                github: .init(
++                    connection: github.connection,
++                    username: github.username,
++                    serverHost: github.serverHost,
++                    serverHostText: serverHostText,
++                    installations: github.installations,
++                    selectedInstallationID: github.selectedInstallationID,
++                    repositories: github.repositories,
++                    selectedRepositoryIDs: github.selectedRepositoryIDs,
++                    syncError: github.syncError,
++                    lastSyncAt: github.lastSyncAt
++                ),
++                general: .init(
++                    appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—",
++                    canCheckForUpdates: updater.canCheckForUpdates,
++                    automaticChecks: updater.automaticallyChecks,
++                    automaticDownloads: updater.automaticallyDownloads,
++                    launchAtLoginEnabled: launchAtLogin.enabled
++                )
++            ),
++            reactions: .init(
++                setEnabled: change,
++                enableAll: { for runner in runners.runners where [.stopped, .failed].contains(runner.status) { change(runner.id, true) } },
++                disableAll: { confirmStop(ids: runners.runners.map(\.id)) },
++                openGitHub: { NSWorkspace.shared.open($0.githubURL) },
++                openLogs: { NSWorkspace.shared.open($0.logs) },
++                showDirectory: { NSWorkspace.shared.open($0.directory) },
++                clearRunnerError: { Task { await action { Runners.Action.clearError } } },
++                serverHostChanged: { serverHostText = $0 },
++                beginLogin: beginLogin,
++                cancelLogin: { Task { await action { GitHubAuth.Effect.cancelLogin } } },
++                logout: { Task { await action { GitHubAuth.Effect.logout } } },
++                openVerification: { NSWorkspace.shared.open($0) },
++                copyCode: copyCode,
++                refreshInstallations: { Task { await action { GitHubAuth.Effect.refreshInstallations } } },
++                selectInstallation: { id in Task { await action { GitHubAuth.Effect.selectInstallation(id) } } },
++                selectRepositories: { ids in Task { await action { GitHubAuth.Effect.selectRepositories(ids) } } },
++                grantAccess: { NSWorkspace.shared.open(URL(string: "https://github.com/settings/installations")!) },
++                revokeInGitHub: { NSWorkspace.shared.open(URL(string: "https://github.com/settings/connections/applications")!) },
++                checkForUpdates: updater.check,
++                setAutomaticChecks: updater.setAutomaticChecks,
++                setAutomaticDownloads: updater.setAutomaticDownloads,
++                setLaunchAtLogin: { launchAtLogin.setEnabled($0) },
++                quit: quit
++            )
++        )
++    }
++
++    private func beginLogin() {
++        let host = serverHostText.trimmingCharacters(in: .whitespacesAndNewlines)
++        let value = host.isEmpty ? nil : host
++        Task { await action { GitHubAuth.Effect.beginLogin(serverHost: value) } }
++    }
++
++    private func copyCode(_ code: String) {
++        NSPasteboard.general.clearContents()
++        NSPasteboard.general.setString(code, forType: .string)
++    }
++
++    private func change(_ id: String, _ enabled: Bool) {
++        if enabled { Task { await action { Runners.Effect.setEnabled(id, true) } } }
++        else { confirmStop(ids: [id]) }
++    }
++
++    private func confirmStop(ids: [String]) {
++        let alert = NSAlert()
++        alert.messageText = "Выключить CI?"
++        alert.informativeText = "Если раннер сейчас выполняет сборку, она будет прервана. Новые задания он принимать не будет."
++        alert.addButton(withTitle: "Отмена")
++        alert.addButton(withTitle: "Выключить")
++        guard alert.runModal() == .alertSecondButtonReturn else { return }
++        Task { for id in ids { await action { Runners.Effect.setEnabled(id, false) } } }
++    }
++
++    private func quit() {
++        guard runners.changing.isEmpty else { return }
++        if runners.runners.contains(where: { $0.status == .running || $0.status == .failed || $0.status == .unknown }) {
++            let alert = NSAlert()
++            alert.messageText = "Закрыть Runner Control?"
++            alert.informativeText = "Включённые раннеры продолжат работать в фоне. Для остановки CI сначала нажмите «Выключить все»."
++            alert.addButton(withTitle: "Остаться")
++            alert.addButton(withTitle: "Закрыть приложение")
++            guard alert.runModal() == .alertSecondButtonReturn else { return }
++        }
++        NSApp.terminate(nil)
++    }
++}
+diff --git a/Targets/RunnerControl/Sources/ManagementWindowPage+Props.swift b/Targets/RunnerControl/Sources/ManagementWindowPage+Props.swift
+new file mode 100644
+index 0000000..a0170d5
+--- /dev/null
++++ b/Targets/RunnerControl/Sources/ManagementWindowPage+Props.swift
+@@ -0,0 +1,56 @@
++import SwiftUI
++import RunnerControlCore
++
++extension ManagementWindowPage {
++    struct GitHubProps {
++        let connection: GitHubAuth.Connection
++        let username: String?
++        let serverHost: String
++        let serverHostText: String
++        let installations: [GitHubAuth.Installation]
++        let selectedInstallationID: Int64?
++        let repositories: [GitHubAuth.Repository]
++        let selectedRepositoryIDs: Set<Int64>
++        let syncError: String?
++        let lastSyncAt: Date?
++    }
++    struct GeneralProps {
++        let appVersion: String
++        let canCheckForUpdates: Bool
++        let automaticChecks: Bool
++        let automaticDownloads: Bool
++        let launchAtLoginEnabled: Bool
++    }
++    struct Props {
++        let runners: [Runners.Snapshot]
++        let changing: Set<String>
++        let runnerError: String?
++        let github: GitHubProps
++        let general: GeneralProps
++    }
++    struct Reactions {
++        let setEnabled: (String, Bool) -> Void
++        let enableAll: () -> Void
++        let disableAll: () -> Void
++        let openGitHub: (Runners.Definition) -> Void
++        let openLogs: (Runners.Definition) -> Void
++        let showDirectory: (Runners.Definition) -> Void
++        let clearRunnerError: () -> Void
++        let serverHostChanged: (String) -> Void
++        let beginLogin: () -> Void
++        let cancelLogin: () -> Void
++        let logout: () -> Void
++        let openVerification: (URL) -> Void
++        let copyCode: (String) -> Void
++        let refreshInstallations: () -> Void
++        let selectInstallation: (Int64?) -> Void
++        let selectRepositories: (Set<Int64>) -> Void
++        let grantAccess: () -> Void
++        let revokeInGitHub: () -> Void
++        let checkForUpdates: () -> Void
++        let setAutomaticChecks: (Bool) -> Void
++        let setAutomaticDownloads: (Bool) -> Void
++        let setLaunchAtLogin: (Bool) -> Void
++        let quit: () -> Void
++    }
++}
+diff --git a/Targets/RunnerControl/Sources/ManagementWindowPage.swift b/Targets/RunnerControl/Sources/ManagementWindowPage.swift
+new file mode 100644
+index 0000000..a491478
+--- /dev/null
++++ b/Targets/RunnerControl/Sources/ManagementWindowPage.swift
+@@ -0,0 +1,337 @@
++import SwiftUI
++import RunnerControlCore
++
++struct ManagementWindowPage: View {
++    let props: Props
++    let reactions: Reactions
++    @State private var selection: Tab = .runners
++
++    enum Tab: Hashable {
++        case runners, github, general
++    }
++
++    var body: some View {
++        TabView(selection: $selection) {
++            runnersTab
++                .tabItem { Label("Раннеры", systemImage: "bolt.circle") }
++                .tag(Tab.runners)
++            githubTab
++                .tabItem { Label("GitHub", systemImage: "person.circle") }
++                .tag(Tab.github)
++            generalTab
++                .tabItem { Label("Основные", systemImage: "gearshape") }
++                .tag(Tab.general)
++        }
++        .frame(width: 760, height: 540)
++    }
++
++    // MARK: - Runners
++
++    private var active: Int { props.runners.filter { $0.status == .running }.count }
++
++    private var runnersTab: some View {
++        VStack(alignment: .leading, spacing: 14) {
++            HStack(spacing: 10) {
++                VStack(alignment: .leading, spacing: 3) {
++                    Text("Раннеры на этом Mac").font(.system(size: 15, weight: .semibold))
++                    Text("\(Host.current().localizedName ?? "Этот Mac") · \(active) из \(props.runners.count) включено")
++                        .font(.system(size: 11)).foregroundStyle(.secondary)
++                }
++                Spacer()
++                Circle().fill(active > 0 ? Color.green : Color.secondary.opacity(0.4)).frame(width: 8, height: 8)
++            }
++            if props.runners.isEmpty {
++                VStack(alignment: .leading, spacing: 8) {
++                    Text("Добавьте раннер на этом Mac").font(.callout.weight(.medium))
++                    Text("Учётная запись GitHub не обязательна. Локальное управление работает без входа.")
++                        .font(.callout).foregroundStyle(.secondary)
++                }
++                .padding(.vertical, 8)
++            }
++            ScrollView {
++                VStack(spacing: 10) {
++                    ForEach(props.runners) { runner in
++                        RunnerCard(
++                            snapshot: runner,
++                            changing: props.changing.contains(runner.id),
++                            setEnabled: { reactions.setEnabled(runner.id, $0) },
++                            openGitHub: { reactions.openGitHub(runner.definition) },
++                            openLogs: { reactions.openLogs(runner.definition) }
++                        )
++                    }
++                }
++            }
++            if let error = props.runnerError {
++                HStack(alignment: .top, spacing: 8) {
++                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
++                    Text(error).font(.caption).textSelection(.enabled).lineLimit(6)
++                    Spacer(minLength: 0)
++                    Button(action: reactions.clearRunnerError) { Image(systemName: "xmark") }.buttonStyle(.plain)
++                }.padding(10).background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
++            }
++            HStack(spacing: 8) {
++                Button("Включить все", action: reactions.enableAll)
++                    .buttonStyle(.borderedProminent).tint(.teal)
++                    .disabled(!props.changing.isEmpty || props.runners.allSatisfy { $0.status == .running || $0.status == .checking || $0.status == .missing || $0.status == .unknown })
++                Button("Выключить все…", action: reactions.disableAll)
++                    .buttonStyle(.bordered)
++                    .disabled(!props.changing.isEmpty || props.runners.allSatisfy { $0.status == .stopped || $0.status == .checking })
++            }
++            Text("Закрытие приложения не останавливает CI. Автозапуск определяется настройками каждой службы.")
++                .font(.system(size: 11)).foregroundStyle(.secondary)
++        }
++        .padding(20)
++    }
++
++    // MARK: - GitHub
++
++    private var githubTab: some View {
++        ScrollView {
++            VStack(alignment: .leading, spacing: 16) {
++                switch props.github.connection {
++                case .disconnected:
++                    disconnectedView
++                case .requestingCode:
++                    HStack(spacing: 10) {
++                        ProgressView().controlSize(.small)
++                        Text("Запрашиваем код входа…").font(.callout)
++                    }
++                    .padding(.vertical, 20)
++                case .awaitingUser(let userCode, let uri, let expiresIn, let interval):
++                    awaitingView(userCode: userCode, uri: uri, expiresIn: expiresIn, interval: interval)
++                case .verifyingAccount:
++                    HStack(spacing: 10) {
++                        ProgressView().controlSize(.small)
++                        Text("Проверяем аккаунт…").font(.callout)
++                    }
++                    .padding(.vertical, 20)
++                case .verifyingInstallations(let username):
++                    HStack(spacing: 10) {
++                        ProgressView().controlSize(.small)
++                        Text("Проверяем установки для @\(username)…").font(.callout)
++                    }
++                    .padding(.vertical, 20)
++                case .connected(let username, let host):
++                    connectedView(username: username, host: host)
++                case .failed(let message, let retry):
++                    failedView(message: message, retry: retry)
++                }
++            }
++            .padding(20)
++            .frame(maxWidth: .infinity, alignment: .leading)
++        }
++    }
++
++    private var disconnectedView: some View {
++        VStack(alignment: .leading, spacing: 12) {
++            Text("Подключение GitHub").font(.system(size: 15, weight: .semibold))
++            Text("Необязательно. Локальное включение и выключение работает без входа. Вход добавляет подтверждённые online/busy/labels.")
++                .font(.callout).foregroundStyle(.secondary)
++            HStack(spacing: 8) {
++                Text("Сервер:").font(.callout)
++                TextField("github.com", text: Binding(
++                    get: { props.github.serverHostText },
++                    set: reactions.serverHostChanged
++                ))
++                .textFieldStyle(.roundedBorder)
++                .frame(width: 220)
++                .accessibilityIdentifier("GitHub server host field")
++            }
++            Button("Войти через GitHub", action: reactions.beginLogin)
++                .buttonStyle(.borderedProminent).tint(.teal)
++                .accessibilityIdentifier("GitHub sign in button")
++            Text("Откроется код подтверждения. Пароль и 2FA вводятся только на сайте GitHub. Токены хранятся в Keychain.")
++                .font(.system(size: 11)).foregroundStyle(.secondary)
++            if let syncError = props.github.syncError {
++                Text(syncError).font(.caption).foregroundStyle(.orange)
++            }
++        }
++    }
++
++    private func awaitingView(userCode: String, uri: URL, expiresIn: Int, interval: Int) -> some View {
++        VStack(alignment: .leading, spacing: 12) {
++            Text("Подтвердите подключение на GitHub").font(.system(size: 15, weight: .semibold))
++            Text(userCode)
++                .font(.system(size: 32, weight: .bold, design: .monospaced))
++                .textSelection(.enabled)
++                .accessibilityIdentifier("GitHub user code")
++            Text("Код действует ~\(expiresIn / 60) мин. Опрос каждые \(interval) c.")
++                .font(.callout).foregroundStyle(.secondary)
++            HStack(spacing: 8) {
++                Button("Скопировать код") { reactions.copyCode(userCode) }
++                    .buttonStyle(.bordered)
++                    .accessibilityIdentifier("GitHub copy code button")
++                Button("Открыть GitHub") { reactions.openVerification(uri) }
++                    .buttonStyle(.bordered)
++                    .accessibilityIdentifier("GitHub open verification button")
++                Button("Отмена", action: reactions.cancelLogin)
++                    .buttonStyle(.plain).foregroundStyle(.secondary)
++                    .accessibilityIdentifier("GitHub cancel login button")
++            }
++            Text("Браузер — системный по умолчанию. Отмена уничтожает временный код и прекращает опрос.")
++                .font(.system(size: 11)).foregroundStyle(.secondary)
++        }
++    }
++
++    private func connectedView(username: String, host: String) -> some View {
++        VStack(alignment: .leading, spacing: 12) {
++            HStack {
++                VStack(alignment: .leading, spacing: 3) {
++                    Text("Подключено как @\(username)").font(.system(size: 15, weight: .semibold))
++                    Text(host).font(.callout).foregroundStyle(.secondary)
++                    if let synced = props.github.lastSyncAt {
++                        Text("Обновлено: \(synced.formatted(date: .omitted, time: .standard))")
++                            .font(.system(size: 11)).foregroundStyle(.secondary)
++                    }
++                }
++                Spacer()
++                Button("Обновить", action: reactions.refreshInstallations)
++                    .buttonStyle(.bordered).controlSize(.small)
++                    .accessibilityIdentifier("GitHub refresh button")
++            }
++            if let syncError = props.github.syncError {
++                HStack(alignment: .top, spacing: 8) {
++                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
++                    Text(syncError).font(.caption).lineLimit(6)
++                    Spacer(minLength: 0)
++                }.padding(10).background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
++            }
++            HStack(spacing: 8) {
++                Button("Выйти на этом Mac", action: reactions.logout)
++                    .buttonStyle(.bordered)
++                    .accessibilityIdentifier("GitHub logout button")
++                Button("Отозвать доступ в GitHub…", action: reactions.revokeInGitHub)
++                    .buttonStyle(.plain).font(.callout).foregroundStyle(.secondary)
++            }
++            Text("Выход удаляет локальные токены и останавливает опрос GitHub. Локальные службы продолжают работать.")
++                .font(.system(size: 11)).foregroundStyle(.secondary)
++            Divider()
++            HStack {
++                Text("Установки GitHub App").font(.system(size: 13, weight: .semibold))
++                Spacer()
++                Button("Предоставить доступ организации…", action: reactions.grantAccess)
++                    .buttonStyle(.plain).font(.callout)
++            }
++            if props.github.installations.isEmpty {
++                Text("Нет доступных установок. Предоставьте доступ организации или запросите одобрение владельца.")
++                    .font(.callout).foregroundStyle(.secondary)
++            } else {
++                Picker("Установка", selection: Binding(
++                    get: { props.github.selectedInstallationID },
++                    set: reactions.selectInstallation
++                )) {
++                    ForEach(props.github.installations) { installation in
++                        Text("\(installation.account) (\(installation.accountType))").tag(Optional(installation.id))
++                    }
++                }
++                .pickerStyle(.menu)
++                .accessibilityIdentifier("GitHub installation picker")
++            }
++            Text("Репозитории").font(.system(size: 13, weight: .semibold))
++            if props.github.repositories.isEmpty {
++                Text("Репозитории выбранной установки появятся здесь.")
++                    .font(.callout).foregroundStyle(.secondary)
++            } else {
++                VStack(alignment: .leading, spacing: 6) {
++                    ForEach(props.github.repositories) { repo in
++                        Toggle(
++                            repo.fullName,
++                            isOn: Binding(
++                                get: { props.github.selectedRepositoryIDs.contains(repo.id) },
++                                set: { enabled in
++                                    var next = props.github.selectedRepositoryIDs
++                                    if enabled { next.insert(repo.id) } else { next.remove(repo.id) }
++                                    reactions.selectRepositories(next)
++                                }
++                            )
++                        )
++                        .font(.callout)
++                    }
++                }
++            }
++            if !props.github.selectedRepositoryIDs.isEmpty {
++                Text("Выбрано: \(props.github.selectedRepositoryIDs.count). Применяется при регистрации раннера.")
++                    .font(.system(size: 11)).foregroundStyle(.secondary)
++            }
++        }
++    }
++
++    private func failedView(message: String, retry: GitHubAuth.RetryKind) -> some View {
++        VStack(alignment: .leading, spacing: 12) {
++            HStack(spacing: 8) {
++                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
++                Text("Не удалось подключить GitHub").font(.system(size: 15, weight: .semibold))
++            }
++            Text(message).font(.callout).textSelection(.enabled)
++            HStack(spacing: 8) {
++                switch retry {
++                case .newCode:
++                    Button("Получить новый код", action: reactions.beginLogin)
++                        .buttonStyle(.borderedProminent).tint(.teal)
++                case .retry:
++                    Button("Повторить", action: reactions.beginLogin)
++                        .buttonStyle(.borderedProminent).tint(.teal)
++                case .relogin:
++                    Button("Войти снова", action: reactions.beginLogin)
++                        .buttonStyle(.borderedProminent).tint(.teal)
++                case .grantAccess:
++                    Button("Предоставить доступ…", action: reactions.grantAccess)
++                        .buttonStyle(.borderedProminent).tint(.teal)
++                    Button("Повторить", action: reactions.beginLogin)
++                        .buttonStyle(.bordered)
++                case .none:
++                    EmptyView()
++                }
++                if retry != .none {
++                    Button("Отмена", action: reactions.cancelLogin)
++                        .buttonStyle(.plain).foregroundStyle(.secondary)
++                } else {
++                    Button("Назад", action: reactions.cancelLogin)
++                        .buttonStyle(.bordered)
++                }
++            }
++            Text("Локальное управление раннерами остаётся доступным.")
++                .font(.system(size: 11)).foregroundStyle(.secondary)
++        }
++    }
++
++    // MARK: - General
++
++    private var generalTab: some View {
++        ScrollView {
++            VStack(alignment: .leading, spacing: 14) {
++                Text("Основные").font(.system(size: 15, weight: .semibold))
++                Toggle(
++                    "Открывать Runner Control при входе",
++                    isOn: Binding(get: { props.general.launchAtLoginEnabled }, set: reactions.setLaunchAtLogin)
++                )
++                .font(.callout)
++                Text("Отдельно от запуска CI. Для новых управляемых служб запуск раннера при входе выключен.")
++                    .font(.system(size: 11)).foregroundStyle(.secondary)
++                Divider()
++                HStack {
++                    Text("Версия \(props.general.appVersion)").font(.callout).foregroundStyle(.secondary)
++                    Spacer()
++                    Button("Проверить обновления…", action: reactions.checkForUpdates)
++                        .disabled(!props.general.canCheckForUpdates)
++                }
++                Toggle("Проверять автоматически", isOn: Binding(get: { props.general.automaticChecks }, set: reactions.setAutomaticChecks))
++                    .font(.callout)
++                Toggle("Устанавливать автоматически", isOn: Binding(get: { props.general.automaticDownloads }, set: reactions.setAutomaticDownloads))
++                    .font(.callout)
++                    .disabled(!props.general.automaticChecks)
++                Text("Выход и обновление приложения оставляют уже запущенные службы работать.")
++                    .font(.system(size: 11)).foregroundStyle(.secondary)
++                Divider()
++                HStack {
++                    Text("RELUX WORKS").font(.system(size: 9, weight: .semibold, design: .monospaced)).tracking(1.5).foregroundStyle(.tertiary)
++                    Spacer()
++                    Button("Закрыть приложение", action: reactions.quit).buttonStyle(.plain)
++                        .font(.system(size: 11)).foregroundStyle(.secondary)
++                }
++            }
++            .padding(20)
++            .frame(maxWidth: .infinity, alignment: .leading)
++        }
++    }
++}
+diff --git a/Targets/RunnerControl/Sources/RunnerContainer.swift b/Targets/RunnerControl/Sources/RunnerContainer.swift
+index 4db8a98..ca6d92a 100644
+--- a/Targets/RunnerControl/Sources/RunnerContainer.swift
++++ b/Targets/RunnerControl/Sources/RunnerContainer.swift
+@@ -18,7 +18,8 @@ struct RunnerContainer: View {
+                 quit: quit,
+                 checkForUpdates: updater.check,
+                 setAutomaticChecks: updater.setAutomaticChecks,
+-                setAutomaticDownloads: updater.setAutomaticDownloads
++                setAutomaticDownloads: updater.setAutomaticDownloads,
++                openSettings: { AppRegistry.openManagementWindow() }
+             )
+         )
+     }
+diff --git a/Targets/RunnerControl/Sources/RunnerPage.swift b/Targets/RunnerControl/Sources/RunnerPage.swift
+index 5cf1d3d..6eda673 100644
+--- a/Targets/RunnerControl/Sources/RunnerPage.swift
++++ b/Targets/RunnerControl/Sources/RunnerPage.swift
+@@ -21,6 +21,7 @@ struct RunnerPage: View {
+         let checkForUpdates: () -> Void
+         let setAutomaticChecks: (Bool) -> Void
+         let setAutomaticDownloads: (Bool) -> Void
++        let openSettings: () -> Void
+     }
+     let props: Props
+     let reactions: Reactions
+@@ -80,6 +81,9 @@ struct RunnerPage: View {
+                 Toggle("Устанавливать автоматически", isOn: Binding(get: { props.automaticDownloads }, set: reactions.setAutomaticDownloads))
+                     .disabled(!props.automaticChecks)
+             }.font(.system(size: 11)).toggleStyle(.switch).controlSize(.mini)
++            Button("Раннеры и настройки…", action: reactions.openSettings)
++                .buttonStyle(.bordered)
++                .controlSize(.regular)
+             Divider()
+             HStack {
+                 Text("RELUX WORKS").font(.system(size: 9, weight: .semibold, design: .monospaced)).tracking(1.5).foregroundStyle(.tertiary)
+diff --git a/ios-app-manager.json b/ios-app-manager.json
+index 37974b8..098beb1 100644
+--- a/ios-app-manager.json
++++ b/ios-app-manager.json
+@@ -29,7 +29,8 @@
+       "SUPublicEDKey": "39zxlS5xFUIf4aqaPWBf2oIi1VBkQ/TdPYLifXzWnS8=",
+       "SUEnableAutomaticChecks": true,
+       "SUAutomaticallyUpdate": true,
+-      "SUVerifyUpdateBeforeExtraction": true
++      "SUVerifyUpdateBeforeExtraction": true,
++      "GitHubAppClientID": ""
+     }
+   }
+ }

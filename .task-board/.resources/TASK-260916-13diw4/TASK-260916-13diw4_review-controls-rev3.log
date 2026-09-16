@@ -1,0 +1,30 @@
+[0/1] Planning build
+Building for debugging...
+[0/2] Write swift-version--58304C5D6DBC2206.txt
+Build complete! (0.78s)
+Test Suite 'Selected tests' started at 2026-09-16 09:28:36.828.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 09:28:36.849.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 09:28:36.849.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 09:28:36.849.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.021) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test remoteDuplicateWithoutReplaceIsRefusedBeforeToken() started.
+􀟈  Test repositoryConfirmationFollowsPagination() started.
+􀟈  Test orgListRequestsUseQueryNotEncodedPath() started.
+􀟈  Test labelsWithMismatchedRemoteIdentityAreRefused() started.
+􀟈  Test downloadRefusesMissingChecksum() started.
+􀟈  Test serviceCannotClaimDoneBeforeRegistration() started.
+􀟈  Test resolvePatchesDeniedPublicReposOnOwnedGroup() started.
+􀟈  Test changedScopeMustNotReuseRegistrationOrRemoteID() started.
+􁁛  Test resolvePatchesDeniedPublicReposOnOwnedGroup() passed after 0.009 seconds.
+􁁛  Test repositoryConfirmationFollowsPagination() passed after 0.011 seconds.
+􁁛  Test downloadRefusesMissingChecksum() passed after 0.161 seconds.
+􁁛  Test remoteDuplicateWithoutReplaceIsRefusedBeforeToken() passed after 0.295 seconds.
+􁁛  Test serviceCannotClaimDoneBeforeRegistration() passed after 0.336 seconds.
+􁁛  Test changedScopeMustNotReuseRegistrationOrRemoteID() passed after 0.337 seconds.
+􁁛  Test orgListRequestsUseQueryNotEncodedPath() passed after 0.340 seconds.
+􁁛  Test labelsWithMismatchedRemoteIdentityAreRefused() passed after 0.340 seconds.
+􁁛  Test run with 8 tests in 0 suites passed after 0.341 seconds.

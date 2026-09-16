@@ -1,0 +1,161 @@
+$ swift test --package-path Packages/RunnerControlCore --scratch-path .temp/landing-core-tests
+[0/1] Planning build
+Building for debugging...
+[0/5] Write sources
+[2/5] Write swift-version--58304C5D6DBC2206.txt
+[4/13] Compiling RunnerControlCore GitHubRedaction.swift
+[5/13] Compiling RunnerControlCore GitHubAppConfig.swift
+[6/13] Compiling RunnerControlCore GitHubAuth+Flow.swift
+[7/13] Compiling RunnerControlCore GitHubAuth+State.swift
+[8/13] Compiling RunnerControlCore GitHubAuth+State+Reducer.swift
+[9/13] Compiling RunnerControlCore GitHubTokenRefresh.swift
+[10/13] Emitting module RunnerControlCore
+[11/13] Compiling RunnerControlCore GitHubSessionIdentityStore.swift
+[12/15] Compiling RunnerControlCore RunnerRuntime.swift
+[13/15] Compiling RunnerControlCore GitHubAuth+Module.swift
+[14/20] Compiling RunnerControlCoreTests GitHubTransportTests.swift
+[15/20] Compiling RunnerControlCoreTests RunnerControlCoreTests.swift
+[16/20] Compiling RunnerControlCoreTests RunnerDiscoveryTests.swift
+[17/20] Emitting module RunnerControlCoreTests
+[18/20] Compiling RunnerControlCoreTests GitHubAuthFlowTests.swift
+[18/20] Write Objects.LinkFileList
+[19/20] Linking RunnerControlCorePackageTests
+Build complete! (16.12s)
+Test Suite 'All tests' started at 2026-09-16 07:16:28.368.
+Test Suite 'All tests' passed at 2026-09-16 07:16:28.394.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.026) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test apiClientSendsBearerAndDecodesUser() started.
+􀟈  Test startWaitsForRunningState() started.
+􀟈  Test devicePollRejectsPATShapedToken() started.
+􀟈  Test flowLogoutClearsKeychainAndStopsSync() started.
+􀟈  Test flowRestoreSessionConnectsFromPersistedIdentityThenLogoutClearsBoth() started.
+􀟈  Test flowPublishesFailureAndClearsPendingState() started.
+􀟈  Test enterpriseConfigUsesHostScopedEndpoints() started.
+􀟈  Test refreshRejectsFineGrainedPATWithoutSaving() started.
+􀟈  Test flowRestoreSessionWithoutIdentityIsNoop() started.
+􀟈  Test flowLoginPersistsSessionIdentityForLaterRestore() started.
+􀟈  Test flowSlowDownIncreasesIntervalThenSucceeds() started.
+􀟈  Test githubReducerRestoreStartedShowsVerifyingAccount() started.
+􀟈  Test githubModuleRegistersStateAndFlow() started.
+􀙟  Test realLaunchAgentLifecycleWithoutGitHubJobs() skipped.
+􀟈  Test flowIgnoresForeignEffectsAndSelectsRepositories() started.
+􀟈  Test flowLoginSuccessDrivesProductionEffectsToConnected() started.
+􀟈  Test flowExpiredCodeFailsWithNewCode() started.
+􀟈  Test commandExecutorHandlesLargeOutputAndExitStatus() started.
+􀟈  Test slowDownAddsFiveSeconds() started.
+􀟈  Test apiClientDecodesInstallationsAndRepositories() started.
+􀟈  Test permissionErrorsNeverTriggerBootstrap() started.
+􀟈  Test flowLoginPhase401DuringInstallationsRequiresRelogin() started.
+􀟈  Test missingDiscoveryRootsReturnEmpty() started.
+􀟈  Test flow401DuringRefreshRequiresRelogin() started.
+􀟈  Test flow403DuringRefreshKeepsConnectedWithStaleError() started.
+􀟈  Test flowMissingClientIDFailsWithExactBinding() started.
+􀟈  Test auditRejectsEmbeddedSecrets() started.
+􀟈  Test keychainRoundTripsAndDeletesScopedRecords() started.
+􀟈  Test flowDeniedFailsWithNewCode() started.
+􀟈  Test apiClientMaps401And403() started.
+􀟈  Test keychainDeleteAllSweepsOnlyMatchingClient() started.
+􀟈  Test refreshMapsInvalidGrantToRevoked() started.
+􀟈  Test flowRefreshInstallationsRefreshesExpiringTokenViaProductionPath() started.
+􀟈  Test flowRestoreSessionWithRevokedTokenRequiresReloginAndClearsStorage() started.
+􀟈  Test reducerPreservesUnrelatedActionsAndCleansState() started.
+􀟈  Test flowConcurrentRefreshAndSelectCoalesceToSingleRefresh() started.
+􀟈  Test patGuardRejectsClassicAndFineGrainedPAT() started.
+􀟈  Test flowCancellationDestroysCodeAndStopsPoll() started.
+􀟈  Test startIsIdempotentAndStopUsesServiceIdentity() started.
+􀟈  Test configAuditRunsThroughCurrentBundle() started.
+􀟈  Test configReportsExactMissingBinding() started.
+􀟈  Test rejectsSpacesBeforeLaunching(inWorkFolder:) started.
+􀟈  Test flowRefreshInstallationsWithInvalidGrantDuringRefreshRequiresRelogin() started.
+􀟈  Test flowCancelWhileConnectedRestoresConnected() started.
+􀟈  Test distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test apiClientRefusesPATWithoutNetwork() started.
+􀟈  Test refreshFailsClosedWithoutRefreshToken() started.
+􀟈  Test redactionScrubsExactSecretsAndJSONShapes() started.
+􀟈  Test restMapperSeparatesUnauthorizedForbiddenSSORateLimit() started.
+􀟈  Test deviceCodeRequestDecodesAndPostsClientID() started.
+􀟈  Test refreshSavesAtomicallyAndCoalescesConcurrentCallers() started.
+􀟈  Test canStopAfterRegistrationIsDeleted() started.
+􀟈  Test discoversManualAndStandardServicesWithoutMachineNames() started.
+􀟈  Test realKeychainBackendRoundTripsUniqueRecord() started.
+􀟈  Test devicePollMapsAllTerminalBodiesOnHTTP200() started.
+􀟈  Test githubReducerCoversLoginLifecycleAndIgnoresForeignActions() started.
+􀟈  Test case passing 1 argument inWorkFolder → false to rejectsSpacesBeforeLaunching(inWorkFolder:) started.
+􀟈  Test case passing 1 argument inWorkFolder → true to rejectsSpacesBeforeLaunching(inWorkFolder:) started.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 0, output: "state = running\npid = 23"), RunnerControlCore.Runners.Status.running) to distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 0, output: "state = exited"), RunnerControlCore.Runners.Status.failed) to distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 113, output: "Could not find service foo"), RunnerControlCore.Runners.Status.stopped) to distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 1, output: "Operation not permitted"), RunnerControlCore.Runners.Status.unknown) to distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 113, output: "Could not find domain"), RunnerControlCore.Runners.Status.unknown) to distinguishesStoppedFromPermissionFailure(value:) started.
+􁁛  Test enterpriseConfigUsesHostScopedEndpoints() passed after 0.011 seconds.
+􁁛  Test devicePollRejectsPATShapedToken() passed after 0.011 seconds.
+􁁛  Test apiClientSendsBearerAndDecodesUser() passed after 0.011 seconds.
+􁁛  Test flowIgnoresForeignEffectsAndSelectsRepositories() passed after 0.011 seconds.
+􁁛  Test slowDownAddsFiveSeconds() passed after 0.012 seconds.
+􁁛  Test apiClientDecodesInstallationsAndRepositories() passed after 0.012 seconds.
+􁁛  Test auditRejectsEmbeddedSecrets() passed after 0.012 seconds.
+􁁛  Test flowMissingClientIDFailsWithExactBinding() passed after 0.012 seconds.
+􁁛  Test keychainRoundTripsAndDeletesScopedRecords() passed after 0.012 seconds.
+􁁛  Test apiClientMaps401And403() passed after 0.012 seconds.
+􁁛  Test flowRestoreSessionConnectsFromPersistedIdentityThenLogoutClearsBoth() passed after 0.013 seconds.
+􁁛  Test keychainDeleteAllSweepsOnlyMatchingClient() passed after 0.012 seconds.
+􁁛  Test missingDiscoveryRootsReturnEmpty() passed after 0.012 seconds.
+􁁛  Test patGuardRejectsClassicAndFineGrainedPAT() passed after 0.012 seconds.
+􁁛  Test flowRestoreSessionWithRevokedTokenRequiresReloginAndClearsStorage() passed after 0.013 seconds.
+􁁛  Test flowCancellationDestroysCodeAndStopsPoll() passed after 0.013 seconds.
+􁁛  Test distinguishesStoppedFromPermissionFailure(value:) with 5 test cases passed after 0.012 seconds.
+􁁛  Test apiClientRefusesPATWithoutNetwork() passed after 0.012 seconds.
+􁁛  Test refreshFailsClosedWithoutRefreshToken() passed after 0.012 seconds.
+􁁛  Test startIsIdempotentAndStopUsesServiceIdentity() passed after 0.013 seconds.
+􁁛  Test startWaitsForRunningState() passed after 0.014 seconds.
+􁁛  Test rejectsSpacesBeforeLaunching(inWorkFolder:) with 2 test cases passed after 0.013 seconds.
+􁁛  Test permissionErrorsNeverTriggerBootstrap() passed after 0.013 seconds.
+􁁛  Test redactionScrubsExactSecretsAndJSONShapes() passed after 0.012 seconds.
+􁁛  Test restMapperSeparatesUnauthorizedForbiddenSSORateLimit() passed after 0.012 seconds.
+􁁛  Test deviceCodeRequestDecodesAndPostsClientID() passed after 0.012 seconds.
+􁁛  Test devicePollMapsAllTerminalBodiesOnHTTP200() passed after 0.011 seconds.
+􁁛  Test githubReducerRestoreStartedShowsVerifyingAccount() passed after 0.014 seconds.
+􁁛  Test reducerPreservesUnrelatedActionsAndCleansState() passed after 0.013 seconds.
+􁁛  Test refreshRejectsFineGrainedPATWithoutSaving() passed after 0.014 seconds.
+􁁛  Test githubReducerCoversLoginLifecycleAndIgnoresForeignActions() passed after 0.012 seconds.
+􁁛  Test refreshMapsInvalidGrantToRevoked() passed after 0.014 seconds.
+􁁛  Test githubModuleRegistersStateAndFlow() passed after 0.014 seconds.
+􁁛  Test refreshSavesAtomicallyAndCoalescesConcurrentCallers() passed after 0.012 seconds.
+􁁛  Test flowPublishesFailureAndClearsPendingState() passed after 0.015 seconds.
+􁁛  Test configReportsExactMissingBinding() passed after 0.014 seconds.
+􁁛  Test canStopAfterRegistrationIsDeleted() passed after 0.013 seconds.
+􁁛  Test configAuditRunsThroughCurrentBundle() passed after 0.015 seconds.
+􁁛  Test discoversManualAndStandardServicesWithoutMachineNames() passed after 0.021 seconds.
+􁁛  Test flowSlowDownIncreasesIntervalThenSucceeds() passed after 0.024 seconds.
+􁁛  Test flowLoginPersistsSessionIdentityForLaterRestore() passed after 0.024 seconds.
+􁁛  Test flowLoginSuccessDrivesProductionEffectsToConnected() passed after 0.024 seconds.
+􁁛  Test flowExpiredCodeFailsWithNewCode() passed after 0.023 seconds.
+􁁛  Test flowLoginPhase401DuringInstallationsRequiresRelogin() passed after 0.024 seconds.
+􁁛  Test flow401DuringRefreshRequiresRelogin() passed after 0.024 seconds.
+􁁛  Test flow403DuringRefreshKeepsConnectedWithStaleError() passed after 0.024 seconds.
+􁁛  Test flowDeniedFailsWithNewCode() passed after 0.025 seconds.
+􁁛  Test flowRefreshInstallationsWithInvalidGrantDuringRefreshRequiresRelogin() passed after 0.025 seconds.
+􁁛  Test flowRefreshInstallationsRefreshesExpiringTokenViaProductionPath() passed after 0.026 seconds.
+􁁛  Test flowConcurrentRefreshAndSelectCoalesceToSingleRefresh() passed after 0.025 seconds.
+􁁛  Test flowCancelWhileConnectedRestoresConnected() passed after 0.029 seconds.
+􁁛  Test commandExecutorHandlesLargeOutputAndExitStatus() passed after 0.107 seconds.
+􁁛  Test flowRestoreSessionWithoutIdentityIsNoop() passed after 0.107 seconds.
+􁁛  Test flowLogoutClearsKeychainAndStopsSync() passed after 0.126 seconds.
+􁁛  Test realKeychainBackendRoundTripsUniqueRecord() passed after 0.181 seconds.
+􁁛  Test run with 56 tests in 0 suites passed after 0.185 seconds.
+[exit 0]
+$ python3 -m unittest discover -s Scripts/tests -v
+test_appcast_archive_binding (test_release_metadata.ReleaseMetadataTests.test_appcast_archive_binding) ... ok
+test_builds_increase_between_attempts_and_runs (test_release_metadata.ReleaseMetadataTests.test_builds_increase_between_attempts_and_runs) ... ok
+test_rejects_wrong_feed (test_release_metadata.ReleaseMetadataTests.test_rejects_wrong_feed) ... ok
+test_rejects_wrong_tag_or_identity (test_release_metadata.ReleaseMetadataTests.test_rejects_wrong_tag_or_identity) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.006s
+
+OK
+[exit 0]
+coverage_unit=exact_command_shard required=2 green=2 failed=0 missing=0 test_case_coverage=unknown

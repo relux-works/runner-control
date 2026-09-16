@@ -1,0 +1,56 @@
+[0/1] Planning build
+Building for debugging...
+[0/2] Write swift-version--58304C5D6DBC2206.txt
+Build complete! (1.47s)
+Test Suite 'Selected tests' started at 2026-09-16 12:17:00.447.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 12:17:00.463.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 12:17:00.463.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 12:17:00.463.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.016) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test reviewerStaleFailureCannotUnlockNewOperation() started.
+􀟈  Test reviewerLoginDuringRestoreIsNotClobberedByRestore() started.
+􀟈  Test reviewerCaseAliasMissingLeafCannotBypassDirectoryLease() started.
+􀟈  Test beginDraftDuringDownloadKeepsDirectoryLease() started.
+􀟈  Test reviewerUnicodeCaseAliasCannotBypassDirectoryLease() started.
+􀟈  Test reviewerLogoutDuringRefreshLeavesNoTokensBehind() started.
+􀟈  Test staleRegisterFailureDoesNotOverwriteBusyFailure() started.
+􀟈  Test reviewerRetryCannotRunTwoConfigsInSameDirectory() started.
+􀟈  Test reviewerSymlinkAliasCannotBypassDirectoryLease() started.
+􀟈  Test reviewerInFlightInstallCannotRepopulateChangedDraft() started.
+􀟈  Test reviewerLogoutDuringRefreshDoesNotEmitSyncAfterLoggedOut() started.
+􀟈  Test reviewerChangedWorkFolderCannotReuseConfiguredSuccess() started.
+􀟈  Test resetDuringDownloadKeepsDirectoryLeaseUntilSettled() started.
+􀟈  Test reviewerForeignServerIdentityCannotAuthorizeLabels() started.
+􀟈  Test secondInstallForAnyDirectoryRefusedWhileInstallerBusy() started.
+􀟈  Test reviewerLogoutDuringRestoreDoesNotReviveSession() started.
+􀟈  Test cancelDuringConfigKeepsLeaseAndRecoversAfterSettle() started.
+case-alias evidence: calls=1, lowerInode=Optional(461094231), upperInode=Optional(461094231)
+􁁛  Test reviewerCaseAliasMissingLeafCannotBypassDirectoryLease() passed after 0.516 seconds.
+􁁛  Test reviewerStaleFailureCannotUnlockNewOperation() passed after 0.524 seconds.
+􁁛  Test cancelDuringConfigKeepsLeaseAndRecoversAfterSettle() passed after 0.542 seconds.
+RA1 sequence: ["restoreStarted", "loggedOut"]
+􁁛  Test reviewerChangedWorkFolderCannotReuseConfiguredSuccess() passed after 0.550 seconds.
+􁁛  Test reviewerInFlightInstallCannotRepopulateChangedDraft() passed after 0.551 seconds.
+case-alias evidence: calls=1, lowerInode=Optional(461094247), upperInode=Optional(461094247)
+􁁛  Test reviewerRetryCannotRunTwoConfigsInSameDirectory() passed after 0.562 seconds.
+􁁛  Test resetDuringDownloadKeepsDirectoryLeaseUntilSettled() passed after 0.576 seconds.
+􁁛  Test reviewerForeignServerIdentityCannotAuthorizeLabels() passed after 0.592 seconds.
+􁁛  Test beginDraftDuringDownloadKeepsDirectoryLease() passed after 0.599 seconds.
+􁁛  Test reviewerUnicodeCaseAliasCannotBypassDirectoryLease() passed after 0.615 seconds.
+􁁛  Test reviewerSymlinkAliasCannotBypassDirectoryLease() passed after 0.638 seconds.
+􁁛  Test reviewerLogoutDuringRestoreDoesNotReviveSession() passed after 0.654 seconds.
+􁁛  Test secondInstallForAnyDirectoryRefusedWhileInstallerBusy() passed after 0.686 seconds.
+􁁛  Test staleRegisterFailureDoesNotOverwriteBusyFailure() passed after 0.711 seconds.
+RA4 sequence: ["loginStarted", "codeReceived", "accountVerified", "installationsLoaded", "syncFailed", "connected", "loggedOut"]
+􁁛  Test reviewerLogoutDuringRefreshLeavesNoTokensBehind() passed after 0.826 seconds.
+RA3 sequence: ["restoreStarted", "loginStarted", "codeReceived", "failed"]
+􁁛  Test reviewerLoginDuringRestoreIsNotClobberedByRestore() passed after 0.877 seconds.
+RA2 sequence: ["loginStarted", "codeReceived", "accountVerified", "installationsLoaded", "syncFailed", "connected", "loggedOut"]
+􁁛  Test reviewerLogoutDuringRefreshDoesNotEmitSyncAfterLoggedOut() passed after 0.893 seconds.
+􁁛  Test run with 17 tests in 0 suites passed after 0.894 seconds.
+
+EXIT:0

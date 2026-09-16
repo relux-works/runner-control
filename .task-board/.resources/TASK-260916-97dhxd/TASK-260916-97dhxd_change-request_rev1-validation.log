@@ -1,0 +1,194 @@
+$ swift test --package-path Packages/RunnerControlCore --scratch-path .temp/landing-core-tests
+Fetching https://github.com/relux-works/swift-relux.git from cache
+Fetched https://github.com/relux-works/swift-relux.git from cache (0.08s)
+Creating working copy for https://github.com/relux-works/swift-relux.git
+Working copy of https://github.com/relux-works/swift-relux.git resolved at 9.2.0
+Building for debugging...
+[0/8] /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-36d1jg/worktree/.temp/landing-core-tests/arm64-apple-macosx/debug/RunnerControlCorePackageTests.derived/runner.swift
+[0/8] Write sources
+[5/8] Write swift-version--58304C5D6DBC2206.txt
+[7/38] Compiling Relux Relux+Logger+EnumReflectible.swift
+[8/38] Compiling Relux Relux+Logger.swift
+[9/38] Compiling Relux Relux+Module.swift
+[10/38] Compiling Relux Relux+Navigation.swift
+[11/42] Compiling Relux TypeKeyable.swift
+[12/42] Compiling Relux timestamp.swift
+[13/42] Compiling Relux Relux+ExecutionType.swift
+[14/42] Compiling Relux Seconds.swift
+[15/42] Compiling Relux Relux+Testing+MockModule+Saga.swift
+[16/42] Compiling Relux Relux+Testing+MockModule+State.swift
+[17/42] Compiling Relux Relux+Testing+MockModule.swift
+[18/42] Compiling Relux Relux+Testing.swift
+[19/42] Compiling Relux Relux+Flow.swift
+[20/42] Compiling Relux Relux+RootSaga.swift
+[21/42] Compiling Relux Relux+Saga.swift
+[22/42] Compiling Relux Relux+State.swift
+[23/42] Compiling Relux Relux+Action.swift
+[24/42] Compiling Relux Relux+ActionResult+Reduced.swift
+[25/42] Compiling Relux Relux+ActionResult.swift
+[26/42] Compiling Relux Relux+ActionResultBuilder.swift
+[27/42] Compiling Relux Relux+Subscriber.swift
+[28/42] Compiling Relux Sequence+AsSet.swift
+[29/42] Compiling Relux AsyncLock.swift
+[30/42] Compiling Relux AsyncUtils.swift
+[31/42] Compiling Relux Optional+isNil.swift
+[32/42] Emitting module Relux
+[33/42] Compiling Relux Relux.Effect.swift
+[34/42] Compiling Relux Relux+Dispatcher+Global.swift
+[35/42] Compiling Relux Relux+Dispatcher+Interface.swift
+[36/42] Compiling Relux Relux+Dispatcher.swift
+[37/42] Compiling Relux Relux+Store.swift
+[38/42] Compiling Relux Relux.swift
+[39/42] Compiling Relux LockedState.swift
+[40/42] Compiling Relux Relux+Testing+Logger.swift
+[41/64] Compiling RunnerControlCore GitHubAuth+State+Reducer.swift
+[42/64] Compiling RunnerControlCore GitHubAuth+State.swift
+[43/64] Compiling RunnerControlCore GitHubAuth.swift
+[44/67] Compiling RunnerControlCore Runners+Models.swift
+[45/67] Compiling RunnerControlCore Runners+Module.swift
+[46/67] Compiling RunnerControlCore Runners+Service.swift
+[47/67] Compiling RunnerControlCore Runners+State+Reducer.swift
+[48/67] Compiling RunnerControlCore Runners+State.swift
+[49/67] Compiling RunnerControlCore Runners.swift
+[50/67] Compiling RunnerControlCore GitHubTokenRefresh.swift
+[51/67] Compiling RunnerControlCore GitHubTransport.swift
+[52/67] Compiling RunnerControlCore RunnerControlCore.swift
+[53/67] Compiling RunnerControlCore RunnerDiscovery.swift
+[54/67] Compiling RunnerControlCore RunnerRuntime.swift
+[55/67] Compiling RunnerControlCore Runners+Flow.swift
+[56/67] Emitting module RunnerControlCore
+[57/67] Compiling RunnerControlCore GitHubDeviceFlow.swift
+[58/67] Compiling RunnerControlCore GitHubKeychainStore.swift
+[59/67] Compiling RunnerControlCore GitHubRedaction.swift
+[60/67] Compiling RunnerControlCore CommandExecutor.swift
+[61/67] Compiling RunnerControlCore GitHubAPIClient.swift
+[62/67] Compiling RunnerControlCore GitHubAppConfig.swift
+[63/67] Compiling RunnerControlCore GitHubAuth+Flow.swift
+[64/67] Compiling RunnerControlCore GitHubAuth+Models.swift
+[65/67] Compiling RunnerControlCore GitHubAuth+Module.swift
+[66/72] Compiling RunnerControlCoreTests RunnerDiscoveryTests.swift
+[67/72] Compiling RunnerControlCoreTests RunnerControlCoreTests.swift
+[68/72] Compiling RunnerControlCoreTests GitHubAuthFlowTests.swift
+[69/72] Emitting module RunnerControlCoreTests
+[70/72] Compiling RunnerControlCoreTests GitHubTransportTests.swift
+[71/74] Emitting module RunnerControlCorePackageTests
+[72/74] Compiling RunnerControlCorePackageTests runner.swift
+[72/74] Write Objects.LinkFileList
+[73/74] Linking RunnerControlCorePackageTests
+Build complete! (60.85s)
+Test Suite 'All tests' started at 2026-09-16 06:44:03.839.
+Test Suite 'All tests' passed at 2026-09-16 06:44:03.870.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.031) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test auditRejectsEmbeddedSecrets() started.
+􀟈  Test flow403DuringRefreshKeepsConnectedWithStaleError() started.
+􀟈  Test redactionScrubsExactSecretsAndJSONShapes() started.
+􀟈  Test flowDeniedFailsWithNewCode() started.
+􀟈  Test flowMissingClientIDFailsWithExactBinding() started.
+􀟈  Test apiClientDecodesInstallationsAndRepositories() started.
+􀟈  Test flow401DuringRefreshRequiresRelogin() started.
+􀟈  Test patGuardRejectsClassicAndFineGrainedPAT() started.
+􀟈  Test apiClientMaps401And403() started.
+􀟈  Test rejectsSpacesBeforeLaunching(inWorkFolder:) started.
+􀟈  Test restMapperSeparatesUnauthorizedForbiddenSSORateLimit() started.
+􀟈  Test flowIgnoresForeignEffectsAndSelectsRepositories() started.
+􀟈  Test distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test flowExpiredCodeFailsWithNewCode() started.
+􀟈  Test discoversManualAndStandardServicesWithoutMachineNames() started.
+􀟈  Test flowCancelWhileConnectedRestoresConnected() started.
+􀟈  Test enterpriseConfigUsesHostScopedEndpoints() started.
+􀟈  Test devicePollRejectsPATShapedToken() started.
+􀟈  Test configReportsExactMissingBinding() started.
+􀟈  Test permissionErrorsNeverTriggerBootstrap() started.
+􀟈  Test deviceCodeRequestDecodesAndPostsClientID() started.
+􀟈  Test flowLoginSuccessDrivesProductionEffectsToConnected() started.
+􀟈  Test flowSlowDownIncreasesIntervalThenSucceeds() started.
+􀟈  Test keychainRoundTripsAndDeletesScopedRecords() started.
+􀟈  Test reducerPreservesUnrelatedActionsAndCleansState() started.
+􀟈  Test flowCancellationDestroysCodeAndStopsPoll() started.
+􀟈  Test flowPublishesFailureAndClearsPendingState() started.
+􀟈  Test slowDownAddsFiveSeconds() started.
+􀟈  Test devicePollMapsAllTerminalBodiesOnHTTP200() started.
+􀟈  Test flowLogoutClearsKeychainAndStopsSync() started.
+􀟈  Test startIsIdempotentAndStopUsesServiceIdentity() started.
+􀟈  Test refreshSavesAtomicallyAndCoalescesConcurrentCallers() started.
+􀟈  Test apiClientRefusesPATWithoutNetwork() started.
+􀟈  Test githubModuleRegistersStateAndFlow() started.
+􀟈  Test githubReducerCoversLoginLifecycleAndIgnoresForeignActions() started.
+􀟈  Test startWaitsForRunningState() started.
+􀟈  Test realKeychainBackendRoundTripsUniqueRecord() started.
+􀟈  Test refreshMapsInvalidGrantToRevoked() started.
+􀙟  Test realLaunchAgentLifecycleWithoutGitHubJobs() skipped.
+􀟈  Test canStopAfterRegistrationIsDeleted() started.
+􀟈  Test missingDiscoveryRootsReturnEmpty() started.
+􀟈  Test keychainDeleteAllSweepsOnlyMatchingClient() started.
+􀟈  Test refreshFailsClosedWithoutRefreshToken() started.
+􀟈  Test apiClientSendsBearerAndDecodesUser() started.
+􀟈  Test commandExecutorHandlesLargeOutputAndExitStatus() started.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 0, output: "state = exited"), RunnerControlCore.Runners.Status.failed) to distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 113, output: "Could not find service foo"), RunnerControlCore.Runners.Status.stopped) to distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 1, output: "Operation not permitted"), RunnerControlCore.Runners.Status.unknown) to distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 113, output: "Could not find domain"), RunnerControlCore.Runners.Status.unknown) to distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 0, output: "state = running\npid = 23"), RunnerControlCore.Runners.Status.running) to distinguishesStoppedFromPermissionFailure(value:) started.
+􁁛  Test redactionScrubsExactSecretsAndJSONShapes() passed after 0.017 seconds.
+􁁛  Test flowMissingClientIDFailsWithExactBinding() passed after 0.017 seconds.
+􁁛  Test patGuardRejectsClassicAndFineGrainedPAT() passed after 0.017 seconds.
+􁁛  Test restMapperSeparatesUnauthorizedForbiddenSSORateLimit() passed after 0.017 seconds.
+􁁛  Test auditRejectsEmbeddedSecrets() passed after 0.017 seconds.
+􁁛  Test flowIgnoresForeignEffectsAndSelectsRepositories() passed after 0.018 seconds.
+􁁛  Test apiClientDecodesInstallationsAndRepositories() passed after 0.018 seconds.
+􀟈  Test case passing 1 argument inWorkFolder → false to rejectsSpacesBeforeLaunching(inWorkFolder:) started.
+􀟈  Test case passing 1 argument inWorkFolder → true to rejectsSpacesBeforeLaunching(inWorkFolder:) started.
+􁁛  Test apiClientMaps401And403() passed after 0.019 seconds.
+􁁛  Test distinguishesStoppedFromPermissionFailure(value:) with 5 test cases passed after 0.019 seconds.
+􁁛  Test enterpriseConfigUsesHostScopedEndpoints() passed after 0.019 seconds.
+􁁛  Test keychainRoundTripsAndDeletesScopedRecords() passed after 0.019 seconds.
+􁁛  Test slowDownAddsFiveSeconds() passed after 0.019 seconds.
+􁁛  Test deviceCodeRequestDecodesAndPostsClientID() passed after 0.020 seconds.
+􁁛  Test flowCancellationDestroysCodeAndStopsPoll() passed after 0.020 seconds.
+􁁛  Test apiClientRefusesPATWithoutNetwork() passed after 0.020 seconds.
+􁁛  Test devicePollMapsAllTerminalBodiesOnHTTP200() passed after 0.020 seconds.
+􁁛  Test devicePollRejectsPATShapedToken() passed after 0.021 seconds.
+􁁛  Test canStopAfterRegistrationIsDeleted() passed after 0.020 seconds.
+􁁛  Test keychainDeleteAllSweepsOnlyMatchingClient() passed after 0.020 seconds.
+􁁛  Test startIsIdempotentAndStopUsesServiceIdentity() passed after 0.021 seconds.
+􁁛  Test refreshFailsClosedWithoutRefreshToken() passed after 0.019 seconds.
+􁁛  Test startWaitsForRunningState() passed after 0.020 seconds.
+􁁛  Test apiClientSendsBearerAndDecodesUser() passed after 0.015 seconds.
+􁁛  Test permissionErrorsNeverTriggerBootstrap() passed after 0.021 seconds.
+􁁛  Test reducerPreservesUnrelatedActionsAndCleansState() passed after 0.022 seconds.
+􁁛  Test githubReducerCoversLoginLifecycleAndIgnoresForeignActions() passed after 0.021 seconds.
+􁁛  Test refreshMapsInvalidGrantToRevoked() passed after 0.021 seconds.
+􁁛  Test configReportsExactMissingBinding() passed after 0.022 seconds.
+􁁛  Test githubModuleRegistersStateAndFlow() passed after 0.021 seconds.
+􁁛  Test refreshSavesAtomicallyAndCoalescesConcurrentCallers() passed after 0.022 seconds.
+􁁛  Test flowPublishesFailureAndClearsPendingState() passed after 0.022 seconds.
+􁁛  Test missingDiscoveryRootsReturnEmpty() passed after 0.021 seconds.
+􁁛  Test rejectsSpacesBeforeLaunching(inWorkFolder:) with 2 test cases passed after 0.026 seconds.
+􁁛  Test flowExpiredCodeFailsWithNewCode() passed after 0.028 seconds.
+􁁛  Test flowCancelWhileConnectedRestoresConnected() passed after 0.028 seconds.
+􁁛  Test flowDeniedFailsWithNewCode() passed after 0.029 seconds.
+􁁛  Test flow403DuringRefreshKeepsConnectedWithStaleError() passed after 0.029 seconds.
+􁁛  Test flow401DuringRefreshRequiresRelogin() passed after 0.029 seconds.
+􁁛  Test flowSlowDownIncreasesIntervalThenSucceeds() passed after 0.029 seconds.
+􁁛  Test flowLoginSuccessDrivesProductionEffectsToConnected() passed after 0.029 seconds.
+􁁛  Test discoversManualAndStandardServicesWithoutMachineNames() passed after 0.032 seconds.
+􁁛  Test commandExecutorHandlesLargeOutputAndExitStatus() passed after 0.120 seconds.
+􁁛  Test flowLogoutClearsKeychainAndStopsSync() passed after 0.139 seconds.
+􁁛  Test realKeychainBackendRoundTripsUniqueRecord() passed after 0.212 seconds.
+􁁛  Test run with 45 tests in 0 suites passed after 0.215 seconds.
+[exit 0]
+$ python3 -m unittest discover -s Scripts/tests -v
+test_appcast_archive_binding (test_release_metadata.ReleaseMetadataTests.test_appcast_archive_binding) ... ok
+test_builds_increase_between_attempts_and_runs (test_release_metadata.ReleaseMetadataTests.test_builds_increase_between_attempts_and_runs) ... ok
+test_rejects_wrong_feed (test_release_metadata.ReleaseMetadataTests.test_rejects_wrong_feed) ... ok
+test_rejects_wrong_tag_or_identity (test_release_metadata.ReleaseMetadataTests.test_rejects_wrong_tag_or_identity) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.007s
+
+OK
+[exit 0]
+coverage_unit=exact_command_shard required=2 green=2 failed=0 missing=0 test_case_coverage=unknown

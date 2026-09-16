@@ -1,0 +1,11 @@
+--- 
++++ 
+@@ -1317,7 +1317,7 @@
+     /// reused across remove/relink/re-import: a later operation mints a new
+     /// UUID that an in-flight predecessor cannot equal.
+     private func beginGroupAccessOperation(id: String) -> UUID {
+-        let owner = UUID()
++        let owner = groupAccessOwner[id] == nil ? UUID(uuidString: "00000000-0000-0000-0000-000000000001")! : UUID()
+         groupAccessOwner[id] = owner
+         return owner
+     }

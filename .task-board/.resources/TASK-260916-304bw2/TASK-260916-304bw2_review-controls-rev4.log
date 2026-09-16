@@ -1,0 +1,31 @@
+Building for debugging...
+[0/2] Write swift-version--58304C5D6DBC2206.txt
+Build complete! (0.57s)
+Test Suite 'Selected tests' started at 2026-09-16 15:04:39.379.
+Test Suite 'RunnerControlCorePackageTests.xctest' started at 2026-09-16 15:04:39.413.
+Test Suite 'RunnerControlCorePackageTests.xctest' passed at 2026-09-16 15:04:39.413.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'Selected tests' passed at 2026-09-16 15:04:39.413.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.035) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Test reviewR3SameAccountReloginDuringRemoveTokenMustRefuseSideEffect() started.
+􀟈  Test relinkRefusesChangedScopeAndRequiresReload() started.
+􀟈  Test reviewR3SameAccountReloginDuringPutMustNotPublishAccess() started.
+􀟈  Test relinkSameIdentityMoveRequiresReload() started.
+􀟈  Test reviewR3RelinkMustNotRebindLoadedEditorToOtherOrg() started.
+􀟈  Test applySucceedsAfterTokenRefreshWithinSameLogin() started.
+􀟈  Test unregisterRetryInNewIncarnationSucceeds() started.
+􀟈  Test reviewR3SiblingLoadDuringReloginMustNotPublishAccess() started.
+􁁛  Test reviewR3SameAccountReloginDuringPutMustNotPublishAccess() passed after 0.053 seconds.
+􁁛  Test reviewR3RelinkMustNotRebindLoadedEditorToOtherOrg() passed after 0.064 seconds.
+􁁛  Test applySucceedsAfterTokenRefreshWithinSameLogin() passed after 0.064 seconds.
+􁁛  Test reviewR3SameAccountReloginDuringRemoveTokenMustRefuseSideEffect() passed after 0.077 seconds.
+􁁛  Test reviewR3SiblingLoadDuringReloginMustNotPublishAccess() passed after 0.085 seconds.
+􁁛  Test unregisterRetryInNewIncarnationSucceeds() passed after 0.093 seconds.
+􁁛  Test relinkRefusesChangedScopeAndRequiresReload() passed after 0.093 seconds.
+􁁛  Test relinkSameIdentityMoveRequiresReload() passed after 0.121 seconds.
+􁁛  Test run with 8 tests in 0 suites passed after 0.122 seconds.
+
+[exit 0]

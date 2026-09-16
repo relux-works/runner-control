@@ -1,0 +1,1 @@
+Revision 6 review: R5-F1 closed by non-reusable UUID owner. Exact remove/reimport regression passes; narrowing owner-reuse mutant fails both original assertions while overlap/retry controls remain green. Restored candidate passes 16 focused functions. Verdict accepted; integration and release not yet claimed. Production untouched.

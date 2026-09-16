@@ -1,0 +1,42 @@
+=== REV2 MUTANT LOG 2026-09-16T03:14:53Z ===
+--- R1 ---
+􀟈  Test run started.
+􀢄  Test flowRefreshInstallationsRefreshesExpiringTokenViaProductionPath() recorded an issue at GitHubAuthFlowTests.swift:462:5: Expectation failed: await waitForLoggedActions(logger, count: 8)
+􀢄  Test flowRefreshInstallationsRefreshesExpiringTokenViaProductionPath() recorded an issue at GitHubAuthFlowTests.swift:464:5: Expectation failed: (tokenPosts.count → 1) == 2
+􀢄  Test flowRefreshInstallationsRefreshesExpiringTokenViaProductionPath() recorded an issue at GitHubAuthFlowTests.swift:465:5: Expectation failed: await credentialStore.load(serverHost: "github.com", userID: 42, clientID: testConfig.clientID)?.accessToken == "ghu_new"
+􀢄  Test flowRefreshInstallationsRefreshesExpiringTokenViaProductionPath() recorded an issue at GitHubAuthFlowTests.swift:466:5: Expectation failed: githubActions(logger).contains { if case .syncSucceeded = $0 { true } else { false } }
+􀢄  Test run with 1 test in 0 suites failed after 2.038 seconds with 4 issues.
+--- R2 ---
+􀟈  Test run started.
+􀢄  Test refreshRejectsFineGrainedPATWithoutSaving() recorded an issue at GitHubTransportTests.swift:288:21: Issue recorded
+􀢄  Test refreshRejectsFineGrainedPATWithoutSaving() recorded an issue at GitHubTransportTests.swift:294:5: Expectation failed: await store.load(serverHost: "github.com", userID: 1, clientID: testConfig.clientID)?.accessToken == "ghu_old"
+􀢄  Test run with 1 test in 0 suites failed after 0.001 seconds with 2 issues.
+--- N1 ---
+􀟈  Test run started.
+􀢄  Test flowRestoreSessionWithRevokedTokenRequiresReloginAndClearsStorage() recorded an issue at GitHubAuthFlowTests.swift:424:21: Issue recorded
+􀢄  Test run with 1 test in 0 suites failed after 0.011 seconds with 1 issue.
+--- N2 ---
+􀟈  Test run started.
+􀢄  Test flowRestoreSessionConnectsFromPersistedIdentityThenLogoutClearsBoth() recorded an issue at GitHubAuthFlowTests.swift:409:5: Expectation failed: await identities.load() == nil
+􀢄  Test run with 1 test in 0 suites failed after 0.003 seconds with 1 issue.
+--- N3 ---
+􀟈  Test run started.
+􀢄  Test flowRefreshInstallationsRefreshesExpiringTokenViaProductionPath() recorded an issue at GitHubAuthFlowTests.swift:462:5: Expectation failed: await waitForLoggedActions(logger, count: 8)
+􀢄  Test flowRefreshInstallationsRefreshesExpiringTokenViaProductionPath() recorded an issue at GitHubAuthFlowTests.swift:464:5: Expectation failed: (tokenPosts.count → 1) == 2
+􀢄  Test flowRefreshInstallationsRefreshesExpiringTokenViaProductionPath() recorded an issue at GitHubAuthFlowTests.swift:465:5: Expectation failed: await credentialStore.load(serverHost: "github.com", userID: 42, clientID: testConfig.clientID)?.accessToken == "ghu_new"
+􀢄  Test flowRefreshInstallationsRefreshesExpiringTokenViaProductionPath() recorded an issue at GitHubAuthFlowTests.swift:466:5: Expectation failed: githubActions(logger).contains { if case .syncSucceeded = $0 { true } else { false } }
+􀢄  Test run with 1 test in 0 suites failed after 2.045 seconds with 4 issues.
+--- W1 ---
+􀟈  Test run started.
+􀢄  Test configAuditRunsThroughCurrentBundle() recorded an issue at GitHubTransportTests.swift:69:21: Issue recorded
+􀢄  Test run with 1 test in 0 suites failed after 0.013 seconds with 1 issue.
+--- L1 ---
+􀟈  Test run started.
+􀢄  Test flowLoginPhase401DuringInstallationsRequiresRelogin() recorded an issue at GitHubAuthFlowTests.swift:291:21: Issue recorded
+􀢄  Test run with 1 test in 0 suites failed after 0.055 seconds with 1 issue.
+=== FINAL SUITE ===
+􁁛  Test realKeychainBackendRoundTripsUniqueRecord() passed after 0.145 seconds.
+􁁛  Test run with 56 tests in 0 suites passed after 0.147 seconds.
+=== FINAL BUILD ===
+** BUILD SUCCEEDED ** [36.243 sec]
+
