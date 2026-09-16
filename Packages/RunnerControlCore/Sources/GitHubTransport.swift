@@ -129,6 +129,13 @@ public actor URLSessionGitHubTransport: GitHubHTTPTransport {
     public init(session: URLSession = .shared) { self.session = session }
     public func send(_ request: GitHubHTTPRequest) async throws -> GitHubHTTPResponse {
         var urlRequest = URLRequest(url: request.url)
+        // Current-state reads: the default protocol policy serves GitHub's
+        // cacheable GET responses (max-age=60) from URLCache, so a readback
+        // immediately after a successful mutation returns stale server
+        // state (live proof: repository IDs persisted by PUT, old list
+        // returned by GET seconds later). Every request this transport
+        // builds bypasses the local cache and hits the network.
+        urlRequest.cachePolicy = .reloadIgnoringLocalCacheData
         urlRequest.httpMethod = request.method
         urlRequest.httpBody = request.body
         for (key, value) in request.headers { urlRequest.setValue(value, forHTTPHeaderField: key) }

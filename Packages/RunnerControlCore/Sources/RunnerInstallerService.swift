@@ -72,6 +72,31 @@ public actor RunnerInstallerService {
         (try? FileManager.default.destinationOfSymbolicLink(atPath: path)) != nil
     }
 
+    /// Backstop for the alias ancestor walk. Real install paths hold a
+    /// handful of components (macOS PATH_MAX bounds lexical components to
+    /// roughly 512); lexical parents strictly shorten, so production never
+    /// reaches this. It exists only so a non-fixpoint parent step — the
+    /// hosted-CI `deletingLastPathComponent` spin, where
+    /// `parent.path == current.path` never becomes true — terminates by
+    /// refusing instead of hanging the caller.
+    nonisolated static let maxAliasWalkAncestors = 4096
+
+    /// Lexical parent of a path string, or nil at a root. Pure string
+    /// operation: every non-root input maps to a strictly shorter string,
+    /// so iteration always terminates regardless of Foundation version.
+    /// Trailing slashes are tolerated; a lone relative component resolves
+    /// to `"."` and `"."` itself is a root.
+    nonisolated static func lexicalParent(of path: String) -> String? {
+        var current = path
+        while current.hasSuffix("/") && current.count > 1 { current.removeLast() }
+        if current.isEmpty || current == "." || current == "/" { return nil }
+        if let slash = current.lastIndex(of: "/") {
+            if slash == current.startIndex { return "/" }
+            return String(current[..<slash])
+        }
+        return "."
+    }
+
     /// Refuses Finder-alias installation paths before any side effect. A
     /// Finder alias is not a transparent directory like a symlink: operating
     /// through its spelling would not operate on the target, so alias
@@ -81,19 +106,42 @@ public actor RunnerInstallerService {
     /// and `/tmp` links every temporary path resolves through. Concurrent
     /// symlink-alias mutations are serialized by the installer-wide lease,
     /// which compares nothing about paths.
+    ///
+    /// The ancestor walk is lexical and bounded: the start path is
+    /// standardized once, parents are derived by string prefix (never by
+    /// `deletingLastPathComponent`, whose root fixpoint varies across
+    /// Foundation versions and spun forever on hosted CI), and a walk that
+    /// still has not reached a root after `maxAliasWalkAncestors` steps
+    /// refuses fail-closed instead of hanging.
     nonisolated static func ensureNoAlias(at directory: URL) throws {
-        var current = URL(fileURLWithPath: directory.path).standardizedFileURL
-        while true {
-            if FileManager.default.fileExists(atPath: current.path),
-               !isSymlink(atPath: current.path),
-               (try? current.resourceValues(forKeys: [.isAliasFileKey]))?.isAliasFile == true {
+        try ensureNoAlias(at: directory, parentStep: Self.lexicalParent(of:))
+    }
+
+    /// Traversal seam for the alias walk. Production passes
+    /// `lexicalParent(of:)`; tests inject the legacy Foundation step to
+    /// model the hosted-CI behavior the bound defends against.
+    nonisolated static func ensureNoAlias(
+        at directory: URL,
+        parentStep: (String) -> String?
+    ) throws {
+        var current: String? = URL(fileURLWithPath: directory.path).standardizedFileURL.path
+        var checked = 0
+        while let path = current {
+            guard checked < maxAliasWalkAncestors else {
                 throw RunnerRegistration.RegistrationError.invalidDraft(
-                    "Installation path '\(directory.path)' resolves through a Finder alias at '\(current.path)'. Choose a direct folder path instead of an alias."
+                    "Installation path '\(directory.path)' could not be verified against Finder aliases " +
+                        "(ancestor walk did not terminate). Choose a direct folder path instead of an alias."
                 )
             }
-            let parent = current.deletingLastPathComponent()
-            if parent.path == current.path { break }
-            current = parent
+            checked += 1
+            if FileManager.default.fileExists(atPath: path),
+               !isSymlink(atPath: path),
+               (try? URL(fileURLWithPath: path).resourceValues(forKeys: [.isAliasFileKey]))?.isAliasFile == true {
+                throw RunnerRegistration.RegistrationError.invalidDraft(
+                    "Installation path '\(directory.path)' resolves through a Finder alias at '\(path)'. Choose a direct folder path instead of an alias."
+                )
+            }
+            current = parentStep(path)
         }
     }
 
