@@ -1,0 +1,80 @@
+name: Release DMG
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing vMAJOR.MINOR.PATCH tag on main
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: runner-control-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: [self-hosted, macOS, ARM64, macbook-iv]
+    environment: release
+    timeout-minutes: 90
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      NOTARY_PROFILE: RunnerControl-notary
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+      - name: Validate trusted release tag
+        shell: bash
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "$RELEASE_TAG^{commit}")"
+          git merge-base --is-ancestor HEAD origin/main
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo 'Release already exists. Inspect it before retrying; no published assets are overwritten.' >&2
+            exit 1
+          fi
+      - name: Release prerequisites
+        run: ./Scripts/release-preflight.sh
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.25.5'
+          cache: false
+      - name: Build pinned scaffold generator
+        shell: bash
+        run: |
+          git clone https://github.com/relux-works/skill-ios-app-manager.git "$RUNNER_TEMP/runner-control-generator-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          cd "$RUNNER_TEMP/runner-control-generator-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          git checkout --detach 755a29538dfe0867671ac4291b016bf42d93a299
+          cd tuist-starter
+          env -u GOROOT go build -o "$RUNNER_TEMP/runner-control-ios-app-manager" ./cmd/ios-app-manager
+          echo "IOS_APP_MANAGER=$RUNNER_TEMP/runner-control-ios-app-manager" >> "$GITHUB_ENV"
+      - name: Unit tests
+        run: |
+          swift test --package-path Packages/RunnerControlCore --scratch-path "$RUNNER_TEMP/runner-control-release-tests"
+          python3 -m unittest discover -s Scripts/tests -v
+      - name: Build, notarize, staple and sign appcast
+        id: package
+        run: ./Scripts/release.sh
+      - name: Publish complete GitHub Release
+        env:
+          RELEASE_DIST: ${{ steps.package.outputs.dist }}
+        shell: bash
+        run: |
+          gh release create "$RELEASE_TAG" --verify-tag --draft --title "Runner Control $RELEASE_TAG" --generate-notes
+          gh release upload "$RELEASE_TAG" "$RELEASE_DIST/RunnerControl.dmg" "$RELEASE_DIST/appcast.xml" "$RELEASE_DIST/SHA256SUMS"
+          gh release edit "$RELEASE_TAG" --draft=false --latest
+      - name: Preserve release logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .temp/release-*/archive.log
+            .temp/release-*/export.log
+            .temp/release-*/*-notary.json
+          if-no-files-found: ignore
+          retention-days: 14

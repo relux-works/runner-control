@@ -1,15 +1,35 @@
 {
- "app_name": "RunnerControl",
- "bundle_id": "works.relux.runnercontrol",
- "team_id": "262RZ595FP",
- "organization_name": "Relux Works",
- "marketing_version": "1.0.0",
- "project_version": "1",
- "swift_version": "6.0",
- "min_target": "14.0",
- "macos": {
-   "menu_bar": true,
-   "sandbox": false,
-   "packages": [{"url":"https://github.com/relux-works/swift-relux.git","version":"9.2.0","product":"Relux"}]
- }
+  "app_name": "RunnerControl",
+  "bundle_id": "works.relux.runnercontrol",
+  "team_id": "262RZ595FP",
+  "organization_name": "Relux Works",
+  "marketing_version": "1.1.0",
+  "project_version": "2",
+  "swift_version": "6.0",
+  "min_target": "14.0",
+  "macos": {
+    "menu_bar": true,
+    "sandbox": false,
+    "packages": [
+      {
+        "url": "https://github.com/relux-works/swift-relux.git",
+        "version": "9.2.0",
+        "product": "Relux"
+      },
+      {
+        "url": "https://github.com/sparkle-project/Sparkle",
+        "version": "2.10.0",
+        "product": "Sparkle",
+        "target": "app"
+      }
+    ],
+    "hardened_runtime": true,
+    "info_plist": {
+      "SUFeedURL": "https://github.com/relux-works/runner-control/releases/latest/download/appcast.xml",
+      "SUPublicEDKey": "39zxlS5xFUIf4aqaPWBf2oIi1VBkQ/TdPYLifXzWnS8=",
+      "SUEnableAutomaticChecks": true,
+      "SUAutomaticallyUpdate": true,
+      "SUVerifyUpdateBeforeExtraction": true
+    }
+  }
 }

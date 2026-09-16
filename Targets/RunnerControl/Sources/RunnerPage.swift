@@ -6,6 +6,9 @@ struct RunnerPage: View {
         let runners: [Runners.Snapshot]
         let changing: Set<String>
         let error: String?
+        let canCheckForUpdates: Bool
+        let automaticChecks: Bool
+        let automaticDownloads: Bool
     }
     struct Reactions {
         let setEnabled: (String, Bool) -> Void
@@ -15,6 +18,9 @@ struct RunnerPage: View {
         let openLogs: (Runners.Definition) -> Void
         let clearError: () -> Void
         let quit: () -> Void
+        let checkForUpdates: () -> Void
+        let setAutomaticChecks: (Bool) -> Void
+        let setAutomaticDownloads: (Bool) -> Void
     }
     let props: Props
     let reactions: Reactions
@@ -58,6 +64,18 @@ struct RunnerPage: View {
             }.controlSize(.regular)
             Text("CI включается вручную. После перезагрузки раннеры останутся выключенными.")
                 .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Divider()
+            VStack(alignment: .leading, spacing: 9) {
+                HStack {
+                    Text("Обновления").font(.system(size: 12, weight: .medium))
+                    Spacer()
+                    Button("Проверить…", action: reactions.checkForUpdates)
+                        .disabled(!props.canCheckForUpdates)
+                }
+                Toggle("Проверять автоматически", isOn: Binding(get: { props.automaticChecks }, set: reactions.setAutomaticChecks))
+                Toggle("Устанавливать автоматически", isOn: Binding(get: { props.automaticDownloads }, set: reactions.setAutomaticDownloads))
+                    .disabled(!props.automaticChecks)
+            }.font(.system(size: 11)).toggleStyle(.switch).controlSize(.mini)
             Divider()
             HStack {
                 Text("RELUX WORKS").font(.system(size: 9, weight: .semibold, design: .monospaced)).tracking(1.5).foregroundStyle(.tertiary)

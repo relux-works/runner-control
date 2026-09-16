@@ -5,6 +5,7 @@ let project = Project(
     organizationName: "Relux Works",
     packages: [
         .remote(url: "https://github.com/relux-works/swift-relux.git", requirement: .exact("9.2.0")),
+        .remote(url: "https://github.com/sparkle-project/Sparkle", requirement: .exact("2.10.0")),
     ],
     settings: .settings(base: [
         "DEVELOPMENT_TEAM": "262RZ595FP",
@@ -13,6 +14,7 @@ let project = Project(
         "SWIFT_VERSION": "6.0",
         "SWIFT_STRICT_CONCURRENCY": "complete",
         "MACOSX_DEPLOYMENT_TARGET": "14.0",
+        "ENABLE_HARDENED_RUNTIME": "YES",
     ]),
     targets: [
         .target(
@@ -20,13 +22,18 @@ let project = Project(
             bundleId: "works.relux.runnercontrol", deploymentTargets: .macOS("14.0"),
             infoPlist: .extendingDefault(with: [
                 "LSUIElement": .boolean(true),
-                "CFBundleShortVersionString": .string("1.0.0"),
-                "CFBundleVersion": .string("1"),
+                "CFBundleShortVersionString": .string("1.1.0"),
+                "CFBundleVersion": .string("2"),
                 "NSHumanReadableCopyright": .string("Relux Works"),
+                "SUAutomaticallyUpdate": .boolean(true),
+                "SUEnableAutomaticChecks": .boolean(true),
+                "SUFeedURL": .string("https://github.com/relux-works/runner-control/releases/latest/download/appcast.xml"),
+                "SUPublicEDKey": .string("39zxlS5xFUIf4aqaPWBf2oIi1VBkQ/TdPYLifXzWnS8="),
+                "SUVerifyUpdateBeforeExtraction": .boolean(true),
             ]),
             sources: ["Targets/RunnerControl/Sources/**"],
             resources: .resources([.glob(pattern: "Targets/RunnerControl/Resources/**", excluding: [])]),
-            dependencies: [.target(name: "RunnerControlCore")],
+            dependencies: [.target(name: "RunnerControlCore"), .package(product: "Sparkle")],
             settings: .settings(base: ["ENABLE_APP_SANDBOX": "NO", "CODE_SIGN_IDENTITY": "Apple Development"])
         ),
         .target(

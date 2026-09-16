@@ -16,7 +16,7 @@ Native macOS menu-bar app for the two registered GitHub Actions runners on this 
 Bundle ID: `works.relux.runnercontrol`  
 Development team: `262RZ595FP` (Relux Works)  
 Platform: macOS 14+, universal Apple Silicon + Intel build supplied.  
-Signed with Apple Development for this Mac; not a notarized public distribution.
+Local builds use Apple Development. Public releases require Developer ID Application and Apple notarization.
 
 ## Build
 
@@ -44,3 +44,15 @@ For logs and JUnit output use `Scripts/run-macos-package-tests.sh` from https://
 The app owns a single Relux runtime in `AppRegistry`; reopening a popover cannot recreate it. UI containers map state to plain page props/reactions. Core owns a HybridState, reducer, actor flow and actor launchd adapter. Process output is file-backed to avoid pipe deadlocks, commands have a timeout, and subprocess arguments are passed without a shell.
 
 The runner service files remain in `~/Library/GitHubActions/macbook-iv` and `~/Library/GitHubActions/cocoaskills`. The app does not store a GitHub token or modify repository workflows.
+
+## Releases and automatic updates
+
+The app uses Sparkle 2.10.0. Its menu offers manual update checks and separate automatic checking/download settings. Updating the app does not stop independently running CI services.
+
+After the first successful release, the latest DMG is available at:
+https://github.com/relux-works/runner-control/releases/latest/download/RunnerControl.dmg
+
+The signed update archive is announced at:
+https://github.com/relux-works/runner-control/releases/latest/download/appcast.xml
+
+See [RELEASING.md](RELEASING.md) for host setup and release steps. The first public release is pending Apple signing and notarization credentials; these links are not available until publication.

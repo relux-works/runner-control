@@ -4,9 +4,10 @@ import RunnerControlCore
 
 struct RunnerContainer: View {
     @ObservedObject var state: Runners.State
+    @ObservedObject private var updater = AppRegistry.updater
     var body: some View {
         RunnerPage(
-            props: .init(runners: state.runners, changing: state.changing, error: state.lastError),
+            props: .init(runners: state.runners, changing: state.changing, error: state.lastError, canCheckForUpdates: updater.canCheckForUpdates, automaticChecks: updater.automaticallyChecks, automaticDownloads: updater.automaticallyDownloads),
             reactions: .init(
                 setEnabled: change,
                 enableAll: { for runner in state.runners where [.stopped, .failed].contains(runner.status) { change(runner.id, true) } },
@@ -14,7 +15,10 @@ struct RunnerContainer: View {
                 openGitHub: { NSWorkspace.shared.open($0.githubURL) },
                 openLogs: { NSWorkspace.shared.open($0.logs) },
                 clearError: { Task { await action { Runners.Action.clearError } } },
-                quit: quit
+                quit: quit,
+                checkForUpdates: updater.check,
+                setAutomaticChecks: updater.setAutomaticChecks,
+                setAutomaticDownloads: updater.setAutomaticDownloads
             )
         )
     }

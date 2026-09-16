@@ -1,0 +1,16 @@
+name: Tests
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Core unit tests (no UI tests or production runners)
+        run: swift test --package-path Packages/RunnerControlCore --scratch-path "$RUNNER_TEMP/runner-control-tests"
+      - name: Release metadata tests
+        run: python3 -m unittest discover -s Scripts/tests -v
