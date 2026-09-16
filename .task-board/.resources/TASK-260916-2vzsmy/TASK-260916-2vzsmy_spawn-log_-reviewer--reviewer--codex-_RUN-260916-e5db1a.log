@@ -1,0 +1,1769 @@
+2026-09-16T03:24:31.619597Z  WARN codex_skills::interface: ignoring interface.icon_small: icon path with '..' must resolve under plugin assets/
+2026-09-16T03:24:31.621123Z  WARN codex_skills::interface: ignoring interface.icon_large: icon path with '..' must resolve under plugin assets/
+OpenAI Codex v0.154.0
+--------
+workdir: /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+model: gpt-6-astra
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: low
+reasoning summaries: none
+session id: 01a0a83e-9fc8-78b3-84dd-47bd60cf2480
+--------
+user
+# Agent Task Assignment
+
+## FIRST — Run Immediately
+
+```bash
+task-board m 'set_status(TASK-260916-2vzsmy, status=reviewing)'
+```
+
+## Operational Constraints (Headless Run)
+
+Read this before you run any gate or attach any outcome. A spawned run is
+usually headless: the session ends when your turn ends.
+
+- **Never background a long command and end your turn.** The session terminates
+  with the turn and the process dies with it, while the run is still recorded as
+  completed — a successful-looking run with no evidence attached.
+- **A single shell call is time-bounded (~10 minutes).** Waiting out a longer
+  check inside one call fails too. Split long verification into bounded
+  sequential calls (package subsets, `-run` masks) and state explicitly what you
+  reran yourself versus accepted from already-attached evidence.
+- **Attach evidence before you end the lifecycle, not after.** "I will attach it
+  when the run finishes" is unfulfillable by construction: once your turn ends
+  there is no session left to attach anything.
+
+## Your Role
+# reviewer
+
+## Description
+
+Reviews how a task was implemented and how the solution fits into the project. Does not modify code; records one of the explicit verdict branches below.
+
+When the run is goal-bound, query `task-board spawn goal "$TASK_BOARD_RUN_ID"` before recording the verdict. The reviewer goal is role-derived as `reviewer_verdict/reviewer_verdict`, carries its immutable parent goal ID/revision, and is satisfied only by exactly one verdict branch with evidence. A provider exit or `reviewing` status is not a verdict.
+The runner persists the branch from the accepted board status plus a new or updated task-scoped verdict artifact. Only persisted `accepted` can satisfy the parent delivery goal; `changes_requested` and `stop_the_line` finish the reviewer goal without accepting delivery.
+
+## Deliverable
+
+Verdict branches are explicit:
+
+- accepted → `done`, or `accept_cr` when the run was launched against a Change Request (see below)
+- changes requested → `to-dev` for implementation rework or `analysis` for research/decision work, with verdict evidence for the next producer and another reviewer cycle
+- genuine stop-the-line boundary → `blocked` only for a concrete external blocker or an unresolved human-only platform/product/architecture/tradeoff/approval decision, with evidence, failed assumptions/attempts, viable alternatives and tradeoffs, a recommendation, and the exact human decision or external input needed
+
+Do not leave the task in `reviewing`, and do not use `blocked` for ordinary rework or a recoverable child/runtime failure.
+
+### Accepting a Change Request
+
+The full Change Request contract — how the candidate is snapshotted, what `repository_delta` means, what a `stale` revision is, and every typed refusal you can hit — is `references/tracked-background-spawn.md` of the `project-management` skill, section `Change Requests, review, rework, and checkpoint`. Read it when a refusal surprises you rather than guessing at a retry.
+
+When your prompt carries a `Change Request Under Review` section, record acceptance with the named mutation rather than a status change:
+
+```bash
+task-board m 'accept_cr(<ELEMENT-ID>, revision=<N>, evidence=<ELEMENT-ID>_review-verdict.md)'
+```
+
+The signature is exactly `accept_cr(ID, revision=N, evidence=NAME)`. Do not try to recover it with `task-board q 'schema(mutation=accept_cr)'` — this mutation is registered on the `m` path only, so schema discovery answers `unknown mutation` for it.
+
+Only the run that was handed the revision may accept it. `accept_cr` checks that the calling run is a reviewer-archetype tracked run bound to this element and this revision, and refuses anything else with `change_request_acceptance_unauthorized`. If you see that refusal, do not retry it from a different shell or run id — it means the acceptance would have named a reviewer that never read the candidate.
+
+`accept_cr` writes `accepted` and `integrating` atomically: the Change Request becomes `accepted`, your run is stamped as the reviewer, and it routes the element to `integrating`. That state means "accepted, not landed". The accepted revision is bound to its producer role and archetype, and only a new tracked run carrying that exact producer role and archetype may checkpoint or integrate it; the orchestrator routes that run but does not close the leaf, and an orchestrator run that tries to integrate is refused. `done` is produced only by the integration transaction. Accepted work does **not** stay in `reviewing`, and `accept_cr` never takes a `commit_ack` argument.
+
+A Change Request with `repository_delta=empty` means the producer changed no repository file. That is neither automatically a failure nor automatically acceptable. All three verdicts are available and mean exactly what they always mean, and your verdict evidence must address the emptiness explicitly: accepting one means stating why no repository change was the right outcome for this leaf.
+
+For an enforced Bug/Story `done` transition, a reviewer-archetype run must not supply `commit_ack`, and must never escalate the commit-or-acknowledge decision to the human. Record acceptance evidence and stop there. Under a Change Request the routing above applies: `accept_cr` moves the element to `integrating`, and only the bound producer run may checkpoint or integrate it. For an inline element with no Change Request the acknowledged transition belongs to the producer that owns the committed scope. Never make it yourself.
+
+For board reads, use compact task-specific projections. A concrete review does not need routine `summary()`, `plan()`, `schema()`, or `{ full }`; request scoped schema only after an unknown call.
+
+## Licence To Defeat A Gate
+
+You are explicitly licensed to attempt to DEFEAT any gate, refusal, validation, authorization, or attestation in the change under review, and to reject a change whose only evidence is positive-path. Reading the code is not review; attacking it is.
+
+- Try to make the gate admit what it must reject. Mint the evidence the way a caller could, remove it entirely, narrow the gate instead of deleting it, and reach the protected state through retry, renewal, resume, and recovery paths.
+- Assert against the composed production artifact, not the pieces it is built from, and check every surface that must carry the rule — a clause present in one context profile and absent from the other is a bypass path.
+- Grep for callers before believing a guard is in force. A guard that no production path invokes has never run, and tests that call it directly prove only that it compiles and returns what it is told to.
+- Positive-path-only evidence, a delete-only mutant, or a green suite around a fake is grounds for `changes_requested` with the failing shape named in the verdict.
+- Apply the same standard to reported facts: a failed or partial read presented as an absence, and a property inferred from a proxy signal instead of reported as unknown, are review findings.
+- Check the AC-row coverage ratio before reading any code. An AC row with no named driving test is an unchecked AC row and is `changes_requested` on its own. A mutant table whose entries are all deletions is positive-path evidence wearing a mutant costume — name the shape and reject it.
+- A gate that inspects source text is defeated by a mutant that preserves the searched-for token. Reject a mutant harness that runs the static checker alone: it reports nothing about the class.
+
+The negative shapes vocabulary and the incidents behind each rule are in `references/negative-evidence.md` of the project-management skill; the operative rules reach producers through the spawn template's `Evidence That Counts`. Name the shape rather than restating the rule.
+
+## Execution Rules
+
+Reviews run sequentially in this session. Do not delegate to sub-agents: the verdict is yours to produce and evidence, and a review distributed across children that do not complete produces nothing. A reviewer run that ends without a recorded verdict is a failed run, not a partial one — record the verdict before you finish, even when the finding list is short.
+
+Every `changes_requested` verdict names a `repeat-of:` value — the prior revision and finding ID this repeats, or `none`. The orchestrator routes on that field, and two consecutive same-class findings mean the next revision of the same leaf must carry a named regression test and narrowing mutant for the class; the verdict asks for that test, not for a separate harness or research task.
+
+Reused validation evidence does not narrow your licence: a green result carried over from an unchanged candidate is one more input to attack, and you keep targeted adversarial discretion over it. Reject reuse whose source, test, configuration or environment identity changed, and reject a log that is missing, truncated or ends before its last command as unrun, not passed. Do not demand production coverage from a research leaf, and do not accept a claim that a landing or release happened before the record that proves it exists; an empty-delta research Change Request with its outcomes attached is a legitimate candidate.
+
+A republish of an unchanged, already-accepted tree is an annotation, not a new revision of substance. Do not review it as fresh work and do not count it as rework.
+
+## Status Transitions
+
+- **start_status:** `reviewing`
+- **end_status:** no unconditional default; the reviewer must set exactly one verdict status: `done`, `to-dev`, `analysis`, or evidence-backed `blocked`. For a Change Request run, acceptance is recorded by `accept_cr`, which routes the element to `integrating` on your behalf and binds the revision to its producer role and archetype; the other three branches are unchanged.
+
+## Constraints
+
+Does NOT modify code. Read-only access.
+- Reviewer-archetype runs must not supply `commit_ack` and must not escalate the commit-or-acknowledge decision to the human; record acceptance evidence and leave every `done` transition to the producer side.
+- When your prompt carries a `Change Request Under Review` section, record acceptance with `task-board m 'accept_cr(ID, revision=N, evidence=ID_review-verdict.md)'`. It writes `accepted` and `integrating` atomically and routes the element to `integrating` — accepted work never stays in `reviewing` and never reaches `done` from here. The accepted revision is bound to its producer role and archetype, and only a new tracked run with that exact producer role and archetype may checkpoint or integrate it; the orchestrator routes that run but does not close the leaf. `accept_cr` takes no `commit_ack`, and only the reviewer run that was handed the revision may call it.
+
+## Skills
+
+These role skill references are a lazy catalog, not a mandate to bulk-read every
+body. Before technical work, identify the skills relevant to this task's concrete
+scope and read those full skill bodies. Always read any skill explicitly required
+by the task, user, or project instructions.
+
+
+## Definition of Done
+
+- [ ] Implement the complete scoped production behavior and acceptance criteria
+- [ ] Run relevant tests and record concrete results and remaining bounds
+- [ ] Attach task-prefixed outcome evidence and hand off for independent review
+- [ ] Code written per task description and AC
+- [ ] Relevant tests written for new or changed behavior and passing
+- [ ] In a managed Story worktree the candidate is left UNCOMMITTED in the worktree for the handoff to snapshot — never commit on the Story branch. A producer commit moves the branch tip off the recorded checkpoint and the handoff refuses with change_request_candidate_committed_past_checkpoint; repair with `git reset --soft <checkpoint_oid>` before completing again.
+- [ ] Every command, message, state, or refusal named in the AC is driven through the production entry point by a named committed test, or is declared a stated bound. Report coverage as a ratio — `n of m AC rows driven` — and name the production call site for each. Prose in place of the ratio is not evidence.
+- [ ] Gating, refusing, validating, authorizing, or attesting behavior covered by negative tests that fail when the gate admits what it must reject, with the production call site named
+- [ ] Every gate ships at least one NARROWING mutant — the gate stays present and is weakened to admit exactly one member of the class it must reject, and a named test must fail. A delete-only mutant proves only that the gate exists and is not accepted as evidence.
+- [ ] A gate that inspects source text is additionally attacked by a mutant that PRESERVES the searched-for token and changes behavior, and the mutant harness executes the behavioral suite, not only the static checker.
+- [ ] Lint clean
+- [ ] Relevant build/validation commands run after changes and build not broken
+- [ ] New outcome artifact attached on the board with a task-scoped name when the work produces notes, logs, screenshots, or other deliverables
+- [ ] Important findings, decisions, anomalies, or regressions recorded in logbook when relevant
+- [ ] Implementation matches AC
+- [ ] Solution fits project architecture
+- [ ] Tests green
+- [ ] Gate, refusal, validation, authorization, and attestation behavior attacked, not read — positive-path-only evidence is not accepted
+- [ ] If review does not accept the work — verdict evidence added and status routed by the explicit verdict branches
+## Your Task
+
+- **ID**: TASK-260916-2vzsmy
+- **Title**: TASK-260916-2vzsmy: validate-and-publish-release
+- **Parent**: STORY-260916-1o0gkc
+### Description
+
+Validate repaired release automation, preflight and source documentation after the CI fix checkpoint. Exercise release metadata and packaging gates with focused tests; document exact signing/notarization and Sparkle requirements. This leaf prepares the release machinery for integration; do not tag or publish yet. Final release is a separate delivery Story after both code Stories land. Use Muse Spark max. No UI tests, no production runner interruption, no secret output, no manual Story commits.
+### Acceptance Criteria
+
+Release scripts and preflight are validated and documented, metadata tests pass, candidate ready for review and integration so the subsequent release tag uses the repaired workflow.
+
+## Instructions
+
+The following instructions have been attached to this task:
+
+### approved-design.md
+> Existing design; task brief promotes registration and removal into this release
+
+# Runner Control — универсальное приложение для macOS
+
+Статус: проект поведения и интерфейса, не реализованная функциональность.
+
+## Решение
+
+Runner Control управляет зарегистрированными GitHub Actions runners на текущем Mac. Количество, организации, репозитории, имя компьютера и пути не зашиты в приложение. Управление локальными службами работает без входа в GitHub. Подключение GitHub отдельно добавляет подтверждённые online/busy/labels/group и ссылки.
+
+Основной сценарий: открыть меню → увидеть раннер → включить или выключить. Второй сценарий: открыть «Раннеры и настройки…» → добавить существующий раннер, изучить ошибку, настроить запуск.
+
+Удалённый runner из GitHub нельзя включить локальным переключателем. Он не попадает в управляемый список без локальной установки. Удалённое управление по SSH — отдельное возможное расширение, не обещание текущего дизайна.
+
+## 1. Меню
+
+Ширина около 400 pt; имя компьютера берётся из macOS. При большом списке в нативном приложении список ограничен по высоте и прокручивается. Вверху: Runner Control, «Этот Mac · N служб включено». Счётчик относится к локальным службам, не к доступности в GitHub.
+
+Каждая строка:
+
+- Имя раннера из регистрации, пользовательский псевдоним при наличии.
+- Организация или owner/repository и сервер, если это GitHub Enterprise.
+- Локальное состояние: выключен, запускается, включён, выключается, ошибка, требуется настройка.
+- Отдельная подпись GitHub: занят / готов / не в сети / не подключён / данные устарели.
+- Явная кнопка действия: «Включить» или «Выключить…». Во время операции — индикатор и блокировка повторного действия только для этой строки.
+- Нажатие на название открывает подробности в основном окне.
+
+Кнопки предпочтительнее переключателя: выключение может потребовать решения о прерывании задачи и не завершается мгновенно. В макете предусмотрен вариант с переключателями для сравнения.
+
+Нижняя область: «Включить все», «Выключить все…», «Добавить раннер…», «Раннеры и настройки…». Массовые команды относятся только к добавленным управляемым раннерам. Ошибки показываются по строкам, а не скрываются за общим успехом. Обновления Sparkle и выход переносятся в настройки; не занимают основную панель.
+
+Иконка меню: контурная молния, когда всё выключено; заполненная, когда хотя бы одна служба включена; маленький знак ошибки при проблеме. Доступное описание всегда текстовое. Состояние не передаётся только цветом.
+
+## 2. Добавление существующего раннера
+
+Пустое состояние: «Добавьте раннер на этом Mac», действия «Найти на Mac» и «Выбрать папку…». Учётная запись GitHub не обязательна.
+
+Обнаружение ограниченное, без сканирования всего диска:
+
+1. Каталог установок, которым управляет приложение: ~/Library/GitHubActions.
+2. Известные manifest-файлы служб текущего пользователя в ~/Library/LaunchAgents, связанные с actions.runner.*.
+3. Каталоги, ранее выбранные пользователем.
+4. Любой иной каталог — через системный выбор папки.
+
+Существующие ручные службы manual-service.plist и стандартные пользовательские службы GitHub распознаются отдельными адаптерами. Демоны другого пользователя, запуск через терминал и неизвестные supervisor-системы показываются как неподдерживаемое управление: без притворного переключателя и без попытки создать второй процесс.
+
+Результат поиска — кандидаты с именем, scope, путём и состоянием проверки. Обнаружение не запускает ничего. Пользователь выбирает «Добавить»; приложение объясняет конкретные изменения, если для управления нужно создать службу. Импорт без изменения существующей службы не перерегистрирует runner.
+
+Проверки: .runner можно прочитать; server/scope определены; бинарник и runsvc.sh существуют; путь и рабочий каталог не содержат пробелов; manifest соответствует реальному каталогу/label; runner ещё не добавлен; нет второго управляющего процесса. Не читать и не экспортировать .credentials для обнаружения. Не выполнять скрипты кандидата во время сканирования.
+
+Путь с пробелами → «Нужно изменить расположение» с выбором новой папки. Никакого автоматического переноса работающего runner: это отдельная операция после остановки с возможностью восстановления. Иначе тот же setup-go дефект вернётся.
+
+«Создать новый runner» в первой версии — пошаговая инструкция регистрации в GitHub и последующее добавление выбранной папки. Полная загрузка/регистрация через приложение — следующий этап с отдельными правами и краткоживущим registration token.
+
+## 3. Окно «Раннеры и настройки»
+
+Нативное окно около 760 × 540 pt, доступное также повторным открытием приложения. Разделы:
+
+### Раннеры
+
+Список и панель выбранного runner: имя/псевдоним, адрес регистрации, локальный каталог, рабочий каталог, архитектура, версия, способ управления. Действия: включить/выключить, открыть GitHub, показать каталог, открыть журнал, выбрать перемещённую папку, убрать из приложения.
+
+Для org runner не перечислять статически якобы разрешённые репозитории. При наличии прав показывать группу и полученные из GitHub ограничения с датой обновления; иначе «Доступ к репозиториям настраивается в GitHub». Пригодность к конкретной job зависит также от labels и правил workflow; online не гарантирует, что она попадёт сюда.
+
+### GitHub
+
+Необязательные подключения по серверу и учётной записи; можно подключить несколько. Секреты в Keychain, в настройках только ссылки на записи. Не импортировать молча учётные данные gh.
+
+Основной способ подключения — «Войти через GitHub»: зарегистрированный GitHub App Runner Control и OAuth Device Flow. Ручное создание и вставка PAT не входит в основной сценарий. Вход и установка GitHub App в организацию/аккаунт — разные шаги: после входа приложение проверяет установки и доступ, затем при необходимости открывает установку или запрос одобрения владельцем организации. Требуемые разрешения: для org runners — Self-hosted runners/read; для repository runners — Administration/read. Чтение job/repository details требует дополнительных прав и включается отдельно. Отсутствие прав не означает отсутствие runner.
+
+Локальное включение/выключение не зависит от доступности API. Нет сети / 401 / 403 / rate limit → соответствующая подпись, время последнего успешного обновления и возможность переподключения.
+
+### Основные
+
+«Открывать Runner Control при входе» — отдельно от запуска CI. Для новых управляемых служб запуск раннера при входе выключен. При импорте существующей службы её политика сохраняется и явно показывается, а не молча меняется. Изменение этой политики — самостоятельное действие пользователя.
+
+Обновления: версия приложения, «Проверить обновления», автоматическая проверка и загрузка. Выход/обновление приложения оставляет уже запущенные службы работать; подтверждение выхода не обещает остановить CI. Во время изменения службы обновление откладывается до завершения операции.
+
+## 4. Два независимых источника состояния
+
+| Источник | Что подтверждает | Чего не подтверждает |
+|---|---|---|
+| macOS service/process | Процесс запущен или остановлен, последние ошибки запуска | Готовность принимать jobs в GitHub |
+| GitHub API | Online/offline, busy, registration ID, labels | Мгновенное состояние процесса, гарантированное отсутствие новой job после ответа |
+
+Храним отдельно LocalState, RemoteState, OperationState и время наблюдения. Потеря сети не превращает локальную службу в выключенную. Отсутствие регистрации не скрывает запущенную службу и возможность её остановить. При противоречии показываем оба факта, например «Служба выключена · GitHub: данные обновляются».
+
+Локальное наблюдение: раз в 3 секунды при открытом меню, реже в фоне; немедленно после команды и пробуждения Mac. GitHub: объединённые запросы по scope, ориентировочно раз в 30 секунд при открытом меню с backoff и учётом rate limit. Старше 60 секунд — явно «данные устарели»; устаревшее busy=false не считается доказательством свободного runner.
+
+## 5. Выключение
+
+- Если GitHub сообщает busy: диалог «На раннере выполняется задача», действия «Оставить включённым» и «Прервать и выключить». Название/ссылка задачи — только если действительно получены из API.
+- Если busy неизвестен, данные устарели или GitHub не подключён: «Занятость неизвестна. Выключение может прервать задачу».
+- Даже свежий idle не исключает гонку с выдачей новой задачи. Поэтому первая универсальная версия всегда подтверждает остановку работающей службы.
+- Остановку выполняет только адаптер известного runner; без kill по одному имени процесса и без воздействия на чужие службы.
+- Успех — после подтверждения остановки. При таймауте — «Не удалось подтвердить остановку», повторная проверка, журнал. Не рисовать выключенное состояние заранее.
+
+«Выключить после задачи» не включать в первую версию. Простое ожидание busy=false не запрещает GitHub выдать новую задачу. Нужен отдельно подтверждённый механизм прекращения приёма новых jobs; периодический опрос API сам по себе такой гарантии не даёт.
+
+«Убрать из приложения» удаляет только запись каталога; предупреждает, если служба продолжит работать. Не удаляет файлы, регистрацию GitHub или сертификаты. Удаление runner из GitHub — отдельный будущий сценарий.
+
+## 6. Архитектура и хранение
+
+Сохранить Relux: UI Page → Container → Effect/Flow → actors/services → Action/Reducer → State. Sparkle и AppKit остаются адаптерами платформы.
+
+- RunnerCatalog: versioned persistence, локальный UUID, canonical directory + bookmark, display override, controller kind, preferences. Переименование на GitHub не меняет локальную identity.
+- RunnerDiscovery: ищет кандидатов в разрешённых местах; результат никогда не даёт автоматического разрешения на запуск.
+- RegistrationReader: читает нужные поля .runner; сохраняет server URL, scope, remote agent ID. Не полагается на формат service label для определения организации.
+- RunnerController protocol: inspect/start/stop/capabilities. Адаптеры для управляемой ручной службы и стандартного пользовательского LaunchAgent; unsupported — только чтение. Проверять конфигурацию повторно непосредственно перед действием.
+- GitHubObserver: отдельно сопоставляет local registration и API runner по server + scope + remote ID, не по имени. При неоднозначности не прикрепляет случайный runner.
+- CredentialStore: Keychain references, secret values не входят в Relux state и diagnostic exports.
+- Diagnostics: ограниченный хвост логов с очисткой токенов; каталог _diag и фактические stdout/stderr пути из manifest, без зашитого Library/Logs имени.
+
+Каталог хранится в Application Support/RunnerControl; это допустимо для настроек приложения. Установки и рабочие каталоги runners — в путях без пробелов. JSON не содержит секретов.
+
+## 7. Миграция текущей установки
+
+Однократно найти существующие macbook-iv и cocoaskills через общий discovery. Сохранить обнаруженные реальные каталоги, scope и service label. Не останавливать, не переименовывать, не перерегистрировать и не менять автозапуск. После успешной записи каталога удалить фиксированный список из Definition.installed(). Имя Mac и все строки интерфейса получать динамически.
+
+Если импорт не удался, показать найденную установку с конкретной ошибкой и выбором папки. Не заменять её фиктивным runner и не удалять старые файлы.
+
+## 8. Критерии готовности реализации
+
+1. Чистый Mac показывает понятное пустое состояние; кнопки не подразумевают наличие Relux Works.
+2. Можно добавить произвольный org/repo runner из нестандартного каталога без пересборки приложения.
+3. Два одинаковых имени на разных scopes остаются двумя разными runners; один каталог нельзя импортировать дважды через symlink.
+4. Без GitHub токена доступно локальное управление; busy честно неизвестен.
+5. 401/403/offline и устаревшие данные не включают/выключают службы и не скрывают локальное состояние.
+6. Повторный клик не создаёт дублирующий процесс; ошибка одной строки не блокирует весь список.
+7. Удалённая .runner не мешает остановить уже известную работающую службу; неверный manifest блокирует запуск.
+8. Массовая остановка показывает конкретный список и частичные ошибки.
+9. Импорт не меняет действующие службы и политику входа; перезапуск приложения не включает CI.
+10. Проверки выполняются unit/integration tests с временными безвредными службами; UI проверяется вручную, без UI-тестов согласно запросу.
+
+## Источники API
+
+- GitHub runner state: https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/monitor-and-troubleshoot
+- Runner REST and permissions: https://docs.github.com/en/rest/actions/self-hosted-runners
+- Group repository access: https://docs.github.com/en/rest/actions/self-hosted-runner-groups
+
+
+## 9. Вход через GitHub API — уточнение дизайна
+
+### Пользовательский сценарий
+
+1. В настройках нажать «Войти через GitHub». По умолчанию github.com; Enterprise — отдельное подключение к явно выбранному серверу.
+2. Приложение получает временный код через API и показывает его крупно: «Подтвердите подключение на GitHub». Кнопки «Скопировать код», «Открыть GitHub», «Отмена». Браузер — системный браузер пользователя; если Brave выбран по умолчанию, открывается Brave.
+3. Пользователь вводит код и подтверждает Runner Control на странице GitHub. Пароль и 2FA вводятся только на сайте GitHub.
+4. Приложение получает токены через API, проверяет профиль и показывает «Подключено как @username».
+5. Отдельно показывает доступные установки GitHub App и репозитории. Если нужной организации нет — «Предоставить доступ организации…» / «Запросить одобрение». Не обещать, что простой вход автоматически открывает все организации пользователя.
+6. После предоставления доступа состояния локальных runners дополняются сведениями GitHub. Runner из GitHub без соответствующей локальной установки остаётся информационной записью без кнопок запуска.
+
+### Техническое решение
+
+GitHub App с включённым Device Flow и истекающими user access tokens. В распространяемом macOS-приложении находится только публичный client_id. Client secret и private key GitHub App не включаются в бинарник, ресурсы, Sparkle-архив или исходники. Device Flow позволяет получить user access token без client secret; обновление токена, полученного через Device Flow, также не требует client secret по текущей документации GitHub. Отдельный сервер для этого сценария не нужен.
+
+- POST /login/device/code: запрос к выбранному GitHub server.
+- POST /login/oauth/access_token: опрос с выданным interval, учёт slow_down и expires_in.
+- GET /user: подтверждение учётной записи.
+- GET /user/installations и /user/installations/{installation_id}/repositories: доступные установки и ресурсы.
+- REST runners/groups endpoints: наблюдение в рамках прав пользователя и установки.
+
+Не использовать широкие OAuth scopes admin:org/repo как скрытую замену недостающим GitHub App permissions. Для регистрации новых runners позже потребуется явное повышение разрешений: Self-hosted runners/write для организации либо Administration/write для репозитория, а также соответствующие права пользователя. Эти права не требуются для локального переключателя.
+
+GitHub App нужно один раз зарегистрировать как продукт Relux Works, разрешив установку другим аккаунтам. Каждая организация отдельно управляет установкой и доступом. Для GitHub Enterprise Server нельзя молча использовать client_id от github.com: требуется регистрация App на этом сервере и проверка поддержки Device Flow его версией. Пока она не настроена, локальное управление работает, подключение API показывает конкретное ограничение.
+
+### Состояния авторизации
+
+Не подключён → получаем код → ждём подтверждения → проверяем аккаунт → проверяем установки → подключён.
+
+Отдельные исходы: пользователь отказал; отменено; код истёк (кнопка «Получить новый»); сеть недоступна (повтор с backoff); требуется установка App; требуется одобрение организации; требуется SSO; сессия отозвана (повторный вход). Отмена уничтожает временный device_code и прекращает опрос. HTTP 200 при device flow ещё не означает успех — проверяется тело ответа.
+
+Access/refresh tokens хранятся в Keychain отдельно для server + user ID + app client ID. Refresh выполняет один actor, без конкурирующих обновлений; новая пара сохраняется атомарно. Сроки берутся из ответа API. При истечении refresh token или отзыве авторизации предлагается вход заново. Токены не попадают в Relux state, UI-логи, crash breadcrumbs или диагностические архивы.
+
+«Выйти на этом Mac» удаляет локальные токены и останавливает опрос GitHub, оставляя локальные службы работать. «Отозвать доступ в GitHub…» открывает страницу управления авторизацией. Не выдавать локальный выход за глобальный отзыв или удаление установки App.
+
+### Дополнительные критерии готовности
+
+- Новый пользователь подключает GitHub без ручного создания PAT.
+- Пользователь видит, под каким аккаунтом и к какому серверу выполнен вход.
+- Вход без установки App заканчивается понятным шагом предоставления доступа, а не пустым списком.
+- Отмена, истечение кода и slow_down проверены unit-тестами транспорта с подменяемыми часами.
+- Refresh не дублируется при одновременных API-запросах; logout отменяет фоновые операции.
+- Отсутствие сети и 403 не препятствуют включению/выключению уже добавленного локального runner.
+
+Источники:
+- Device Flow и ограничения доступа: https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app
+- Refresh для Device Flow: https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/refreshing-user-access-tokens
+
+
+
+### release-operational-context.md
+> Clarified release-artifact notarization gate; diagnostic submission is not an extra dependency
+
+Release target is v1.2.0 after product and smoke Stories land. Do not retry/delete v1.1.0. Diagnostic signing-check submission 6d537548-8c24-48ea-89b5-7ebb2dc959d5 was In Progress at 02:49 UTC; do not duplicate that test submission. Clarification of reviewer F2: this diagnostic ZIP is NOT an additional release prerequisite. The actual release app ZIP and DMG must each receive their own Accepted notarization result and pass staple verification before final publication. Submitting genuinely new release artifacts is authorized and is not duplication of the old diagnostic test. Document the diagnostic ID and read-only inspection, and these precise final-artifact gates. Existing generator /Users/iv/Documents/Codex/2026-09-15/new-chat-4/work/ios-app-manager. No tag or publication in this preflight task. Keep existing runner jobs intact.
+
+
+
+
+## Board CLI Reference
+
+You have access to `task-board` CLI for managing your work. All writes use the `m` (mutation DSL) subcommand:
+
+```bash
+# FIRST/LAST lifecycle commands:
+# Use explicit status changes when the task flow requires it.
+task-board m 'set_status(TASK-260916-2vzsmy, status=analysis)'       # analyst-style work
+task-board m 'set_status(TASK-260916-2vzsmy, status=development)'    # implementation / testing work
+task-board m 'set_status(TASK-260916-2vzsmy, status=reviewing)'      # reviewer handoff
+task-board m 'set_status(TASK-260916-2vzsmy, status=blocked)'        # when blocked
+task-board m 'set_status(TASK-260916-2vzsmy, status=to-review)'      # when your work is ready for review
+
+# Track progress with checklist
+task-board m 'check_item(TASK-260916-2vzsmy, item=1)'                        # check item N
+task-board m 'add_checklist_item(TASK-260916-2vzsmy, text="Write tests")'    # add checklist item
+
+# Add notes about your progress, decisions, blockers, or review findings
+task-board m 'set_notes(TASK-260916-2vzsmy, text="your note here")'
+
+# Save short text directly as outcome resources
+task-board m 'add_resource(TASK-260916-2vzsmy, name=TASK-260916-2vzsmy_results.md, content="...", type=outcome, description="Description")'
+
+# Attach an existing local file (screenshots, PDFs, logs, archives, research docs)
+task-board resource add TASK-260916-2vzsmy ./path/to/file --type outcome --name TASK-260916-2vzsmy_artifact.bin -d "Description"
+```
+
+## Spawn Run Control
+
+Tracked runs expose `TASK_BOARD_RUN_ID`. Check directives at safe checkpoints,
+at most once per 1 minute, never in a loop. Directives have no delivery timer.
+
+```bash
+task-board spawn status "$TASK_BOARD_RUN_ID"
+task-board spawn directives "$TASK_BOARD_RUN_ID"
+```
+
+No inbound push: directives are cooperative checkpoint signals:
+- persist your current notes/artifacts before acting on `cancel`-style requests
+- only honor pause/reroute intent at a safe checkpoint
+- if no directive is present, continue normally
+
+## IMPORTANT: Saving Results
+
+When you produce work products (research documents, design docs, screenshots, logs, archives, implementation notes), you MUST save them as outcome resources with names that include the task ID:
+
+```bash
+task-board m 'add_resource(TASK-260916-2vzsmy, name=TASK-260916-2vzsmy_results.md, content="...", type=outcome, description="Description")'
+task-board resource add TASK-260916-2vzsmy ./path/to/file --type outcome --name TASK-260916-2vzsmy_artifact.bin -d "Description"
+```
+
+If you revise the same artifact later, use `task-board m 'update_resource(...)'` or `task-board resource update ...` instead of creating a silent overwrite.
+
+If you discover important findings, decisions, anomalies, regressions, or non-obvious constraints while working, record them in `logbook` as well as on the board.
+
+This ensures your results persist on the board and are accessible to other agents and the coordinator. Spawn completion is expected to produce at least one new task-scoped outcome artifact before the task can cleanly remain in `to-review`.
+
+## Evidence That Counts
+
+A passing suite means nothing unless something in it would have failed.
+
+- Any behavior that GATES, REFUSES, VALIDATES, AUTHORIZES, or ATTESTS ships with negative tests that fail when the gate admits what it must reject. A positive test proves the gate is reachable, not that it works.
+- Prove a bound by NARROWING the gate, not only by deleting it. A delete-only mutant proves the gate exists and says nothing about the class it covers.
+- Prove behavior by driving the real entry point — launch, materialize, resolve, publish — and name the production call site. A helper that is unit-tested but called from nowhere promises nothing.
+- Standard negative shapes to test and to look for: forged or self-minted evidence; absent evidence treated as satisfied; the check present but uncalled from production; a bypass path around the check; a capability claim that does not reproduce.
+- A gate reports coverage as a measured ratio, not as prose: prose cannot distinguish 7 of 7 from 3 of 7, and "nothing is there" is not "nothing this checker sees". Name the blind spot as a stated bound.
+- An absence and a failure to read are different facts. A failed, partial, or malformed read is never a legitimate absence, and a fallback defined for absence must not fire on a read failure.
+- Prove, or report nothing. Where a property cannot be established, report unknown instead of inferring it from a proxy signal; callers act on a plausible guess.
+
+Shapes vocabulary and the incident record behind each rule: `references/negative-evidence.md` in the project-management skill.
+
+## Stop-The-Line: No Forced Fits
+
+Do not keep implementing when autonomous work starts requiring a forced fit. A forced fit is any path where the task conflicts with a platform/API constraint, product decision, UX state model, ownership boundary, or architecture, and the remaining "solution" is mostly compensating hacks.
+
+Warning signs:
+- each fix needs another flag, stub, priority rule, mock-only behavior, or special-case test
+- the tests can pass only because the test harness avoids the real platform behavior
+- the implementation depends on an assumption you can no longer defend
+- the user-facing behavior cannot be described cleanly without contradicting the product model
+
+When this happens, stop product-code changes before adding another workaround layer. Attach or note:
+- the constraint and evidence
+- the failed assumptions/attempts
+- the viable options and tradeoffs
+- the recommended option
+- the exact human/product/architecture decision needed
+
+Then set the board item to `blocked` and ask only for that exact decision or external input. This stop applies only to a concrete external blocker or an unresolved human-only platform/product/architecture/tradeoff/approval decision; recoverable failures and ordinary rework stay autonomous. Tests and stubs are not proof that a forced-fit design is correct; use them only after the state model and platform assumptions are valid.
+
+## Working Directory
+Board directory: `/Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.task-board`
+
+Work in the project root. Do not modify board files directly — always use the `task-board` CLI.
+
+## Story Workspace
+
+You are running in an isolated Git worktree for STORY-260916-1o0gkc.
+
+- Workspace path: `.temp/STORY-260916-1o0gkc/worktree` (this is your working directory)
+- Branch: `task-board/story/STORY-260916-1o0gkc`, forked from `main`
+- Authoritative board: `/Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.task-board` (already exported as `TASK_BOARD_DIR`)
+
+Make every repository change here. Do not commit, switch, rebase, merge, or delete this branch, and do not run `task-board` against the `.task-board` copy inside this worktree — it is a checkout artifact, not the board. Integration into trunk is the orchestrator's step, not yours.
+
+Leave your work UNCOMMITTED in the worktree — the handoff snapshots the working tree against the recorded checkpoint. A commit of your own on this branch is refused at handoff with `change_request_candidate_committed_past_checkpoint`, and the repair is `git reset --soft <checkpoint_oid>` before completing again.
+
+## Change Request Under Review
+
+- Change Request: `CR-TASK-260916-2vzsmy-2` revision `2` (state `ready`)
+- Element: `TASK-260916-2vzsmy`, integration scope: `STORY-260916-1o0gkc`
+- Branch: `task-board/story/STORY-260916-1o0gkc`
+- Base OID: `7d2126aef02d9bb2c5443f5ef433462fda537732`
+- Candidate tree OID: `0acdbb9b6db1b5f08efd76595f458e22f5434679`
+- Repository delta: `present`
+- Patch resource: `TASK-260916-2vzsmy_change-request_rev2.patch` (sha256 `cb4b833216f6635e25b2f25bc5d3bda4a8e1ece3eff4634019f382f2a1d54009`)
+
+```bash
+git -C . diff 7d2126aef02d9bb2c5443f5ef433462fda537732 0acdbb9b6db1b5f08efd76595f458e22f5434679          # the exact reviewable delta
+git -C . diff --stat 7d2126aef02d9bb2c5443f5ef433462fda537732 0acdbb9b6db1b5f08efd76595f458e22f5434679   # its shape
+```
+
+Changed paths (11):
+
+- `.github/workflows/release.yml`
+- `RELEASING.md`
+- `Scripts/release-preflight.sh`
+- `Scripts/release.sh`
+- `Scripts/release_metadata.py`
+- `Scripts/tests/test_release_docs.py`
+- `Scripts/tests/test_release_metadata.py`
+- `Scripts/tests/test_release_packaging.py`
+- `Scripts/tests/test_release_preflight.py`
+- `Scripts/tests/test_release_workflow.py`
+- `Scripts/validate-release-tag.sh`
+
+### Recording the verdict
+
+Acceptance is a named mutation, not a status change:
+
+```bash
+task-board m 'accept_cr(TASK-260916-2vzsmy, revision=2, evidence=TASK-260916-2vzsmy_review-verdict-rev2.md)'
+```
+
+`accept_cr` writes `accepted` and `integrating` atomically: the Change Request becomes `accepted`, this run is stamped as the reviewer, and TASK-260916-2vzsmy routes the element to `integrating` — accepted but not landed, and never `done`. The accepted revision is bound to its producer role and archetype (`developer`/`implementer`), and only a new tracked run with that exact producer role and archetype may checkpoint or integrate it. The orchestrator routes that run; it does not close the leaf, and no orchestrator run may execute the integration itself. `done` is produced only by the integration transaction, never by you and never by an acknowledgement. Never supply `commit_ack` yourself.
+
+Changes requested and Stop-The-Line are unchanged: route to `to-dev`/`analysis` or evidence-backed `blocked`. Leaving the element in `reviewing` is still not a verdict and still gets this run cancelled and respawned.
+
+2026-09-16T03:24:31.986649Z  WARN codex_skills::interface: ignoring interface.icon_small: icon path with '..' must resolve under plugin assets/
+2026-09-16T03:24:31.986696Z  WARN codex_skills::interface: ignoring interface.icon_large: icon path with '..' must resolve under plugin assets/
+codex
+I’ll review the candidate and its coverage, run focused adversarial checks, then attach and record the verdict. I’m using the project-management skill for the review workflow.
+
+exec
+/bin/zsh -lc "task-board m 'set_status(TASK-260916-2vzsmy, status=reviewing)'" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 756ms:
+{"ok":true,"result":{"primary":{"action":"status_changed","element_id":"TASK-260916-2vzsmy","field":"status","new_value":"reviewing","old_value":"to-review"},"side_effects":[{"action":"promoted","element_id":"STORY-260916-1o0gkc","field":"status","new_value":"reviewing","old_value":"to-review"},{"action":"demoted","element_id":"EPIC-260916-3oqyia","field":"status","new_value":"reviewing","old_value":"to-review"}]}}
+
+exec
+/bin/zsh -lc 'cat /Users/iv/.codex/skills/project-management/SKILL.md' in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 0ms:
+---
+name: project-management
+description: >
+  File-backed task boards and spawn-first multi-agent orchestration through
+  task-board. Use for board/spec decomposition, task tracking, planning,
+  status/progress, tracked producer/reviewer runs, and delivery goals. A normal
+  primary session is the Orchestrator; a prompt-assigned role or
+  TASK_BOARD_RUN_ID is a specialist worker. Russian triggers: борд, доска,
+  задачи, эпик, стори, таски, спавн, оркестратор, субагент, статус, прогресс.
+triggers:
+  - task board, epic, story, task, bug, status, progress
+  - spec decomposition, planning, critical path
+  - spawn, orchestrator, coordinator, sub-agent, delivery goal
+  - борд, доска, задачи, эпик, стори, таски, спавн, оркестратор
+---
+
+# Project Management Router
+
+Load only the focused references needed. Use `task-board` for reads/writes;
+never edit `.task-board/` directly.
+
+## Active Role
+
+- **Specialist:** when assigned a role, `TASK_BOARD_RUN_ID` exists, or the
+  human explicitly requests inline execution. Follow lifecycle/evidence gates.
+- **Orchestrator:** otherwise. Detail settled specs inline; route
+  every artifact-producing or validating task through a tracked
+  background child run. `solution-architect` only for genuine
+  architecture decisions.
+
+## Critical Invariants
+
+1. Preflight with `project_config(view=spawn-preflight, role=ROLE, agent=RUNTIME?)`;
+   bare `project_config()` stays the role-optional config surface.
+   Cross-provider ranking requires the agent-less query: omit `agent`, compare
+   recommendations, then narrow with `agent=RUNTIME` for the fresh spawn snapshot.
+   `providers.targeted` names the query's runtime scope; policy-allowed entries
+   outside it use `runtime_not_targeted_by_query`, while policy-excluded entries
+   use `provider_not_allowed_by_preferred_agentic_system`.
+   When workload recommendations are configured: query with `task_class` or an
+   explicit `workload_class`, reason about scope/risk/autonomy/validation and
+   context cost, then spawn an explicit pair with the exact class transport,
+   fresh snapshot digest, and one-line recommendation rationale. A ranking is
+   advice, never authority, a default, or permission to widen the pair.
+   For a proprietary (paid) model, choose the pair that maximises delivered
+   work per token and escalate only for a stated reason.
+   Every child has explicit role, background mode, and a complete
+   model/reasoning-effort pair across its applicable dimensions — model
+   either typed or seeded by a configured per-role default, and, for Codex,
+   Qwen, or a Claude model whose registry row declares a reasoning-effort
+   vocabulary, an in-policy effort either typed or default-seeded the same
+   way. Built-in runtimes: `agy`, `claude`, `codex`, `gemini`, `muse`, `qwen`
+   (plus any runtime declared under `spawn.runtimes`); Gemini, Agy,
+   `muse-spark-1.2-contributor`, and an effortless Claude model take no
+   `--reasoning-effort` at all, while `muse-spark-1.3-contributor` and its
+   `muse-spark` alias REQUIRE one from `high`/`xhigh`/`max`. The
+   versioned-short `muse-spark-1.3` names no registered row and is not
+   spawnable; codex `gpt-6-astra`/`astra` REQUIRE one of `low`/`medium`/`high`/`xhigh`/`max`/`ultra`.
+   Treat the v3 `admitted_pairs` set the
+   preflight reports as the exact admission authority, not `allowed_models`,
+   which is one input form and is `null` when the runtime uses combinable
+   `entries`; when preflight reports a v2 migration warning, use the
+   full read-only migration snapshot for an explicit reviewed repository edit.
+   Never infer admission from `PolicyRank` or silently migrate config.
+   Spawn is idempotent per element while a RUN is `queued` or `running`: a
+   repeat returns that RUN and its observation hints without writes;
+   `--allow-parallel` explicitly creates another RUN.
+   Codex-only `fast_mode` defaults false; authority schema v1 authorizes no
+   per-board backend policy route, so never infer or add one. See
+   [canonical config reference](references/task-board-config.md) and
+   [README](README.md) for `service_tier`/remote-v4 provenance.
+2. Workers use compact, task-specific projections. Skip routine
+   `summary()`, `plan()`, `schema()`, and `{ full }`; scoped schema only
+   repairs an unknown call.
+   Under managed Story isolation, `.planning/` belongs to the authoring Story
+   worktree, never the control root. Before that worktree exists, persist the
+   canonical plan as a task-scoped board resource; after provisioning,
+   materialize it in the worktree while retaining the explicit board/config
+   bindings. Never bypass control-root cleanliness to make planning spawnable.
+3. In a manager-hosted session (`task-board claude`/`codex` primary) never
+   wait for a spawned run in a foreground tool call: the Session Manager
+   types the terminal run state in as a notice, and an unbounded `spawn
+   wait`/`observe --until terminal` refuses there (`--allow-blocking`
+   overrides). No foreground `until`/`sleep` loops on `spawn status`.
+   Observe/wait serve unmanaged sessions, replay and diagnosis; an
+   unavoidable wait is a harness background task (`run_in_background`/
+   Monitor) while the session keeps reading owner messages. Route the handoff.
+4. The Orchestrator owns producer -> reviewer -> rework -> reviewer until the
+   configured review policy is satisfied and the board reaches `done`.
+   `to-review` is a routing trigger, not human acceptance. Commit
+   decomposition is that same Orchestrator's own call, never a per-commit
+   human checkpoint. That chain lives only in the live session: a restarted
+   or resumed primary session runs `task-board worktree obligations` BEFORE
+   spawning anything new and routes every listed ready-without-reviewer or
+   accepted-without-checkpoint revision first.
+5. Handoff needs a task-scoped outcome and `task-board handoff TASK-ID --role
+   ROLE`. Early exits and intermediate parked states are
+   retried, or rerouted through a focused child; routine work is never handed to the human.
+   Producer `set_status(to-review)`
+   is refused, and reviewer `accept_cr` requires its live merged checklist.
+   Attach artifacts through resource CRUD under
+   `.task-board/.resources/<ELEMENT-ID>/`, optionally in safe nested paths;
+   never write that tree directly or attach directories.
+6. `blocked` needs an evidence-backed external blocker or a
+   human-only product/platform/architecture/approval decision. Persist
+   constraint, evidence, failed assumptions, viable alternatives, tradeoffs,
+   recommendation, and the exact decision or external input needed. Linked
+   `blocked` lifts when its last blocker is done.
+7. At `to-review` say **ready for review** / **handed off to review**;
+   done/complete/final only for `done`.
+8. `board-goal-v2` is authoritative: `goal` owns `parent/primary`; `spawn goal`
+   owns `run/RUN-*`. V1 shapes are compatibility-only.
+   Local goal/query/status reads require an existing board and do not migrate
+   legacy goals. Goal writes initialize and validate the board before migration.
+9. `openai-board` / `anthropic-board` launch the primary `task-board
+   codex|claude` sessions.
+   agents-infra composes; `tb-sessiond` owns goal bind, location-scoped
+   `openai-board|anthropic-board resume [SES-*]`, native identity restart, and
+   session operations. Provider-native adoption remains explicit as
+   `codex resume THREAD_ID` (compatibility form) or `codex --resume THREAD_ID`,
+   and `claude --resume UUID`.
+   Bad records move to private `<state>/quarantine/`; listen continues and
+   status/list report them.
+10. Freeze stable project/config/runtime/control roots and one binding+digest.
+    Explicit config must exist; direct/managed children override ambient roots.
+    `TASK_BOARD_DIR` stores, not authority. Resolve authority from a
+    binding via fresh `git ls-remote --symref <authorized-url> HEAD`,
+    exact-ref fetch, and equal advertised/fetched OIDs. Never use cached/local
+    refs, tracking, caller/config fields, or prior tuples. Cross-check
+    `integration_base_branch` against the independent branch/remote
+    pair. Zero/multiple/unavailable/indeterminate evidence refuses.
+    Producer publishes a Change Request, reviewer runs `accept_cr`,
+    then Orchestrator checkpoints leaves and integrates the Story. Managed
+    commits use `-S` with repository human identity/key; index failures never
+    justify broad reset. See
+    [tracked background spawn](references/tracked-background-spawn.md#story-worktree-isolation).
+11. Cross-Story `set_parent` and integration are durable and fail closed; move
+    evidence never widens source-tombstone admission. See
+    [tracked background spawn](references/tracked-background-spawn.md#what-the-board-state-commit-covers-and-what-it-leaves-alone).
+12. Board validation stays strict by default. The project setting
+    `validation.allow_legacy_empty_done_containers=true` suppresses only the
+    historical empty-`done` Story/Epic aggregate mismatch; active or
+    child-backed containers remain strict.
+13. Transaction-owned `.activity/<ID>/events.ndjson` forbids caller logging.
+    Reads are bounded; corrections privileged/append-only. Transfer/worktrees
+    reject foreign history, preserve legacy/deletion boundaries, and never backfill.
+    See [file format](references/file-formats.md#activity-streams),
+    [query](references/querying.md), and
+    [coverage](docs/activity-mutation-coverage.md).
+14. Never run `make install*`, `scripts/setup.sh`, or `task-board self-update`
+    from inside a manager-hosted session. A Claude host's PTY master lives in
+    the `tb-sessiond` process, so replacing that daemon hangs up every hosted
+    session including the caller's own. A binary swap is a human action taken
+    between sessions; the manager restarts from an outside shell with
+    `task-board session restart`. See
+    [goals recovery](references/goals-recovery.md#1-a-skill-reinstall-beside-a-running-tb-sessiond).
+
+## Decision Tree
+
+```text
+Prompt-assigned role or TASK_BOARD_RUN_ID? -> work as that specialist
+Artifact, test, docs, research, or review? -> tracked role-based spawn
+Primary session restarted or resumed? -> `task-board worktree obligations` first
+Producer reached to-review? -> spawn reviewer, route verdict
+Concrete stop boundary? -> persist packet, then blocked
+Known structured board operation? -> q/m DSL with narrow projection
+Unknown name/field? -> schema(); known call syntax? -> schema(operation|mutation=NAME); see querying recovery examples
+```
+
+## Lazy Reference Routes
+
+| Need | Read |
+| --- | --- |
+| Queries, observability, goals, estimates, deps | [querying](references/querying.md), [file formats](references/file-formats.md) |
+| Status, review, recovery, Stop-The-Line | [statuses](references/statuses.md) |
+| Resources, bugs | [resources and bugs](references/resources-and-bugs.md) |
+| Detailing, plans, execution | [planning workflow](references/planning-workflow.md) |
+| Research budgets, exit, first slice | [research workflow](references/research-workflow.md) |
+| Roles, task classes, DoD | [roles](references/roles.md) |
+| Negative tests, gate proofs, refusal rows | [negative evidence](references/negative-evidence.md) |
+| Spawned goals, selection, runs, recovery, Story worktrees | [tracked background spawn](references/tracked-background-spawn.md) |
+| CR order, checkpoint, repeat-of, reuse, landing proofs | [CR lifecycle](references/change-request-lifecycle.md) |
+| Session Manager wrappers, goal runtimes | [codex goal runtime](docs/codex-goal-runtime.md), [claude goal runtime](docs/claude-goal-runtime.md) |
+| Templates, reviewer routing | [sub-agent templates](references/sub-agent-templates.md) |
+| Context budgets | [context efficiency](references/context-efficiency.md) |
+| Config feature gates | [config features](references/config-features.md) |
+| Goal daemon skew, native recovery | [goals recovery](references/goals-recovery.md) |
+| Project config refusals/schema/examples, authority envelopes, guarded alias migration, spawn supervision in minutes | [canonical config reference](references/task-board-config.md); persist a matching scoped selection before removing legacy `remote.user`, preview with `task-board migrate-project-config`, then apply only with its reviewed `--expected-digest` |
+| Install/bootstrap | [setup](references/setup.md) |
+| Remote auth/admin/ops | [remote board runbook](docs/remote-board-operations.md) |
+| CLI/deploy overview | [README](README.md) |
+| Developing task-board itself (this repo) | [CLAUDE.md](CLAUDE.md) |
+
+Runtime changes follow canonical `.specs/` contracts.
+
+Gemini CLI 0.54.4 is deprecated in favour of Antigravity (`agy`); both remain
+supported. `agy` effort is encoded in its model ID, not `--reasoning-effort`.
+See [README](README.md#antigravity-cli-agy) for the command, models, argv
+budget, and JSON contract.
+
+exec
+/bin/zsh -lc "task-board q 'task(TASK-260916-2vzsmy)'" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ exited 1 in 0ms:
+query error: parse error at 1:1: unknown operation "task" (got "task"); known operations: activity, agents, context, context_boundary, context_candidates, context_retention, contexts, count, get, list, models, plan, project_config, provider_limits, schema, summary, whoami; see schema() for the contract and schema(operation=NAME) for one signature
+
+exec
+/bin/zsh -lc "cat /Users/iv/.codex/skills/project-management/references/negative-evidence.md; rg --files -g AGENTS.md -g '*release*' -g '*mutant*' Scripts .planning" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ exited 2 in 0ms:
+# Negative Evidence Contract
+
+A passing suite means nothing unless something in it would have failed. This
+file is the single source of truth for the rules that make a green check mean
+something, and for the incident record behind each one. The operative wording
+that reaches every spawned child lives in the spawn template section
+`Evidence That Counts`; the reviewer's licence lives in `.roles/reviewer/role.md`;
+the repeated-variant heuristic lives in `.roles/orchestrator/role.md`. Read this
+file when you need the shapes, the failure vocabulary, or the incidents that
+produced a rule — do not restate these rules in other documents.
+
+| Rule | Operative statement | Evidence record |
+| --- | --- | --- |
+| Negative tests for gates | spawn template, `Evidence That Counts` | this file |
+| Narrowing, not deleting | spawn template, `Evidence That Counts` | this file |
+| Production call site | spawn template, `Evidence That Counts` | this file |
+| Absence vs failure to read | spawn template, `Evidence That Counts` | this file |
+| Prove, or report nothing | spawn template, `Evidence That Counts` | this file |
+| Reviewer licence to defeat a gate | `.roles/reviewer/role.md` | this file |
+| Many variants, one unowned decision | `.roles/orchestrator/role.md` | this file |
+
+## Negative Tests For Gates
+
+Any feature that GATES, REFUSES, VALIDATES, AUTHORIZES, or ATTESTS must ship
+with negative tests that fail when the gate admits what it is supposed to
+reject. A positive test proving the happy path passes is not evidence that the
+gate works; it is evidence that the gate is reachable.
+
+This is the dominant defect class in this repository's 2026-07-28..08-03 waves.
+Every instance below was found because a reviewer deliberately attacked the
+gate, not because anyone read the code:
+
+- the fact-assay attested a COLD child that never inherited the context, because
+  it checked inventory, session id, digests, and output shape, but never
+  inheritance;
+- the assay fork had repository tool access, so it could answer from disk while
+  the base was false;
+- the builder attestation accepted a correctly-shaped forged digest that the
+  caller minted itself;
+- clearance enforcement existed but no production path called it, and counting
+  tests around a fake proved nothing;
+- an unknown assay event preserved a false zero-tool observation;
+- a provider capability was declared absent to disable a flaky check, and the
+  claim did not reproduce (9/11 success).
+
+## Standard Negative Shapes
+
+Use these names in checklists, verdicts, and test names. They are the shapes a
+negative test must cover and the shapes a reviewer looks for first.
+
+| Shape | What it looks like when nobody tests for it | What the negative test must do |
+| --- | --- | --- |
+| Forged or self-minted evidence | The caller supplies the proof that the gate checks, and a correctly-shaped value passes. | Mint the evidence in the test the way a caller could, and require refusal. |
+| Absent evidence treated as satisfied | Missing input takes the permissive branch; the suite only ever supplies the input. | Remove the evidence entirely and require refusal, not a default-pass. |
+| Check present but uncalled from production | The guard is implemented and unit-tested by direct call; no production path invokes it. | Drive the real entry point — launch, materialize, resolve, publish — and name the production call site. |
+| Bypass path around the check | One entry point enforces; a second, older, or retry/renewal path does not. | Exercise every entry point that reaches the protected state, including retry, renewal, resume, and recovery, and every delivery surface that carries the rule — a contract clause reaching one context profile and not the other is this shape. |
+| Capability claim that does not reproduce | A capability is declared absent or present to make a flaky check go away. | Re-run the claim enough times to state a real rate, or report unknown. |
+
+## Derive Completeness From An Independent Source
+
+Completeness is derived from the pinned source or generated artifact, never
+enumerated by hand. When a registry, schema set, or declared scope defines the
+members, derive the expected set from that source and fail when any member lacks
+enforcement. This rule comes from five consecutive review rounds that each
+closed exactly the hand-picked members named by the previous reviewer; the next
+unlisted member defeated every list.
+
+A completeness test that reads the implementation's own table is circular and
+can never detect a missing entry: removing the entry also removes it from the
+test's expected set. Derive the expectation from the normative source of truth,
+not from the code under test. This distinction was what let the next Story's
+round-1 review demand a source-derived completeness test instead of accepting
+the producer's two selected cases.
+
+## Prove Exact Bounds At The Production Entry
+
+Prove every bound in both directions at the production entry: accept at the
+limit and refuse past the limit. Character bounds count characters rather than
+bytes. The motivating failure was a value containing 3,999 characters but
+5,999 bytes that production rejected with a byte comparison even though the
+normative `string[1..4096]` bound permitted it; helper-only or ASCII-only tests
+could not expose that narrowing.
+
+## Disable Every Refusal Clause
+
+Disable each refusal clause individually. If the suite stays green, that clause
+is a hole unless the test or evidence documents it as provably subsumed and
+names the check that subsumes it. This is measured rather than hypothetical: in
+one file, disabling 110 clause sites produced 45 surviving mutants, and 12 of
+those survivors were genuine widenings.
+
+Numeric-bound mutation and clause-disablement are different classes, and one
+harness rarely generates both. Numeric mutation finds off-by-one defects but
+cannot express disabling a tagged-union arm, cross-field equality, or grammar
+predicate; clause disablement finds those omissions but cannot move a numeric
+boundary. The 110-site clause run exposed widenings that the numeric harness
+could not generate, so run both classes.
+
+## Check Refusals Against The Normative Source
+
+A green test can defend a bug when it asserts a refusal that the normative
+source does not require. One observed test required production to reject values
+that the pinned specification permitted, so the suite protected the narrowing
+instead of detecting it. Whenever a test encodes a refusal, check that refusal
+against the pinned source rather than copying current behaviour into the
+assertion.
+
+## Eliminate Ambient Test Inputs
+
+No test may depend on ambient environment. Fixtures set explicit identity and
+all other values that could otherwise come from global configuration, the OS,
+or developer-machine state. A developer machine let Git derive an author name
+from the OS and passed the suite, while a CI runner with an empty GECOS field
+failed with `empty ident name`; only CI can catch this class, so the fixture
+must make its identity deterministic before CI exercises it.
+
+## Prove A Bound By Narrowing, Not By Deleting
+
+A test that removes a gate entirely proves only that the gate exists. It says
+nothing about whether the gate covers the right class. Restrict the gate to a
+narrower condition instead and require a named test to fail.
+
+Two repository incidents where a narrowed gate survived a green suite:
+
+- **BUG-260801-3kiloe F1** — the recovery successor cap was proven only by total
+  removal. Narrowing it to provider-limit signals left every other recoverable
+  failure unbounded, with the whole suite still green.
+- **TASK-260802-17wetr F16** — thirteen cycles later, the same shape: the
+  probe-lease cap survived deletion tests while the renewal path escaped it.
+- **TASK-260730-2c1e8l cycle 1** — this contract itself. The reviewer clauses
+  landed in the role body and the shipped test checked the role file and the
+  lite template separately, so both halves were green while the composed lite
+  prompt carried neither. Assert on the composed production artifact, not on the
+  pieces it is built from.
+- **TASK-260730-2c1e8l cycle 2** — the same contract, one level up, and the
+  clearest statement of the difference between the two shapes. The cycle-1 fix
+  did assert on the composed prompt, but it called the composition helper
+  directly and handed it the role, task-class filter, and profile itself.
+  Production builds those inputs inside the spawn entry point, so a mutant
+  narrowing only the real lite-reviewer routing just before composition left the
+  test green while an actual lite reviewer lost its gate-defeat licence. A test
+  that supplies the inputs is testing the helper, not the path. Obtain the
+  artifact the way the consumer does — here, read the prompt file recorded on
+  the run manifest after driving the entry point — so role resolution, the
+  task-class filter, and profile resolution are all under test rather than
+  assumed.
+
+Three traps when running the mutants themselves, all hit while proving this file:
+
+- **The mutant must be re-run with `-count=1`.** `go test` caches on package
+  sources; a test that reads `.roles/*.md` or any file outside its package at
+  runtime returns a stale cached PASS after that file is mutated. A cached green
+  is not a surviving mutant, it is an unexecuted test.
+- **A passing assertion may be satisfied by the wrong source.** Two mutants of
+  the producer DoD entries survived because the phrase asserted also appears,
+  differently worded, in the shared spawn template. Choose assertion wording
+  that only the intended source can supply, then narrow that source and require
+  the named test to fail.
+- **Restore the mutant from a copy, not from git.** `git checkout <file>`
+  restores from the index, which silently discards uncommitted work in that file
+  — during this task it reverted the whole cycle-2 change, not just the mutant.
+  Copy the file aside before mutating, restore from the copy, and verify the
+  restoration by diffing against it before rerunning the gates.
+
+## A Gate Publishes Its Coverage As A Ratio
+
+Prose about what a gate checks cannot distinguish 7 of 7 from 3 of 7. Every
+statement such a description makes is usually true — it is true of what the gate
+can see, and silent about what it cannot. The longer and more careful the
+description, the more thorough the gate looks.
+
+Report the fraction of intended targets the gate actually reaches, and assert
+that fraction so it reddens when a target drops out of reach. A target no mutant
+can redden is not covered, however elaborate the structure around it.
+
+Three defects of this exact shape, each found only once a ratio existed:
+
+- an AST call graph that recorded an edge only for a direct identifier call
+  covered 3 of 7 guarded functions while every pin passed; the package's real
+  dispatch was a function-value table, and the blind spot was invisible from
+  inside;
+- a classifier keyed on prose that a sibling gate was actively rewriting silently
+  dropped 8 rows, taking a suite from 107 executed subtests to 66, while its
+  completeness check `count == 0` reported nothing, because four is not zero;
+- an ownership gate that proved a symbol exists and a case is linked reported 48
+  sections as owned; measured against the specification, those bindings
+  discharged 2 of 394 normative clauses.
+
+A non-empty check on a derived set is the recurring form. `len(x) > 0` answers a
+different question from `len(x) == expected`, and only the second notices a
+narrowing.
+
+## A Blind Spot Is Not An Empty Set
+
+"Nothing is there" and "nothing this checker can see" are different facts, and
+only the second is a statement about the checker. Reporting the first when you
+mean the second converts a limitation into a clean bill of health, and the reader
+has no way to tell.
+
+An ownership gate scanned for uppercase RFC 2119 keywords. Sections stating their
+obligations in declarative present tense scored zero, were bucketed as carrying
+no obligations, and were admitted with no evidence required. Its documentation
+said "there is no obligation to enumerate". The true sentence was "the section
+carries no keyword line, so the scanner cannot see its obligations" — and 19 of
+151 headings were free-admission surface the moment they were bound, including a
+19-row exit-code registry and a closed manifest specification.
+
+Two rules follow:
+
+- State the bound of what the checker can see, next to what it reports. A
+  residual class that is named can be attacked later; one that is implied cannot.
+- Do not let the bucket for "nothing to check" also be the bucket that skips the
+  check. Where absence of measurable obligation is a legitimate state, require an
+  explicit reviewed justification for it, so the weakest entries are the ones
+  that must say the most rather than the least.
+
+## An Absence And A Failure To Read Are Different Facts
+
+Absence is a legitimate state with a defined fallback. A failed, partial, or
+malformed read is evidence of a problem. Treating the second as the first lets
+the fallback launder a fault into a normal-looking value, and a fallback defined
+for absence must never fire on a read failure.
+
+Each of these was a separate defect in this repository:
+
+- a non-empty value read as verified;
+- an unknown scanner version read as clean;
+- a partial provenance record read as absent;
+- a zero pid start time read as alive;
+- a malformed `api_error_status` read as missing;
+- an unparsed envelope read as no envelope — this one produced a false provider
+  suppression that would have hidden a healthy provider for hours.
+
+## Prove, Or Report Nothing
+
+Where a property cannot be established, report unparsed or unknown rather than
+inferring it from a proxy signal. A plausible guess is worse than an explicit
+unknown, because callers act on it.
+
+Incident: headless top-level inference in the Claude classifier was unsound in
+principle and produced six variants before it was deleted rather than
+strengthened.
+
+## Many Variants, One Unowned Decision
+
+A long run of same-shaped variants usually means a decision has more than one
+owner, not that there are many bugs. Eleven framing variants stopped reproducing
+only when structure got a single scanner and a single state type; every per-site
+patch before that produced the next variant. The operative wording is in
+`.roles/orchestrator/role.md`: unify the decision, do not patch each site.
+
+## Reviewer Licence
+
+Reviewers are explicitly licensed to attempt to defeat a gate and to reject a
+change whose only evidence is positive-path. Grep for callers before believing a
+guard is in force. The operative wording is in `.roles/reviewer/role.md`.
+
+## Exact-Evidence Reuse Is Not Full Replay
+
+A green validation result is evidence about ONE candidate: the source and test
+tree it ran against, the suite and configuration it ran with, and the
+environment it ran in. Progressive checks may reuse that exact result while
+all four identities are unchanged; the moment any of them differs, the result
+is evidence about a different candidate and a rerun is required. The runtime
+binding — which identities are hashed, what `reused_from_revision` records,
+and why an absent or malformed environment identity forces a reasoned rerun —
+is [docs/delivery-validation.md](../docs/delivery-validation.md). This page
+states the shapes a plan and a reviewer check against.
+
+- **Freeze the candidate before execution.** Evidence is bound to a captured
+  tree, never to "the worktree as it is now". A result produced while the tree
+  was still moving is evidence about no candidate at all.
+- **Full replay needs a reason.** Re-running the whole configured suite is
+  justified by exactly three things: a changed input identity, coverage the
+  reused evidence does not carry, or a recorded diagnostic reason. "To be
+  safe", "the runbook always does", or a retry that lost track of what already
+  ran are not reasons, and each burns the same budget the incident measured.
+- **Reuse never disarms the reviewer.** An independent reviewer retains
+  targeted adversarial discretion over a reused green: the attack described in
+  `Licence To Defeat A Gate` is against the candidate, not against the log,
+  and a reused result is one more input to attack, not a waiver.
+- **References and digests replace duplicated corpora.** A manifest of
+  content digests proves what was checked; a second copy of the corpus proves
+  only that the bytes were attached again. Portable archives are for a named
+  consumer that cannot resolve references, and for nothing else.
+
+## Refusal Rows: Research And Validation Budgets
+
+The rows below are what the guidance REFUSES, and the two controls are what it
+must keep admitting. Check a research plan, a rework brief, or a validation
+decision against both halves: a rule that refuses everything satisfies the
+first half and fails the second. Each refusal row names the observed incident
+behind it (`TASK-260909-2ax2l1` retrospective and addendum).
+
+| # | Scenario | Verdict | Why, and what the incident looked like |
+| --- | --- | --- | --- |
+| R1 | An agent justifies a second serial research prerequisite by consistency alone — "the sibling leaf has a gate, so this class needs one too", "the harness should also cover", symmetry with a prior leaf | **Refused.** A second serial prerequisite needs a checked spec gap (`solution-architect` rule 3: the missing piece, the requirement left incomplete, the spec sections checked) and its own budget; otherwise the finding is a focused regression in the owning leaf | Three nested gate leaves (contract gate, atom shapes, codepoints) were spawned from `repeat-of:` verdicts; production coverage stayed 0/28 vectors, 0/32 guards |
+| R2 | Reuse of a green result after the harness, the source tree, the test tree, the configuration or the environment changed | **Refused.** Any changed identity makes the evidence about a different candidate; rerun with the diagnostic reason recorded. An earlier empty candidate never exempts a later source change | Reviewer anchors on a stale producer/revision are documented in two verdicts; a candidate was reviewed against a tree it no longer was |
+| R3 | A gate claimed green with logs missing, truncated, unreadable, or ending before the last command | **Refused.** A failed or partial read is not a pass and not an absence; report which commands ran, which exit codes were observed, and mark the rest unrun. A cached `ok` on a package that reads files outside its module is this row | A 20-command suite timed out at command 13 of 20 after twelve greens; the seven unrun commands are unrun, not passed |
+| R4 | A retry, resume, recovery or republish that starts its budgets from zero | **Refused.** Worker time, artifact bytes and serial depth accumulate across every continuation of the same leaf; a continuation inherits the budget position it was cancelled at | 13 of 42 runs were cancelled continuations; the chain re-entered full publication validation on an empty-delta research handoff until an operator directive stopped it |
+| C1 | An unchanged green candidate: the same frozen tree, suite, configuration and environment, presented again for a later check | **Admissible.** Reuse the exact evidence; do not replay. The reviewer may still attack the candidate | The positive control for R2 and R3: identical identities, readable digest-matching log |
+| C2 | A legitimate research-only Change Request with an empty `repository_delta`, whose task-scoped outcomes are attached and whose decision is recorded | **Admissible.** Publish it for independent review, skip source validation as `docs/delivery-validation.md` records, and route to the first implementation slice | The positive control for R1 and R4: one bounded contract task is the intended shape; twelve consecutive empty revisions with no consuming slice is what R1 and R4 refuse |
+
+rg: .planning: No such file or directory (os error 2)
+Scripts/validate-release-tag.sh
+Scripts/release.sh
+Scripts/release_metadata.py
+Scripts/release-preflight.sh
+Scripts/tests/test_release_docs.py
+Scripts/tests/test_release_packaging.py
+Scripts/tests/test_release_metadata.py
+Scripts/tests/test_release_preflight.py
+Scripts/tests/test_release_workflow.py
+
+exec
+/bin/zsh -lc "task-board q 'get(TASK-260916-2vzsmy) { notes resources checklist }'" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ exited 1 in 0ms:
+query error: parse error at 1:35: unknown field "resources" (got "resources"); see schema() for valid fields and preset names
+
+exec
+/bin/zsh -lc "git status --short; git diff --stat 7d2126aef02d9bb2c5443f5ef433462fda537732 0acdbb9b6db1b5f08efd76595f458e22f5434679; rg --files -g AGENTS.md -g '*mut*' ." in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ exited 1 in 0ms:
+ M .github/workflows/release.yml
+ M RELEASING.md
+ M Scripts/tests/test_release_metadata.py
+ M Scripts/tests/test_release_packaging.py
+ M Scripts/tests/test_release_preflight.py
+?? Scripts/tests/test_release_docs.py
+?? Scripts/tests/test_release_workflow.py
+?? Scripts/validate-release-tag.sh
+ .github/workflows/release.yml           |  10 +-
+ RELEASING.md                            |  65 ++++++++
+ Scripts/release-preflight.sh            |  35 +++-
+ Scripts/release.sh                      |   2 +-
+ Scripts/release_metadata.py             |  25 +++
+ Scripts/tests/test_release_docs.py      |  92 +++++++++++
+ Scripts/tests/test_release_metadata.py  | 107 ++++++++++++-
+ Scripts/tests/test_release_packaging.py | 276 ++++++++++++++++++++++++++++++++
+ Scripts/tests/test_release_preflight.py | 171 ++++++++++++++++++++
+ Scripts/tests/test_release_workflow.py  | 194 ++++++++++++++++++++++
+ Scripts/validate-release-tag.sh         |  38 +++++
+ 11 files changed, 1002 insertions(+), 13 deletions(-)
+
+exec
+/bin/zsh -lc "task-board q 'schema(operation=get)'" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 0ms:
+{"description":"Get a single element by ID","examples":["get(TASK-XX) { overview }"],"kind":"operation","name":"get","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID"}],"signature":"get(id:string)","syntax":"OPERATION(element-or-identifier, key=value, key=\"quoted string\") { field preset }; statements separated by ';'; the first bare positional value is the element/identifier argument; remaining arguments use key=value (no operators or lists); string escapes: \\\" \\\\ \\n \\t"}
+
+exec
+/bin/zsh -lc 'task-board resource list TASK-260916-2vzsmy' in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 0ms:
+Manage attached resources such as screenshots, docs, logs, and other files.
+
+Use "task-board resource add" to create a new attached resource, "task-board
+resource adopt" to register an orphaned local payload, "task-board resource
+update" to replace an existing one, "task-board resource delete" to remove it,
+and "task-board resource get" to materialize a resource back to the local
+filesystem for inspection.
+
+Usage:
+  task-board resource [command]
+
+Available Commands:
+  add         Attach a new file resource to an element
+  adopt       Register an existing unreferenced local resource payload
+  delete      Delete a resource from an element (requires --confirm)
+  get         Download a resource to the local filesystem
+  update      Replace an existing file resource on an element
+
+Flags:
+  -h, --help   help for resource
+
+Global Flags:
+      --board-dir string         Path to the board directory (overrides TASK_BOARD_DIR and config local.board_dir) (default ".task-board")
+      --context-profile string   Agent context profile override: full or lite
+      --insecure                 Skip TLS certificate verification (for self-signed certs)
+      --json                     Output in JSON format
+      --no-update-check          Disable automatic update check
+      --remote string            Remote board server URL (overrides TASK_BOARD_REMOTE)
+      --remote-board string      Remote board ID (overrides TASK_BOARD_ID)
+
+Use "task-board resource [command] --help" for more information about a command.
+
+exec
+/bin/zsh -lc "task-board q 'get(TASK-260916-2vzsmy) { overview }'" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 39ms:
+{"assignee":"[reviewer] reviewer (codex)","id":"TASK-260916-2vzsmy","name":"release-preflight-and-documentation","parent":"STORY-260916-1o0gkc","status":"reviewing"}
+
+exec
+/bin/zsh -lc "rg -n 'resource|attachment' /Users/iv/.codex/skills/project-management/references/querying.md" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 0ms:
+381:# Rename overview name/slug while preserving ID, README, progress, children, and resources
+405:task-board m 'add_resource(TASK-12, name="TASK-12_design.md", type=precondition, content="...", description="Design doc")'
+406:task-board m 'update_resource(TASK-12, name="TASK-12_design.md", type=precondition, content="revised", description="Design doc v2")'
+407:task-board m --confirm 'delete_resource(TASK-12, name="TASK-12_design.md")'
+421:- `--confirm` — required for destructive mutations (`delete`, `delete_resource`)
+552:| Resource management | DSL mutation / CLI | `task-board m 'add_resource(TASK-XX, name=TASK-XX_results.md, content="...", type=outcome)'` |
+
+exec
+/bin/zsh -lc "task-board q 'get(TASK-260916-2vzsmy) { attachments notes checklist }'" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ exited 1 in 0ms:
+query error: parse error at 1:29: unknown field "attachments" (got "attachments"); see schema() for valid fields and preset names
+
+exec
+/bin/zsh -lc "task-board q 'schema()'" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 0ms:
+{"defaultFields":["id","name","status"],"fields":["id","type","name","title","status","integrationCheckpointed","review","task_class","estimate","observability","parent","assignee","description","scope","ac","blockedBy","blocks","derivedBlockedBy","derivedBlocks","checklist","notes","created","updated","isBlocked","isAdvisoryBlocked","children","preconditionResources","outcomeResources","identity","binding","lineage","lifecycle","freshness","actualization","security","payload"],"grammar":{"statement":"OPERATION(ARGUMENTS) { PROJECTION }; the projection block is optional","batch":"STATEMENT; STATEMENT — statements separated by ';', results keep source order","arguments":"comma-separated arguments: the first bare positional value is the element/identifier argument; remaining arguments use key=value; no operators or lists (not key in [a,b], not key!=value)","values":"a bare identifier (letters, digits, '_', '-', '.', '/'), an int, a bool (true|false), or a \"double-quoted string\"; quote any value containing spaces, commas or parentheses","escapes":["\\\"","\\\\","\\n","\\t"],"projection":"field projection: { field preset ... } — space-separated field names and preset names inside braces; omitted means the default fields","tokens":["identifier","string","'('","')'","'{'","'}'","'='","','","';'","end of input"],"examples":["op()","op(key=value)","op(key=value, other=42, flag=true)","op(key=\"quoted value with \\\" \\\\ \\n \\t\")","op(positional)","op() { field preset }","op(key=value) { field }; other()"]},"mutationMetadata":{"add_checklist_item":{"description":"Add a new checklist item","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID","required":true},{"name":"text","type":"string","optional":false,"description":"Checklist item text","required":true}],"examples":["add_checklist_item(TASK-260218-abc123, text=\"Write unit tests\")"],"destructive":false,"idempotent":false},"add_resource":{"description":"Add a text resource to an element","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID","required":true},{"name":"name","type":"string","optional":false,"description":"Resource name (e.g. research.md)","required":true},{"name":"content","type":"string","optional":true,"description":"Resource content (text); required if path is not provided"},{"name":"path","type":"string","optional":true,"description":"Client-local file path (remote CLI inlines content; board-server rejects raw paths)"},{"name":"type","type":"string","optional":true,"default":"outcome","description":"Resource type","enum":["precondition","outcome"]},{"name":"description","type":"string","optional":true,"description":"One-line description"}],"examples":["add_resource(TASK-260218-abc123, name=\"research.md\", content=\"...\", type=outcome)","add_resource(TASK-260218-abc123, name=\"spec.md\", path=\".temp/spec.md\", type=precondition)"],"destructive":false,"idempotent":false},"assign":{"description":"Assign an agent to an element","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID","required":true},{"name":"agent","type":"string","optional":false,"description":"Agent name","required":true}],"examples":["assign(TASK-260218-abc123, agent=claude-opus)"],"destructive":false,"idempotent":true},"audit_context_validation":{"description":"Run one no-model validation audit over a ready context and apply its consequence","parameters":[{"name":"id","type":"string","optional":false,"description":"CTX identifier","required":true},{"name":"expected_revision","type":"int","optional":true,"description":"Observed record revision"},{"name":"trigger","type":"string","optional":true,"default":"daily_audit","description":"Audit to run; the model gate is not reachable here","enum":["daily_audit","deep_audit","fork_preflight","validator_policy_change"]},{"name":"payload_sha256","type":"string","optional":true,"description":"Observed payload digest"},{"name":"coverage_manifest_sha256","type":"string","optional":true,"description":"Observed manifest digest; a deep audit needs it"},{"name":"anchor_commit","type":"string","optional":true,"description":"Observed anchor commit; a deep audit needs it"},{"name":"boundary_drift","type":"bool","optional":true,"default":false,"description":"In-boundary change the caller detected"},{"name":"finding","type":"string","optional":true,"description":"Post-publication finding; quarantines","enum":["known_falsehood","contaminated","integrity_failed"]},{"name":"at","type":"string","optional":true,"description":"RFC3339 audit instant"}],"examples":["audit_context_validation(CTX-260728-a1b2c3, trigger=daily_audit)","audit_context_validation(CTX-260728-a1b2c3, trigger=deep_audit, coverage_manifest_sha256=abc123, anchor_commit=def456)"],"destructive":false,"idempotent":false},"check_item":{"description":"Check a checklist item","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID","required":true},{"name":"item","type":"int","optional":false,"description":"Checklist item number (1-based)","required":true}],"examples":["check_item(TASK-260218-abc123, item=1)"],"destructive":false,"idempotent":true},"collect_context_retention":{"description":"Retire what a never-pruning provider left behind and name the payloads to delete","parameters":[{"name":"warn_days","type":"int","optional":true,"default":7,"description":"Expiry warning horizon"},{"name":"include_pinned","type":"bool","optional":true,"default":false,"description":"Collect pinned contexts too"}],"examples":["collect_context_retention()"],"destructive":false,"idempotent":false},"confirm_context_reclamation":{"description":"Record that a retired context's provider payload was deleted, so later sweeps stop asking","parameters":[{"name":"id","type":"string","optional":false,"description":"CTX identifier","required":true},{"name":"archived_included","type":"bool","optional":true,"default":false,"description":"Archive location swept too; required where archiving moves rather than deletes"},{"name":"files","type":"int","optional":true,"description":"Payload files removed"},{"name":"reclaimed_at","type":"string","optional":true,"description":"RFC3339 deletion time"}],"examples":["confirm_context_reclamation(CTX-260728-a1b2c3, archived_included=true, files=2)"],"destructive":false,"idempotent":true},"correct_activity":{"description":"Append a privileged, append-only correction/supersession event referencing an earlier activity event. Never edits or deletes the original event.","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID whose activity stream receives the correction","required":true},{"name":"target_event_id","type":"string","optional":false,"description":"Event ID being corrected or superseded","required":true},{"name":"kind","type":"string","optional":false,"description":"\"corrects\" or \"supersedes\"","enum":["corrects","supersedes"],"required":true},{"name":"reason","type":"string","optional":false,"description":"Non-empty human-readable justification","required":true}],"examples":["correct_activity(TASK-260218-abc123, target_event_id=AEV-260218-000000000000000000000001, kind=corrects, reason=\"wrong status recorded\")"],"destructive":true,"idempotent":false},"create":{"description":"Create a new board element","parameters":[{"name":"type","type":"string","optional":false,"description":"Element type","enum":["epic","story","task","bug"],"required":true},{"name":"name","type":"string","optional":false,"description":"Element name (kebab-case)","required":true},{"name":"parent","type":"string","optional":true,"description":"Parent element ID (required for story/task/bug)"},{"name":"description","type":"string","optional":true,"description":"Element description"},{"name":"scope","type":"string","optional":true,"description":"Element scope"},{"name":"ac","type":"string","optional":true,"description":"Acceptance criteria"},{"name":"review","type":"string","optional":true,"description":"Review policy","enum":["required","light","none"]},{"name":"task_class","type":"string","optional":true,"description":"Task class","enum":["code","metadata","docs","research"]}],"examples":["create(type=epic, name=auth-system)","create(type=task, name=implement-login, parent=STORY-260218-abc123)"],"destructive":false,"idempotent":false},"delete":{"description":"Delete an element and its children","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID to delete","required":true}],"examples":["delete(TASK-260218-abc123)"],"destructive":true,"idempotent":false},"delete_resource":{"description":"Delete a resource from an element","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID","required":true},{"name":"name","type":"string","optional":false,"description":"Resource name to delete","required":true}],"examples":["delete_resource(TASK-260218-abc123, name=\"research.md\")"],"destructive":true,"idempotent":false},"handoff":{"description":"Verify checklist and task-scoped outcome evidence, then move to a role handoff status atomically","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID","required":true},{"name":"role","type":"string","optional":false,"description":"Resolved role name","required":true},{"name":"status","type":"string","optional":false,"description":"Resolved role end status","enum":["backlog","analysis","to-dev","development","to-review","reviewing","integrating","done","closed","blocked"],"required":true},{"name":"commit_ack","type":"string","optional":true,"description":"Mover acknowledgement required by version_control.confirm for Bug/Story done transitions"},{"name":"txn_id","type":"string","optional":true,"description":"Integration transaction token presented to satisfy a transition lease; it authorizes nothing else"}],"examples":["handoff(TASK-260218-abc123, role=developer, status=to-review)"],"destructive":false,"idempotent":true},"link":{"description":"Create dependency: element is blocked by another","parameters":[{"name":"id","type":"string","optional":false,"description":"Element that will be blocked","required":true},{"name":"blocked_by","type":"string","optional":false,"description":"Element that blocks","required":true}],"examples":["link(TASK-260218-abc123, blocked_by=TASK-260218-def456)"],"destructive":false,"idempotent":true},"login":{"description":"Store auth token in Keychain and select the active user in non-versioned local state","parameters":[{"name":"user","type":"string","optional":false,"description":"User ID","required":true},{"name":"token","type":"string","optional":false,"description":"Auth token (tb_...)","required":true},{"name":"remote","type":"string","optional":true,"description":"Remote URL (defaults to current remote)"}],"examples":["login(user=alexis, token=tb_xxx)"],"destructive":false,"idempotent":true},"logout":{"description":"Remove the configured user's token from Keychain","parameters":[{"name":"remote","type":"string","optional":true,"description":"Remote URL (defaults to current remote)"}],"examples":["logout()"],"destructive":false,"idempotent":false},"mark_context_stale":{"description":"Invalidate a ready context and, transactionally, every ready lineage descendant","parameters":[{"name":"id","type":"string","optional":false,"description":"CTX identifier","required":true},{"name":"expected_revision","type":"int","optional":false,"description":"Observed record revision","required":true},{"name":"reason","type":"string","optional":false,"description":"Invalidation reason","enum":["ancestor_invalidated","ancestry_drift","freshness_drift","payload_vanished","provider_incompatible","validation_overdue","validation_refuted"],"required":true}],"examples":["mark_context_stale(CTX-260728-a1b2c3, expected_revision=2, reason=freshness_drift)"],"destructive":false,"idempotent":false},"normalize_legacy_status":{"description":"Replace one exact unparseable legacy raw status with a canonical status under the board mutation lock","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID","required":true},{"name":"expected_raw","type":"string","optional":false,"description":"Exact current raw Status section value","required":true},{"name":"status","type":"string","optional":false,"description":"Canonical replacement status","enum":["backlog","analysis","to-dev","development","to-review","reviewing","integrating","done","closed","blocked"],"required":true}],"examples":["normalize_legacy_status(STORY-260713-72b914, expected_raw=\"in-progress\", status=development)"],"destructive":false,"idempotent":false},"publish_context":{"description":"Publish a completed building context as ready after successful register-time classification and transcript verification","parameters":[{"name":"id","type":"string","optional":false,"description":"CTX identifier","required":true},{"name":"expected_revision","type":"int","optional":false,"description":"Observed record revision","required":true},{"name":"transcript","type":"string","optional":false,"description":"Client-local provider transcript path verified before publication; never read by board-server","required":true},{"name":"secret_class","type":"string","optional":true,"description":"Classification result; may elevate but never downgrade","enum":["unrestricted","restricted"]},{"name":"expires_at","type":"string","optional":true,"description":"RFC3339 retention deadline"}],"examples":["publish_context(CTX-260728-a1b2c3, expected_revision=1, transcript=\"./.temp/run/transcript.jsonl\")","publish_context(CTX-260728-a1b2c3, expected_revision=1, transcript=\"./.temp/run/transcript.jsonl\", secret_class=restricted)"],"destructive":false,"idempotent":false},"reclassify_context":{"description":"Quarantine a misclassified context's payload and retire it instead of relabeling it","parameters":[{"name":"id","type":"string","optional":false,"description":"CTX identifier","required":true},{"name":"expected_revision","type":"int","optional":false,"description":"Observed record revision","required":true},{"name":"rules","type":"string","optional":true,"description":"Comma-separated classifier rule ids"},{"name":"detail","type":"string","optional":true,"description":"Bounded reason; never quote content"}],"examples":["reclassify_context(CTX-260728-a1b2c3, expected_revision=2, rules=provider-api-key)"],"destructive":false,"idempotent":false},"record_ledger_event":{"description":"Append the derived activity mirror of one control-plane ledger row (run, Change Request, or Story workspace). Facts only: the runtime emits this automatically and it refuses any free-text payload.","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID that owns the ledger row","required":true},{"name":"domain","type":"string","optional":false,"description":"Ledger domain","enum":["run","change_request","workspace"],"required":true},{"name":"ledger_id","type":"string","optional":false,"description":"Identifier of the ledger the row belongs to (RUN id, CR id, or workspace id)","required":true},{"name":"event","type":"string","optional":false,"description":"Enumerated ledger event token, lowercase snake_case","required":true},{"name":"recorded_at","type":"string","optional":false,"description":"RFC3339 UTC instant the ledger row was written","required":true},{"name":"sequence","type":"int","optional":true,"description":"Ledger row sequence within its ledger"},{"name":"revision","type":"int","optional":true,"description":"Change Request revision, when the domain has one"},{"name":"from_state","type":"string","optional":true,"description":"Enumerated prior state token"},{"name":"to_state","type":"string","optional":true,"description":"Enumerated resulting state token"},{"name":"facts","type":"string","optional":true,"description":"Typed facts as name:kind:value separated by |, kind is oid, ref, id or token"}],"examples":["record_ledger_event(TASK-260218-abc123, domain=run, ledger_id=RUN-260218-abcdef, event=completed, sequence=7, to_state=completed, recorded_at=\"2026-02-18T10:00:00Z\")","record_ledger_event(STORY-260218-bbbbbb, domain=workspace, ledger_id=WS-0123456789ab, event=checkpointed, sequence=3, recorded_at=\"2026-02-18T10:00:00Z\", facts=\"checkpoint:oid:0123abc\")"],"destructive":false,"idempotent":false},"register_context":{"description":"Allocate a provisional building context and fix its binding, provider, producer role, and lineage","parameters":[{"name":"provider","type":"string","optional":false,"description":"Provider lineage","enum":["codex","claude"],"required":true},{"name":"kind","type":"string","optional":false,"description":"Output kind","enum":["project","role","task"],"required":true},{"name":"scope","type":"string","optional":false,"description":"Canonical binding scope","enum":["board","element"],"required":true},{"name":"element","type":"string","optional":true,"description":"Bound board element for scope=element"},{"name":"producer_role","type":"string","optional":false,"description":"Role that produces the snapshot","required":true},{"name":"builder_profile","type":"string","optional":false,"description":"Publication authority","enum":["allowlisted-context-builder","standard-role"],"required":true},{"name":"secret_class","type":"string","optional":true,"default":"restricted","description":"Requested classification","enum":["unrestricted","restricted"]},{"name":"id","type":"string","optional":true,"description":"Explicit CTX id; generated when omitted"},{"name":"primary","type":"string","optional":true,"description":"Primary lineage parent CTX id"},{"name":"supplemental","type":"string","optional":true,"description":"Comma-separated supplemental parent CTX ids"},{"name":"supersedes","type":"string","optional":true,"description":"CTX id this snapshot supersedes"},{"name":"run","type":"string","optional":true,"description":"Producing RUN id"},{"name":"ancestry_digest","type":"string","optional":true,"description":"sha256 of the bound element ancestry"},{"name":"commit_sha","type":"string","optional":true,"description":"Workspace commit at registration"},{"name":"path_specs","type":"string","optional":true,"description":"Comma-separated repo-relative path globs"},{"name":"ingested_paths","type":"string","optional":true,"description":"Comma-separated exact repo-relative paths read by the builder"},{"name":"ingested_scopes","type":"string","optional":true,"description":"Comma-separated top-level components containing ingested paths"},{"name":"resolved_paths_digest","type":"string","optional":true,"description":"sha256 of the resolved path set"},{"name":"builder_contract_digest","type":"string","optional":true,"description":"sha256 of builder instructions and policy"},{"name":"base_live_tokens","type":"int","optional":true,"description":"Live token count of the published base"},{"name":"scout_ingestion_baseline_tokens","type":"int","optional":true,"description":"Median ingestion of the last three successful equivalent scout builds"},{"name":"checked_at","type":"string","optional":true,"description":"RFC3339 freshness check time"},{"name":"expires_at","type":"string","optional":true,"description":"RFC3339 retention deadline"}],"examples":["register_context(provider=codex, kind=role, scope=element, element=STORY-260728-abc123, producer_role=solution-architect, builder_profile=standard-role)","register_context(provider=claude, kind=project, scope=board, producer_role=context-builder, builder_profile=allowlisted-context-builder, secret_class=unrestricted)"],"destructive":false,"idempotent":false},"remove_checklist_item":{"description":"Remove an obsolete checklist item by one-based index","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID","required":true},{"name":"item","type":"int","optional":false,"description":"Checklist item number (1-based)","required":true}],"examples":["remove_checklist_item(TASK-260218-abc123, item=2)"],"destructive":true,"idempotent":false},"rename":{"description":"Rename an element name/slug while preserving its ID, details, progress, children, and resources","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID to rename","required":true},{"name":"name","type":"string","optional":false,"description":"New element name/slug; sanitized to kebab-case","required":true}],"examples":["rename(TASK-260218-abc123, name=better-task-name)"],"destructive":false,"idempotent":true},"retire_context":{"description":"Retire a context as an audit and lineage tombstone","parameters":[{"name":"id","type":"string","optional":false,"description":"CTX identifier","required":true},{"name":"expected_revision","type":"int","optional":false,"description":"Observed record revision","required":true},{"name":"reason","type":"string","optional":false,"description":"Retirement reason","enum":["building_abandoned","building_failed","classification_failed","element_closed","publication_not_requested","retention_expired","security_reclassification_required","superseded","validation_failed"],"required":true}],"examples":["retire_context(CTX-260728-a1b2c3, expected_revision=1, reason=publication_not_requested)","retire_context(CTX-260728-a1b2c3, expected_revision=1, reason=building_abandoned)"],"destructive":false,"idempotent":false},"retry_context_payload_withdrawal":{"description":"Retry an outstanding context payload deletion","parameters":[{"name":"id","type":"string","optional":false,"description":"CTX identifier","required":true}],"examples":["retry_context_payload_withdrawal(CTX-260728-a1b2c3)"],"destructive":false,"idempotent":true},"set_details":{"description":"Update element details, review policy, and task class","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID","required":true},{"name":"title","type":"string","optional":true,"description":"New title"},{"name":"description","type":"string","optional":true,"description":"New description"},{"name":"scope","type":"string","optional":true,"description":"New scope"},{"name":"ac","type":"string","optional":true,"description":"New acceptance criteria"},{"name":"review","type":"string","optional":true,"description":"New review policy","enum":["required","light","none"]},{"name":"task_class","type":"string","optional":true,"description":"New task class","enum":["code","metadata","docs","research"]}],"examples":["set_details(TASK-260218-abc123, title=\"new-title\", description=\"updated desc\")"],"destructive":false,"idempotent":true},"set_estimate":{"description":"Set the explicit Task/Bug estimate enum","parameters":[{"name":"id","type":"string","optional":false,"description":"Task or Bug ID","required":true},{"name":"estimate","type":"string","optional":false,"description":"Outer estimate enum","enum":["notEstimated","estimated"],"required":true},{"name":"scale","type":"string","optional":true,"description":"Nested estimate scale","enum":["fibonacci"]},{"name":"number","type":"int","optional":true,"description":"Non-negative scale value"}],"examples":["set_estimate(TASK-260218-abc123, estimate=notEstimated)","set_estimate(TASK-260218-abc123, estimate=estimated, scale=fibonacci, number=5)"],"destructive":false,"idempotent":true},"set_notes":{"description":"Append or replace notes on an element","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID","required":true},{"name":"text","type":"string","optional":false,"description":"Notes text","required":true},{"name":"set","type":"bool","optional":true,"default":false,"description":"Replace all notes instead of appending"},{"name":"txn_id","type":"string","optional":true,"description":"Integration transaction token presented to satisfy a transition lease; it authorizes nothing else"}],"examples":["set_notes(TASK-260218-abc123, text=\"Started implementation\")","set_notes(TASK-260218-abc123, text=\"Full replacement\", set=true)"],"destructive":false,"idempotent":false},"set_parent":{"description":"Move element to a different parent","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID to move","required":true},{"name":"parent","type":"string","optional":false,"description":"New parent element ID","required":true}],"examples":["set_parent(TASK-260218-abc123, parent=STORY-260218-def456)"],"destructive":false,"idempotent":false},"set_status":{"description":"Change element status with auto-promotion and escalation","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID","required":true},{"name":"status","type":"string","optional":false,"description":"New status","enum":["backlog","analysis","to-dev","development","to-review","reviewing","integrating","done","closed","blocked"],"required":true},{"name":"commit_ack","type":"string","optional":true,"description":"Mover acknowledgement required by version_control.confirm for Bug/Story done transitions"},{"name":"txn_id","type":"string","optional":true,"description":"Integration transaction token presented to satisfy a transition lease; it authorizes nothing else"}],"examples":["set_status(TASK-260218-abc123, status=development)","set_status(STORY-260218-abc123, status=done, commit_ack=scope_committed)"],"destructive":false,"idempotent":true},"sweep_context_retention":{"description":"Retire contexts past their configured age or over a fan-out cap, then withdraw payload bytes for records already retired","parameters":[{"name":"leases_observed","type":"bool","optional":true,"default":false,"description":"Assert live writer leases were read; without it nothing is planned"},{"name":"leases","type":"string","optional":true,"description":"Comma-separated CTX ids a live run holds"},{"name":"include_pinned","type":"bool","optional":true,"default":false,"description":"Sweep pinned contexts too"},{"name":"settings","type":"string","optional":true,"description":"Resolved retention policy as name=duration or name=count pairs separated by ';'; unset knobs keep documented defaults"}],"examples":["sweep_context_retention(leases_observed=true)","sweep_context_retention(leases_observed=true, settings=\"ready_ttl=168h;max_ready_per_binding=2\")"],"destructive":false,"idempotent":true},"sweep_context_validation_audits":{"description":"Run every due no-model validation audit across ready contexts","parameters":[{"name":"provider","type":"string","optional":true,"description":"Provider lineage","enum":["codex","claude"]},{"name":"kind","type":"string","optional":true,"description":"Output kind","enum":["project","role","task"]},{"name":"at","type":"string","optional":true,"description":"RFC3339 sweep instant"}],"examples":["sweep_context_validation_audits(kind=project)"],"destructive":false,"idempotent":false},"switch_user":{"description":"Switch active user for a remote using non-versioned local state","parameters":[{"name":"user","type":"string","optional":false,"description":"User ID to switch to","required":true},{"name":"remote","type":"string","optional":true,"description":"Remote URL (defaults to current remote)"}],"examples":["switch_user(user=admin)"],"destructive":false,"idempotent":true},"unassign":{"description":"Remove agent assignment from an element","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID","required":true}],"examples":["unassign(TASK-260218-abc123)"],"destructive":false,"idempotent":true},"uncheck_item":{"description":"Uncheck a checklist item","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID","required":true},{"name":"item","type":"int","optional":false,"description":"Checklist item number (1-based)","required":true}],"examples":["uncheck_item(TASK-260218-abc123, item=2)"],"destructive":false,"idempotent":true},"unlink":{"description":"Remove dependency between elements","parameters":[{"name":"id","type":"string","optional":false,"description":"Element that was blocked","required":true},{"name":"blocked_by","type":"string","optional":false,"description":"Element that was blocking","required":true}],"examples":["unlink(TASK-260218-abc123, blocked_by=TASK-260218-def456)"],"destructive":false,"idempotent":false},"update_resource":{"description":"Replace an existing resource on an element","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID","required":true},{"name":"name","type":"string","optional":false,"description":"Resource name to replace","required":true},{"name":"content","type":"string","optional":true,"description":"Replacement content (text); required if path is not provided"},{"name":"path","type":"string","optional":true,"description":"Client-local file path (remote CLI inlines content; board-server rejects raw paths)"},{"name":"type","type":"string","optional":true,"default":"outcome","description":"Resource type","enum":["precondition","outcome"]},{"name":"description","type":"string","optional":true,"description":"One-line description"}],"examples":["update_resource(TASK-260218-abc123, name=\"research.md\", content=\"revised\", type=outcome)","update_resource(TASK-260218-abc123, name=\"spec.md\", path=\".temp/spec.md\", type=precondition)"],"destructive":false,"idempotent":false}},"mutations":["add_checklist_item","add_resource","assign","audit_context_validation","check_item","collect_context_retention","confirm_context_reclamation","correct_activity","create","delete","delete_resource","handoff","link","login","logout","mark_context_stale","normalize_legacy_status","publish_context","reclassify_context","record_ledger_event","register_context","remove_checklist_item","rename","retire_context","retry_context_payload_withdrawal","set_details","set_estimate","set_notes","set_parent","set_status","sweep_context_retention","sweep_context_validation_audits","switch_user","unassign","uncheck_item","unlink","update_resource"],"operationMetadata":{"activity":{"description":"Read bounded, cursor-paginated activity for one element","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID"},{"name":"cursor","type":"string","optional":true,"description":"Opaque cursor returned by the previous page"},{"name":"limit","type":"int","optional":true,"default":50,"description":"Maximum events to return (1-100)"},{"name":"order","type":"string","optional":true,"default":"ascending","description":"Sequence order: ascending or descending"},{"name":"kinds","type":"string","optional":true,"description":"Comma-separated activity operation kinds"},{"name":"view","type":"string","optional":true,"default":"raw","description":"History view: raw or effective"}],"examples":["activity(TASK-XX, limit=50, order=ascending, view=raw)","activity(TASK-XX, cursor=opaque-cursor, limit=25, kinds=progress, view=effective)"]},"agents":{"description":"List agents and their assigned elements","parameters":[{"name":"stale","type":"int","optional":true,"description":"Stale threshold in minutes for done items"}],"examples":["agents()","agents(stale=60)"]},"context":{"description":"Get one Context Registry record by CTX id","parameters":[{"name":"id","type":"string","optional":false,"description":"CTX identifier"}],"examples":["context(CTX-260728-a1b2c3) { selection }","context(CTX-260728-a1b2c3) { identity binding lineage freshness security payload lifecycle }"]},"context_boundary":{"description":"Project one context's declared coverage boundary","parameters":[{"name":"id","type":"string","optional":false,"description":"CTX identifier"},{"name":"detail","type":"string","optional":true,"default":"banner","description":"manifest includes the full boundary document","enum":["banner","manifest"]}],"examples":["context_boundary(CTX-260728-a1b2c3, detail=manifest)"]},"context_candidates":{"description":"Board-side context candidate projection for one target element and target role, ordered by scope distance then role affinity","parameters":[{"name":"element","type":"string","optional":false,"description":"Target board element"},{"name":"role","type":"string","optional":true,"description":"Target role the run will execute as; keeps same-role, allowed predecessor, and project-producer snapshots and ranks them by affinity"},{"name":"producer_role","type":"string","optional":true,"description":"Opt-in exact producer-role filter"},{"name":"provider","type":"string","optional":true,"description":"Provider lineage","enum":["codex","claude"]},{"name":"kind","type":"string","optional":true,"description":"Output kind","enum":["project","role","task"]},{"name":"state","type":"string","optional":true,"default":"ready","description":"Comma-separated lifecycle states"},{"name":"skip","type":"int","optional":true,"default":0,"description":"Candidates to skip"},{"name":"take","type":"int","optional":true,"default":20,"description":"Maximum candidates to return"}],"examples":["context_candidates(element=TASK-260728-abc123, role=developer, provider=codex) { selection }","context_candidates(element=TASK-260728-abc123, producer_role=solution-architect) { selection }"]},"context_retention":{"description":"Retention outlook: contexts a provider is about to delete on its own timer, and payloads only the board will ever delete","parameters":[{"name":"warn_days","type":"int","optional":true,"default":7,"description":"Expiry warning horizon"},{"name":"include_pinned","type":"bool","optional":true,"default":false,"description":"Consider pinned contexts for collection"}],"examples":["context_retention(warn_days=14)"]},"contexts":{"description":"List Context Registry records with bounded, deterministic filters","parameters":[{"name":"element","type":"string","optional":true,"description":"Board element the binding is resolved against"},{"name":"relation","type":"string","optional":true,"default":"exact","description":"Binding relation to the element","enum":["exact","ancestors","descendants","any"]},{"name":"provider","type":"string","optional":true,"description":"Provider lineage","enum":["codex","claude"]},{"name":"role","type":"string","optional":true,"description":"Producer role that published the snapshot"},{"name":"kind","type":"string","optional":true,"description":"Output kind","enum":["project","role","task"]},{"name":"state","type":"string","optional":true,"description":"Comma-separated lifecycle states","enum":["building","ready","stale","retired"]},{"name":"skip","type":"int","optional":true,"default":0,"description":"Records to skip"},{"name":"take","type":"int","optional":true,"default":20,"description":"Maximum records to return"}],"examples":["contexts(element=TASK-260728-abc123, relation=ancestors, role=developer, provider=codex, state=ready, skip=0, take=20) { selection }","contexts(state=building) { identity lifecycle }"]},"count":{"description":"Count elements matching filters","parameters":[{"name":"type","type":"string","optional":true,"description":"Filter by element type (epic, story, task, bug)"},{"name":"status","type":"string","optional":true,"description":"Filter by status"},{"name":"parent","type":"string","optional":true,"description":"Filter by parent ID"},{"name":"assignee","type":"string","optional":true,"description":"Filter by assignee"},{"name":"blocked","type":"bool","optional":true,"description":"Filter by hard or advisory blocked scheduling state"}],"examples":["count()","count(type=task, status=done)"]},"get":{"description":"Get a single element by ID","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID"}],"examples":["get(TASK-XX) { overview }"]},"list":{"description":"List elements with optional filters and pagination","parameters":[{"name":"type","type":"string","optional":true,"description":"Filter by element type (epic, story, task, bug)"},{"name":"status","type":"string","optional":true,"description":"Filter by status"},{"name":"parent","type":"string","optional":true,"description":"Filter by parent ID"},{"name":"assignee","type":"string","optional":true,"description":"Filter by assignee"},{"name":"blocked","type":"bool","optional":true,"description":"Filter by hard or advisory blocked scheduling state"},{"name":"skip","type":"int","optional":true,"default":0,"description":"Number of items to skip"},{"name":"take","type":"int","optional":true,"description":"Maximum number of items to return"}],"examples":["list(type=task, status=development) { overview }","list(take=5) { minimal }","list(type=story, skip=10, take=5) { overview }"]},"plan":{"description":"Get execution plan with dependency phases and critical path","parameters":[{"name":"scope","type":"string","optional":true,"description":"Scope to an element ID, or a set of IDs: scope=[ID,ID,...] (union of their subtrees)"},{"name":"mode","type":"string","optional":true,"description":"Planning mode: children or related"},{"name":"active","type":"bool","optional":true,"description":"Exclude done/closed elements before building phases"}],"examples":["plan()","plan(EPIC-XX)","plan(STORY-XX, mode=related)","plan(EPIC-XX, active=true)","plan(scope=[EPIC-XX, STORY-YY, TASK-ZZ], mode=children)"]},"project_config":{"description":"Show the active project board runtime config or a target-specific spawn preflight projection","parameters":[{"name":"view","type":"string","optional":true,"description":"Optional narrow projection; targeted arguments opt in to spawn-preflight","enum":["spawn-preflight"]},{"name":"role","type":"string","optional":true,"description":"Target spawn role; required for spawn-preflight"},{"name":"agent","type":"string","optional":true,"description":"Explicit target runtime: a built-in runtime or one declared under spawn.runtimes; omitted uses normal provider selection","enum":["agy","claude","codex","gemini","muse","qwen","qwen-codex"]},{"name":"task_class","type":"string","optional":true,"description":"Task class used for deterministic workload-class derivation","enum":["code","metadata","docs","research"]},{"name":"workload_class","type":"string","optional":true,"description":"Explicit workload-class override; takes precedence over task_class","enum":["architecture","implementation","mechanical","debugging","testing","review","research","documentation","migration","operations","unified"]}],"examples":["project_config()","project_config(view=spawn-preflight, role=developer, agent=codex, task_class=code)","project_config(view=spawn-preflight, role=developer, agent=gemini)"]},"provider_limits":{"description":"Machine-scoped provider rate-limit state per group; always local, takes no probe claim","parameters":[{"name":"identity","type":"string","optional":true,"description":"One indexed identity by key"},{"name":"all_identities","type":"bool","optional":true,"description":"Every indexed identity, not just this environment's"}],"examples":["provider_limits()","provider_limits(all_identities=true)"]},"summary":{"description":"Get board summary with counts by type and status","examples":["summary()"]},"whoami":{"description":"Show current remote URL and active user","examples":["whoami()"]}},"operations":["activity","agents","context","context_boundary","context_candidates","context_retention","contexts","count","get","list","plan","project_config","provider_limits","schema","summary","whoami"],"presets":{"context-full":["identity","binding","lineage","lifecycle","freshness","actualization","security","payload"],"default":["id","name","status"],"full":["id","type","name","title","status","integrationCheckpointed","review","task_class","estimate","observability","parent","assignee","description","scope","ac","blockedBy","blocks","derivedBlockedBy","derivedBlocks","checklist","notes","created","updated","isBlocked","isAdvisoryBlocked","children","preconditionResources","outcomeResources"],"minimal":["id","status"],"observability-epic":["id","name","status","observability"],"observability-project":["observability"],"observability-story":["id","name","status","observability"],"observability-task":["id","name","status","observability"],"overview":["id","name","status","assignee","parent"],"planning":["id","name","status","integrationCheckpointed","blockedBy","blocks","derivedBlockedBy","derivedBlocks","parent"],"progress":["id","status","integrationCheckpointed","review","task_class","estimate","checklist","notes","blockedBy","derivedBlockedBy","isBlocked","isAdvisoryBlocked"],"selection":["identity","binding","lineage","lifecycle","security"]}}
+
+exec
+/bin/zsh -lc "task-board q 'get(TASK-260916-2vzsmy) { outcomeResources notes checklist }'" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 0ms:
+{"checklist":[{"text":"Implement the complete scoped production behavior and acceptance criteria","done":true},{"text":"Run relevant tests and record concrete results and remaining bounds","done":true},{"text":"Attach task-prefixed outcome evidence and hand off for independent review","done":true},{"text":"Code written per task description and AC","done":true},{"text":"Relevant tests written for new or changed behavior and passing","done":true},{"text":"In a managed Story worktree the candidate is left UNCOMMITTED in the worktree for the handoff to snapshot — never commit on the Story branch. A producer commit moves the branch tip off the recorded checkpoint and the handoff refuses with change_request_candidate_committed_past_checkpoint; repair with `git reset --soft \u003ccheckpoint_oid\u003e` before completing again.","done":true},{"text":"Every command, message, state, or refusal named in the AC is driven through the production entry point by a named committed test, or is declared a stated bound. Report coverage as a ratio — `n of m AC rows driven` — and name the production call site for each. Prose in place of the ratio is not evidence.","done":true},{"text":"Gating, refusing, validating, authorizing, or attesting behavior covered by negative tests that fail when the gate admits what it must reject, with the production call site named","done":true},{"text":"Every gate ships at least one NARROWING mutant — the gate stays present and is weakened to admit exactly one member of the class it must reject, and a named test must fail. A delete-only mutant proves only that the gate exists and is not accepted as evidence.","done":true},{"text":"A gate that inspects source text is additionally attacked by a mutant that PRESERVES the searched-for token and changes behavior, and the mutant harness executes the behavioral suite, not only the static checker.","done":true},{"text":"Lint clean","done":true},{"text":"Relevant build/validation commands run after changes and build not broken","done":true},{"text":"New outcome artifact attached on the board with a task-scoped name when the work produces notes, logs, screenshots, or other deliverables","done":true},{"text":"Important findings, decisions, anomalies, or regressions recorded in logbook when relevant","done":true},{"text":"Implementation matches AC","done":true},{"text":"Solution fits project architecture","done":true},{"text":"Tests green","done":true},{"text":"Gate, refusal, validation, authorization, and attestation behavior attacked, not read — positive-path-only evidence is not accepted","done":true},{"text":"If review does not accept the work — verdict evidence added and status routed by the explicit verdict branches","done":true}],"notes":"spawn selection rationale tuple: {\"role\":\"developer\",\"pair\":\"muse-spark-1.3-contributor/max\",\"text\":\"User-selected Muse Spark max; release preflight and documentation after accepted signing fixes checkpointed, no publication yet.\"}\nspawn selection rationale for muse-spark-1.3-contributor/max: User-selected Muse Spark max; release preflight and documentation after accepted signing fixes checkpointed, no publication yet.\nspawn agent resolution: Agent selection: muse via explicit_override (preferred_agentic_system: mixed[muse,codex,claude], config: spawn.preferred_agentic_system)\nspawn queued: [implementer] developer (muse) (run=RUN-260916-07794b, max_parallel=3)\nspawn run started: [implementer] developer (muse) (run=RUN-260916-07794b)\n51/51 Scripts/tests green locally (exit 0); 11/11 narrowing mutants killed incl. token-preserving M9; RELEASING.md exact-requirements table added; no production script change needed; no tag/publish; candidate uncommitted. Bounds B1-B9 in outcome artifact.\nagent completed: [implementer] developer (muse) (exit=0)\nspawn run completed: muse (run=RUN-260916-07794b, pid=50969, exit=0)\nspawn selection rationale tuple: {\"role\":\"reviewer\",\"pair\":\"gpt-6-astra/low\",\"text\":\"User-selected Astra low; final release-machinery review before Story integration, focusing new tests/docs and preserving accepted predecessor scope.\"}\nspawn selection rationale for gpt-6-astra/low: User-selected Astra low; final release-machinery review before Story integration, focusing new tests/docs and preserving accepted predecessor scope.\nspawn agent resolution: Agent selection: codex via explicit_override (preferred_agentic_system: mixed[muse,codex,claude], config: spawn.preferred_agentic_system)\nspawn queued: [reviewer] reviewer (codex) (run=RUN-260916-9c9be5, max_parallel=3)\nspawn run started: [reviewer] reviewer (codex) (run=RUN-260916-9c9be5)\nReview rev1 changes_requested; repeat-of: none. F1: token-preserving ancestry bypass survives all 51 release tests; actual workflow block exits 1 original versus 0 mutant. F2: RELEASING.md pending-signing-check guidance contradicts Accepted prerequisite. Verdict and full attack log attached. No code edits or publication.\nagent completed: [reviewer] reviewer (codex) (exit=0)\nspawn run completed: codex (run=RUN-260916-9c9be5, pid=58283, exit=0)\nspawn selection rationale tuple: {\"role\":\"developer\",\"pair\":\"muse-spark-1.3-contributor/max\",\"text\":\"User-selected Muse Spark max; focused F1 behavioral trust-gate test and F2 exact release-artifact notarization documentation, operational precondition clarified.\"}\nspawn selection rationale for muse-spark-1.3-contributor/max: User-selected Muse Spark max; focused F1 behavioral trust-gate test and F2 exact release-artifact notarization documentation, operational precondition clarified.\nspawn agent resolution: Agent selection: muse via explicit_override (preferred_agentic_system: mixed[muse,codex,claude], config: spawn.preferred_agentic_system)\nspawn queued: [implementer] developer (muse) (run=RUN-260916-ae7c5b, max_parallel=3)\nspawn run started: [implementer] developer (muse) (run=RUN-260916-ae7c5b)\nrev2 rework: F1 trust script extracted + 8 behavioral tests, F2 diagnostic/Accepted docs fixed; 60/60 green exit 0; M12-M17 narrowing killed incl token-preserving M12 (failures=1, wiring passes); M10 rechecked killed; no tag/publish; candidate uncommitted; bounds B1-B14 in rework-validation-rev2 artifact.\nagent completed: [implementer] developer (muse) (exit=0)\nspawn run completed: muse (run=RUN-260916-ae7c5b, pid=60925, exit=0)\nspawn selection rationale tuple: {\"role\":\"reviewer\",\"pair\":\"gpt-6-astra/low\",\"text\":\"User-selected Astra low; review focused trust-block behavioral fixes and clarified actual-release notarization docs in revision 2.\"}\nspawn selection rationale for gpt-6-astra/low: User-selected Astra low; review focused trust-block behavioral fixes and clarified actual-release notarization docs in revision 2.\nspawn agent resolution: Agent selection: codex via explicit_override (preferred_agentic_system: mixed[muse,codex,claude], config: spawn.preferred_agentic_system)\nspawn queued: [reviewer] reviewer (codex) (run=RUN-260916-e5db1a, max_parallel=3)\nspawn run started: [reviewer] reviewer (codex) (run=RUN-260916-e5db1a)","outcomeResources":[{"name":"TASK-260916-2vzsmy_spawn-log_-implementer--developer--muse-_RUN-260916-07794b.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_spawn-log_-implementer--developer--muse-_RUN-260916-07794b.log","description":"System spawn log captured by task-board"},{"name":"TASK-260916-2vzsmy_validation.md","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_validation.md","description":"Release validation evidence: 51 green tests, 11 narrowing mutants killed, exact-requirements docs, stated bounds"},{"name":"TASK-260916-2vzsmy_change-request_rev1.patch","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_change-request_rev1.patch","description":"Change Request CR-TASK-260916-2vzsmy-1 revision 1 candidate patch (repository_delta=present, 9 changed paths)"},{"name":"TASK-260916-2vzsmy_change-request_rev1-validation.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_change-request_rev1-validation.log","description":"Change Request CR-TASK-260916-2vzsmy-1 revision 1 bounded validation log"},{"name":"TASK-260916-2vzsmy_spawn-log_-reviewer--reviewer--codex-_RUN-260916-9c9be5.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_spawn-log_-reviewer--reviewer--codex-_RUN-260916-9c9be5.log","description":"System spawn log captured by task-board"},{"name":"TASK-260916-2vzsmy_review-attack-rev1.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_review-attack-rev1.log","description":"Token-preserving ancestry mutant survives all 51 tests; production shell behavior differs"},{"name":"TASK-260916-2vzsmy_review-verdict-rev1.md","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_review-verdict-rev1.md","description":"changes_requested; F1 workflow behavioral coverage, F2 notarization recovery instruction conflict"},{"name":"TASK-260916-2vzsmy_review-logbook-rev1.md","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_review-logbook-rev1.md","description":"Review logbook findings and rework decisions"},{"name":"TASK-260916-2vzsmy_spawn-log_-implementer--developer--muse-_RUN-260916-ae7c5b.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_spawn-log_-implementer--developer--muse-_RUN-260916-ae7c5b.log","description":"System spawn log captured by task-board"},{"name":"TASK-260916-2vzsmy_rework-validation-rev2.md","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_rework-validation-rev2.md","description":"F1/F2 rework evidence: 60 green tests, 6 narrowing mutants killed, exact notarization docs, stated bounds"},{"name":"TASK-260916-2vzsmy_mutants-rev2.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_mutants-rev2.log","description":"Mutant harness log: M12-M17 killed with named failing tests, restores verified"},{"name":"TASK-260916-2vzsmy_suite-rev2.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_suite-rev2.log","description":"Full 60-test suite verbose log, exit 0"},{"name":"TASK-260916-2vzsmy_change-request_rev2.patch","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_change-request_rev2.patch","description":"Change Request CR-TASK-260916-2vzsmy-2 revision 2 candidate patch (repository_delta=present, 11 changed paths)"},{"name":"TASK-260916-2vzsmy_change-request_rev2-validation.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_change-request_rev2-validation.log","description":"Change Request CR-TASK-260916-2vzsmy-2 revision 2 bounded validation log"},{"name":"TASK-260916-2vzsmy_spawn-log_-reviewer--reviewer--codex-_RUN-260916-e5db1a.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_spawn-log_-reviewer--reviewer--codex-_RUN-260916-e5db1a.log","description":"System spawn log captured by task-board"}]}
+
+exec
+/bin/zsh -lc 'task-board resource get TASK-260916-2vzsmy TASK-260916-2vzsmy_rework-validation-rev2.md' in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 0ms:
+.temp/resources/TASK-260916-2vzsmy/TASK-260916-2vzsmy_rework-validation-rev2.md
+
+exec
+/bin/zsh -lc 'cat .temp/resources/TASK-260916-2vzsmy/TASK-260916-2vzsmy_rework-validation-rev2.md; task-board spawn goal "$TASK_BOARD_RUN_ID"' in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 46ms:
+Active Goal: none (run is not goal-bound)
+
+exec
+/bin/zsh -lc 'cat Scripts/validate-release-tag.sh Scripts/tests/test_release_workflow.py; cat .github/workflows/release.yml' in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 0ms:
+#!/bin/bash
+# Validate that RELEASE_TAG is a trusted release tag before any release work.
+# Production entry point invoked by .github/workflows/release.yml ("Validate
+# trusted release tag"). Refuses malformed tags, HEAD/tag mismatch, non-main
+# ancestry, existing releases, and unknown lookup failures (fail closed).
+set -euo pipefail
+: "${RELEASE_TAG:?Set RELEASE_TAG to an existing vMAJOR.MINOR.PATCH tag}"
+if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "Refusing untrusted release tag '$RELEASE_TAG': must be vMAJOR.MINOR.PATCH." >&2
+  exit 1
+fi
+head_commit="$(git rev-parse HEAD)"
+tag_commit="$(git rev-parse "$RELEASE_TAG^{commit}")"
+if [ "$head_commit" != "$tag_commit" ]; then
+  echo "Refusing tag $RELEASE_TAG: HEAD ($head_commit) does not match tag commit ($tag_commit)." >&2
+  exit 1
+fi
+if ! git merge-base --is-ancestor HEAD origin/main; then
+  echo "Refusing tag $RELEASE_TAG: HEAD is not on origin/main ancestry." >&2
+  exit 1
+fi
+gh_err="$(mktemp)"
+if gh release view "$RELEASE_TAG" >/dev/null 2>"$gh_err"; then
+  echo 'Release already exists. Inspect it before retrying; no published assets are overwritten.' >&2
+  rm -f "$gh_err"
+  exit 1
+fi
+gh_text="$(cat "$gh_err" 2>/dev/null || true)"
+rm -f "$gh_err"
+if printf '%s\n' "$gh_text" | grep -qi 'release not found'; then
+  printf 'Trusted release tag %s verified (HEAD matches, on origin/main, no existing release).\n' "$RELEASE_TAG"
+  exit 0
+fi
+echo "Could not verify release absence for $RELEASE_TAG; refusing to proceed." >&2
+if [ -n "$gh_text" ]; then
+  printf '%s\n' "$gh_text" >&2
+fi
+exit 1
+"""Release workflow wiring and tag-trust behavior.
+
+The workflow delegates tag trust to the production script
+Scripts/validate-release-tag.sh. Wiring tests prove the workflow invokes that
+script before any work and preserves gate order and publish gating. Behavioral
+tests execute the production script with stubbed git/gh and prove it accepts a
+trusted tag while refusing malformed tags, HEAD/tag mismatch, non-main
+ancestry, existing releases, and unknown lookup failures (fail closed).
+"""
+from pathlib import Path
+import os
+import re
+import shutil
+import subprocess
+import tempfile
+import unittest
+
+WORKFLOW = Path(__file__).parents[2] / '.github' / 'workflows' / 'release.yml'
+SCRIPT = Path(__file__).parents[1] / 'validate-release-tag.sh'
+ORDER = ['Validate trusted release tag', 'Release prerequisites', 'Unit tests',
+         'Build, notarize, staple and sign appcast', 'Publish complete GitHub Release']
+
+GIT_STUB = '''#!/bin/bash
+printf '%s\\n' "$*" >> "$GIT_LOG"
+if [ "$1" = "rev-parse" ] && [ "$2" = "HEAD" ]; then
+  printf '%s\\n' "${HEAD_SHA:-abc123}"
+  exit 0
+fi
+if [ "$1" = "rev-parse" ]; then
+  printf '%s\\n' "${TAG_SHA:-abc123}"
+  exit 0
+fi
+if [ "$1" = "merge-base" ]; then
+  exit "${ANCESTRY_EXIT:-0}"
+fi
+exit 0
+'''
+
+GH_STUB = '''#!/bin/bash
+printf '%s\\n' "$*" >> "$GH_LOG"
+if [ "${GH_MODE:-absent}" = "exists" ]; then
+  exit 0
+fi
+if [ -n "${GH_TEXT:-}" ]; then
+  printf '%s\\n' "$GH_TEXT" >&2
+fi
+exit 1
+'''
+
+
+def blocks(text):
+    starts = [m.start() for m in re.finditer(r'^      - ', text, re.M)]
+    return [text[s:e] for s, e in zip(starts, starts[1:] + [len(text)])]
+
+
+def block_named(blocks, name):
+    found = [b for b in blocks if b.splitlines()[0].endswith(f'- name: {name}')]
+    assert len(found) == 1, name
+    return found[0]
+
+
+def write_exe(path, content):
+    path.write_text(content)
+    path.chmod(0o755)
+
+
+class ReleaseWorkflowTests(unittest.TestCase):
+    def test_gates_precede_packaging_precedes_publish(self):
+        text = WORKFLOW.read_text()
+        positions = [text.index(f'- name: {name}') for name in ORDER]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_only_log_preservation_overrides_success_gating(self):
+        gated = set()
+        for block in blocks(WORKFLOW.read_text()):
+            name = block.splitlines()[0]
+            if any(re.match(r'\s*if\s*:', line) for line in block.splitlines()[1:]):
+                gated.add(name)
+        self.assertEqual(len(gated), 1)
+        self.assertTrue(next(iter(gated)).endswith('- name: Preserve release logs'))
+
+    def test_workflow_invokes_trust_script_before_any_work(self):
+        block = block_named(blocks(WORKFLOW.read_text()), 'Validate trusted release tag')
+        self.assertIn('Scripts/validate-release-tag.sh', block)
+        self.assertTrue(SCRIPT.exists(), 'production trust script missing')
+        self.assertTrue(os.access(SCRIPT, os.X_OK), 'trust script must be executable')
+        body = SCRIPT.read_text()
+        for token in (r'^v[0-9]+\.[0-9]+\.[0-9]+$', 'git rev-parse',
+                      'merge-base --is-ancestor', 'gh release view',
+                      'release not found', 'Could not verify'):
+            self.assertIn(token, body)
+
+
+class ReleaseTagTrustBehaviorTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        scripts = root / 'Scripts'
+        scripts.mkdir()
+        shutil.copy(SCRIPT, scripts / 'validate-release-tag.sh')
+        bindir = root / 'bin'
+        bindir.mkdir()
+        write_exe(bindir / 'git', GIT_STUB)
+        write_exe(bindir / 'gh', GH_STUB)
+        self.root = root
+        self.bindir = bindir
+        self.git_log = root / 'git.log'
+        self.gh_log = root / 'gh.log'
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_trust(self, tag='v1.2.0', head='abc123def', tag_sha='abc123def',
+                  ancestry_exit=0, gh_mode='absent',
+                  gh_text='release not found', unset_tag=False):
+        env = dict(os.environ)
+        env['PATH'] = str(self.bindir) + os.pathsep + env['PATH']
+        if unset_tag:
+            env.pop('RELEASE_TAG', None)
+        else:
+            env['RELEASE_TAG'] = tag
+        env['HEAD_SHA'] = head
+        env['TAG_SHA'] = tag_sha
+        env['ANCESTRY_EXIT'] = str(ancestry_exit)
+        env['GH_MODE'] = gh_mode
+        env['GH_TEXT'] = gh_text
+        env['GIT_LOG'] = str(self.git_log)
+        env['GH_LOG'] = str(self.gh_log)
+        return subprocess.run(['bash', str(self.root / 'Scripts' / 'validate-release-tag.sh')],
+                              capture_output=True, text=True, timeout=60,
+                              env=env, cwd=self.tmp.name)
+
+    def test_trusted_tag_accepted(self):
+        r = self.run_trust()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('Trusted release tag v1.2.0 verified', r.stdout)
+
+    def test_non_main_ancestry_refused(self):
+        r = self.run_trust(ancestry_exit=1)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('not on origin/main ancestry', r.stderr)
+        self.assertNotIn('Trusted release tag', r.stdout)
+
+    def test_head_tag_mismatch_refused(self):
+        r = self.run_trust(head='aaa111', tag_sha='bbb222')
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('does not match tag commit', r.stderr)
+        self.assertNotIn('Trusted release tag', r.stdout)
+
+    def test_malformed_tags_refused_before_any_git_work(self):
+        for tag in ['v1.2', 'v1.2.3.4', 'main', '1.2.0', 'v1.2.0 ',
+                    'v1.2.0;echo', 'v1.2.0\nv9.9.9']:
+            if self.git_log.exists():
+                self.git_log.unlink()
+            if self.gh_log.exists():
+                self.gh_log.unlink()
+            r = self.run_trust(tag=tag)
+            self.assertNotEqual(r.returncode, 0, tag)
+            self.assertIn('must be vMAJOR.MINOR.PATCH', r.stderr, tag)
+            self.assertNotIn('Trusted release tag', r.stdout, tag)
+            self.assertFalse(self.git_log.exists(), f'git reached for {tag!r}')
+            self.assertFalse(self.gh_log.exists(), f'gh reached for {tag!r}')
+
+    def test_missing_release_tag_refused(self):
+        r = self.run_trust(unset_tag=True)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('RELEASE_TAG', r.stderr)
+        self.assertFalse(self.git_log.exists())
+
+    def test_existing_release_refused(self):
+        r = self.run_trust(gh_mode='exists')
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('Release already exists', r.stderr)
+        self.assertNotIn('Trusted release tag', r.stdout)
+
+    def test_gh_lookup_failure_fails_closed_not_absent(self):
+        for text in ['Error: HTTP 500 from the GitHub API',
+                     "GraphQL: Could not resolve to a Repository with the name 'x/y'."]:
+            r = self.run_trust(gh_text=text)
+            self.assertNotEqual(r.returncode, 0, text)
+            self.assertIn('Could not verify release absence', r.stderr, text)
+            self.assertIn(text.split(':')[0] if ':' in text else text[:20], r.stderr, text)
+            self.assertNotIn('Trusted release tag', r.stdout, text)
+            self.assertNotIn('Release already exists', r.stderr, text)
+
+    def test_gh_empty_error_fails_closed(self):
+        r = self.run_trust(gh_text='')
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('Could not verify release absence', r.stderr)
+        self.assertNotIn('Trusted release tag', r.stdout)
+
+
+if __name__ == '__main__':
+    unittest.main()
+name: Release DMG
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing vMAJOR.MINOR.PATCH tag on main
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: runner-control-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: [self-hosted, macOS, ARM64, macbook-iv]
+    environment: release
+    timeout-minutes: 90
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      NOTARY_PROFILE: RunnerControl-notary
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+      - name: Validate trusted release tag
+        run: ./Scripts/validate-release-tag.sh
+      - name: Release prerequisites
+        run: ./Scripts/release-preflight.sh
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.25.5'
+          cache: false
+      - name: Build pinned scaffold generator
+        shell: bash
+        run: |
+          git clone https://github.com/relux-works/skill-ios-app-manager.git "$RUNNER_TEMP/runner-control-generator-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          cd "$RUNNER_TEMP/runner-control-generator-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          git checkout --detach 755a29538dfe0867671ac4291b016bf42d93a299
+          cd tuist-starter
+          env -u GOROOT go build -o "$RUNNER_TEMP/runner-control-ios-app-manager" ./cmd/ios-app-manager
+          echo "IOS_APP_MANAGER=$RUNNER_TEMP/runner-control-ios-app-manager" >> "$GITHUB_ENV"
+      - name: Unit tests
+        run: |
+          swift test --package-path Packages/RunnerControlCore --scratch-path "$RUNNER_TEMP/runner-control-release-tests"
+          python3 -m unittest discover -s Scripts/tests -v
+      - name: Build, notarize, staple and sign appcast
+        id: package
+        run: ./Scripts/release.sh
+      - name: Publish complete GitHub Release
+        env:
+          RELEASE_DIST: ${{ steps.package.outputs.dist }}
+        shell: bash
+        run: |
+          gh release create "$RELEASE_TAG" --verify-tag --draft --title "Runner Control $RELEASE_TAG" --generate-notes
+          gh release upload "$RELEASE_TAG" "$RELEASE_DIST/RunnerControl.dmg" "$RELEASE_DIST/appcast.xml" "$RELEASE_DIST/SHA256SUMS"
+          gh release edit "$RELEASE_TAG" --draft=false --latest
+      - name: Preserve release logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .temp/release-*/archive.log
+            .temp/release-*/export.log
+            .temp/release-*/*-notary.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+exec
+/bin/zsh -lc 'git diff 7d2126aef02d9bb2c5443f5ef433462fda537732 0acdbb9b6db1b5f08efd76595f458e22f5434679 -- Scripts/release-preflight.sh Scripts/release.sh Scripts/release_metadata.py RELEASING.md' in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 0ms:
+diff --git a/RELEASING.md b/RELEASING.md
+index f576e28..37bdab8 100644
+--- a/RELEASING.md
++++ b/RELEASING.md
+@@ -28,6 +28,71 @@ Each feed points to its immutable version-specific DMG URL. The application foll
+ 
+ Build numbers are derived from the release workflow run number and attempt. Keep this workflow's run counter continuous; do not replace it with a new workflow whose counter starts over without adjusting the build-number scheme.
+ 
++## Exact requirements reference
++
++Every value below is enforced by the named script and covered by `Scripts/tests`. If a value changes, update the script, this section, and the tests together.
++
++| Requirement | Exact value | Enforced by |
++|---|---|---|
++| Signing identity | Exactly one `Developer ID Application` certificate with private key for team `262RZ595FP`; Apple Development and other teams are refused | `release-preflight.sh`, `release_metadata.py signing-identity`, `release.sh` DMG signing |
++| Bundle and team | `works.relux.runnercontrol` / `262RZ595FP` | `release_metadata.py prepare` |
++| Release tag | `vMAJOR.MINOR.PATCH`, equal to `marketing_version`, on `main` ancestry at `HEAD`; an existing release refuses the run; unknown `gh` lookup failures refuse instead of passing as absent | `validate-release-tag.sh` (invoked by `release.yml`), `prepare` |
++| Build number | `project_version` = `(100 + run).attempt` with run 1..9899 and attempt 1..99 (for example run 1 attempt 1 → `101.1`) | `release_metadata.py prepare` |
++| Notary profile | `RunnerControl-notary` in the runner's login keychain, unlocked in the runner session; `notarytool` waits up to 30 minutes per artifact (app ZIP, then DMG), each needs its own `Accepted` plus `stapler staple`/`validate` before publication | `release-preflight.sh`, `release.sh` notarize |
++| Sparkle account and feed | Account `works.relux.runnercontrol`; private key must match `SUPublicEDKey`; feed `https://github.com/relux-works/runner-control/releases/latest/download/appcast.xml` | `release-preflight.sh`, `prepare` |
++| Sparkle tools | Version `2.10.0`, SHA-256 `c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c` | `sparkle-tools.sh` |
++| Appcast | Exactly one item; `sparkle:version` = build, `shortVersionString` = marketing version, enclosure URL `https://github.com/relux-works/runner-control/releases/download/<tag>/RunnerControl.dmg`, 64-byte `edSignature`, `length` = DMG bytes, minimum macOS 14 | `release_metadata.py verify` |
++| Scaffold generator | `skill-ios-app-manager` at `755a29538dfe0867671ac4291b016bf42d93a299`, built with Go `1.25.5` | `release.yml` |
++| Host tools | Xcode, Tuist 4.9.0, GitHub CLI, Python 3, plus `xcodebuild xcrun codesign security hdiutil tuist gh python3` on `PATH` | `release-preflight.sh` |
++| Publish order | Preflight → unit tests → package/notarize/verify → draft → upload DMG + appcast + SHA256SUMS → publish as latest; the publish step runs only after a successful package and never overwrites published assets | `release.yml`, `release.sh` |
++
++## Failure recovery
++
++Release run 35040921163 (`v1.1.0`) failed in Release prerequisites before any
++build or signing: the login keychain was locked in the runner session, so
++`notarytool` could not read profile `RunnerControl-notary` (`keychainLocked`).
++No draft or published release was created.
++
++Per coordinator directive, `v1.1.0` is neither retried nor deleted: the tag
++stays as-is with no release, and the approved next release is new `v1.2.0`
++after product integration. No new tag is created and nothing is published
++until product review and coordinator dispatch.
++
++If a future run reports a locked keychain in Release prerequisites, unlock
++the login keychain on macbook-iv with a console login as the runner user (no
++credentials are printed or exported), enable the runner in Runner Control,
++then run **Release DMG** via workflow_dispatch with the existing tag. Do not
++delete or re-push the tag and do not create the release by hand; the workflow
++refuses to overwrite published assets. If prerequisites still report a locked
++keychain, the runner session has no unlocked login keychain; unlock it and
++dispatch again.
++
++Preflight also fails fast when no Developer ID Application identity for team
++`262RZ595FP` is present, when several are present (remove the stale
++certificate so signing is unambiguous), when the notarytool profile is missing
++(recreate it with `xcrun notarytool store-credentials` as above), when the
++Sparkle private key does not match `SUPublicEDKey`, or when signing
++identities cannot be read at all (a failed read is reported as unknown,
++never as missing or verified).
++
++Apple notarization waits up to 30 minutes per artifact (app ZIP, then DMG).
++Each artifact must receive its own `Accepted` result and pass `stapler staple`
++plus `stapler validate` before final publication; `release.sh` enforces this
++and only `Accepted` proceeds for each submission. If a wait times out, the
++submission ID in the release logs can be inspected read-only with
++`xcrun notarytool info <id> --keychain-profile RunnerControl-notary` (status
++only); retrying dispatches a new run with a new monotonic build number.
++
++Diagnostic signing-check submission `6d537548-8c24-48ea-89b5-7ebb2dc959d5`
++was `In Progress` at 02:49 UTC. Do not duplicate that test submission and do
++not treat it as a release prerequisite: it is not a release artifact and its
++state does not gate the next release. Inspect it read-only only if needed
++(`xcrun notarytool info 6d537548-8c24-48ea-89b5-7ebb2dc959d5
++--keychain-profile RunnerControl-notary`, status only). Submitting the
++genuinely new release app ZIP and DMG for `v1.2.0` is authorized and is not
++duplication; each must still reach its own `Accepted` and pass staple
++verification before the draft is published.
++
+ ## Validation status
+ 
+ Core and release metadata tests pass locally and in GitHub Actions; the Sparkle-enabled app builds successfully. Developer ID signing and the notarytool profile are validated on macbook-iv. The complete notarization and update-install cycle requires the first accepted Apple submission and two published versions. Check GitHub Releases for publication status.
+diff --git a/Scripts/release-preflight.sh b/Scripts/release-preflight.sh
+index 1e279d7..bc01188 100755
+--- a/Scripts/release-preflight.sh
++++ b/Scripts/release-preflight.sh
+@@ -3,15 +3,46 @@ set -euo pipefail
+ for tool in xcodebuild xcrun codesign security hdiutil tuist gh python3; do
+   command -v "$tool" >/dev/null || { echo "Missing release tool: $tool" >&2; exit 1; }
+ done
+-if ! security find-identity -v -p codesigning | grep -E 'Developer ID Application:.*\(262RZ595FP\)' >/dev/null; then
++identity_out="$(mktemp)"
++identity_err="$(mktemp)"
++if ! security find-identity -v -p codesigning >"$identity_out" 2>"$identity_err"; then
++  echo 'Could not read signing identities; the result is unknown, not missing.' >&2
++  head -n 5 "$identity_err" >&2 || true
++  rm -f "$identity_out" "$identity_err"
++  exit 1
++fi
++identities="$(grep -E 'Developer ID Application:.*\(262RZ595FP\)' "$identity_out" || true)"
++rm -f "$identity_out" "$identity_err"
++if [ -z "$identities" ]; then
+   echo 'Missing Developer ID Application identity with private key for team 262RZ595FP.' >&2
+   echo 'An Account Holder must issue it; Apple Development or another team cannot be substituted.' >&2
+   exit 1
+ fi
+-xcrun notarytool history --keychain-profile "${NOTARY_PROFILE:-RunnerControl-notary}" --output-format json >/dev/null
++if [ "$(printf '%s\n' "$identities" | grep -c .)" -gt 1 ]; then
++  echo 'Multiple Developer ID Application identities for team 262RZ595FP; remove the stale certificate so release signing is unambiguous.' >&2
++  exit 1
++fi
++profile="${NOTARY_PROFILE:-RunnerControl-notary}"
++history_err="$(mktemp)"
++if ! xcrun notarytool history --keychain-profile "$profile" --output-format json >/dev/null 2>"$history_err"; then
++  if grep -q 'keychainLocked' "$history_err"; then
++    echo "The login keychain is locked in this session, so notarytool profile '$profile' cannot be read." >&2
++    echo 'Unlock the login keychain on macbook-iv (console login as the runner user) and re-run Release DMG via workflow_dispatch with the existing tag. Credentials are never printed or exported.' >&2
++  elif grep -q 'No Keychain password item found for profile' "$history_err"; then
++    echo "notarytool profile '$profile' is missing from the login keychain." >&2
++    echo "Recreate it locally with 'xcrun notarytool store-credentials' (see RELEASING.md), then re-run Release DMG via workflow_dispatch with the existing tag." >&2
++  else
++    echo "notarytool history failed for profile '$profile':" >&2
++    head -n 5 "$history_err" >&2 || true
++  fi
++  rm -f "$history_err"
++  exit 1
++fi
++rm -f "$history_err"
+ root="$(cd "$(dirname "$0")/.." && pwd)"
+ cd "$root"
+ sparkle_bin="$("$root/Scripts/sparkle-tools.sh")"
+ actual="$("$sparkle_bin/generate_keys" --account works.relux.runnercontrol -p)"
+ expected="$(python3 -c 'import json; print(json.load(open("ios-app-manager.json"))["macos"]["info_plist"]["SUPublicEDKey"])')"
+ [ "$actual" = "$expected" ] || { echo 'Sparkle signing key is missing or does not match the app public key.' >&2; exit 1; }
++printf "Release prerequisites verified (team 262RZ595FP, notary profile '%s').\n" "$profile"
+diff --git a/Scripts/release.sh b/Scripts/release.sh
+index 5508acf..31e0781 100755
+--- a/Scripts/release.sh
++++ b/Scripts/release.sh
+@@ -58,7 +58,7 @@ ditto "$app" "$release_root/image/RunnerControl.app"
+ ln -s /Applications "$release_root/image/Applications"
+ hdiutil create -volname 'Runner Control' -srcfolder "$release_root/image" -fs APFS \
+   -format ULFO "$release_root/dist/RunnerControl.dmg"
+-signing_identity="$(security find-identity -v -p codesigning | sed -nE '/Developer ID Application:.*\(262RZ595FP\)/s/.*[0-9]+\) ([A-Fa-f0-9]+) .*/\1/p' | head -n 1)"
++signing_identity="$(security find-identity -v -p codesigning | python3 Scripts/release_metadata.py signing-identity --team 262RZ595FP)"
+ codesign --force --timestamp --sign "$signing_identity" "$release_root/dist/RunnerControl.dmg"
+ notarize "$release_root/dist/RunnerControl.dmg" "$release_root/dmg-notary.json"
+ xcrun stapler staple "$release_root/dist/RunnerControl.dmg"
+diff --git a/Scripts/release_metadata.py b/Scripts/release_metadata.py
+index 7244970..cb7e2c5 100644
+--- a/Scripts/release_metadata.py
++++ b/Scripts/release_metadata.py
+@@ -5,6 +5,7 @@ import base64
+ import json
+ from pathlib import Path
+ import re
++import sys
+ import xml.etree.ElementTree as ET
+ 
+ REPO = 'relux-works/runner-control'
+@@ -28,6 +29,26 @@ def prepare(config, tag, run, attempt):
+     config['project_version'] = f'{100 + run}.{attempt}'
+     return config
+ 
++def resolve_signing_identity(find_identity_output, team):
++    """Return the Developer ID Application SHA-1 for team.
++
++    Parses `security find-identity -v -p codesigning` output. Apple
++    Development and other-team identities are ignored. Zero or several
++    matches fail so release signing never silently picks a wrong key.
++    """
++    matches = []
++    for line in find_identity_output.splitlines():
++        if 'Developer ID Application:' not in line or f'({team})' not in line:
++            continue
++        found = re.search(r'\b([A-F0-9]{40})\b', line)
++        if found:
++            matches.append(found.group(1))
++    if not matches:
++        raise ValueError(f'No Developer ID Application identity for team {team}')
++    if len(matches) > 1:
++        raise ValueError(f'Multiple Developer ID Application identities for team {team}; remove the stale certificate')
++    return matches[0]
++
+ def verify_appcast(path, dmg, tag, build):
+     root = ET.parse(path).getroot()
+     items = root.findall('./channel/item')
+@@ -61,11 +82,15 @@ def main():
+     verify.add_argument('--dmg', type=Path, required=True)
+     verify.add_argument('--tag', required=True)
+     verify.add_argument('--build', required=True)
++    sig = sub.add_parser('signing-identity')
++    sig.add_argument('--team', required=True)
+     args = parser.parse_args()
+     if args.command == 'prepare':
+         data = prepare(json.loads(args.config.read_text()), args.tag, args.run, args.attempt)
+         args.config.write_text(json.dumps(data, indent=2) + '\n')
+         print(data['project_version'])
++    elif args.command == 'signing-identity':
++        print(resolve_signing_identity(sys.stdin.read(), args.team))
+     else:
+         verify_appcast(args.appcast, args.dmg, args.tag, args.build)
+         print('Appcast identity, signature presence, size and minimum OS verified')
+
+codex
+The producer reports 5 of 6 AC rows driven, with integration readiness treated as a procedural bound. The new script tests cover ancestry refusal. I’m checking whether the workflow tests also catch a bypass at the script’s call site.
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import pathlib,subprocess,tempfile
+root=pathlib.Path(tempfile.mkdtemp(prefix='release-review-r2-'))
+subprocess.run(['git','archive','0acdbb9b6db1b5f08efd76595f458e22f5434679'],stdout=open(root/'tree.tar','wb'),check=True)
+subprocess.run(['tar','-xf',str(root/'tree.tar'),'-C',str(root)],check=True)
+p=root/'.github/workflows/release.yml'
+p.write_text(p.read_text().replace('run: ./Scripts/validate-release-tag.sh','run: ./Scripts/validate-release-tag.sh || true'))
+log=pathlib.Path('/tmp/TASK-260916-2vzsmy_review-attack-rev2.log')
+with log.open('w') as f:
+ f.write('Candidate 0acdbb9b6db1b5f08efd76595f458e22f5434679; isolated archive.\\nNarrowing mutant: workflow trust call appends || true; searched token preserved.\\nCommand: python3 -m unittest discover -s Scripts/tests -v\\n');f.flush()
+ r=subprocess.run(['python3','-m','unittest','discover','-s','Scripts/tests','-v'],cwd=root,stdout=f,stderr=subprocess.STDOUT)
+ f.write(f'\\nEXIT={r.returncode}\\n')
+print(root);print(log);print('MUTANT_SUITE_EXIT',r.returncode)
+PY" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import sys,subprocess,os
+sys.path.insert(0,'Scripts/tests')
+from test_release_workflow import ReleaseTagTrustBehaviorTests
+c=ReleaseTagTrustBehaviorTests();c.setUp()
+try:
+ env=dict(os.environ,PATH=str(c.bindir)+os.pathsep+os.environ['PATH'],RELEASE_TAG='v1.2.0',HEAD_SHA='abc',TAG_SHA='abc',ANCESTRY_EXIT='1',GH_MODE='absent',GH_TEXT='release not found',GIT_LOG=str(c.git_log),GH_LOG=str(c.gh_log))
+ for suffix in ['', ' || true']:
+  r=subprocess.run(['bash','-e','-c','./Scripts/validate-release-tag.sh'+suffix],cwd=c.root,env=env,text=True,capture_output=True)
+  print('workflow run suffix',repr(suffix),'exit',r.returncode,'stderr',r.stderr.strip())
+finally:c.tearDown()
+PY" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 410ms:
+workflow run suffix '' exit 1 stderr Refusing tag v1.2.0: HEAD is not on origin/main ancestry.
+workflow run suffix ' || true' exit 0 stderr Refusing tag v1.2.0: HEAD is not on origin/main ancestry.
+
+ succeeded in 21324ms:
+/var/folders/v5/c7x5kxfd2dvc6gmb1772xdp00000gn/T/release-review-r2-lqgzzd1d
+/tmp/TASK-260916-2vzsmy_review-attack-rev2.log
+MUTANT_SUITE_EXIT 0
+
+exec
+/bin/zsh -lc 'tail -n 6 /tmp/TASK-260916-2vzsmy_review-attack-rev2.log; task-board spawn directives "$TASK_BOARD_RUN_ID"' in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 86ms:
+Active Goal: none (run is not goal-bound)
+No directives recorded for RUN-260916-e5db1a
+
+codex
+The call-site bypass survives all 60 tests: appending `|| true` makes the workflow step succeed after the trust script rejects non-main ancestry. This repeats rev1 F1. The notarization documentation addresses F2; I’ll request a focused workflow-level regression test and narrowing mutant for F1.
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+from pathlib import Path
+p=Path('/tmp/TASK-260916-2vzsmy_review-attack-rev2.log')
+with p.open('a') as f:
+ f.write('\\nIndependent composed-step probe using candidate trust script and test git/gh stubs, ANCESTRY_EXIT=1:\\n bash -e -c ./Scripts/validate-release-tag.sh => exit 1, Refusing tag v1.2.0: HEAD is not on origin/main ancestry.\\n bash -e -c \"./Scripts/validate-release-tag.sh || true\" => exit 0, same refusal stderr.\\nNo repository source modified; mutant executed in isolated git archive.\\n')
+Path('/tmp/TASK-260916-2vzsmy_review-verdict-rev2.md').write_text('''# Review verdict: changes_requested
+
+Candidate: CR-TASK-260916-2vzsmy-2 revision 2, tree 0acdbb9b6db1b5f08efd76595f458e22f5434679; repository_delta=present.
+repeat-of: rev1 F1
+
+## F1 — workflow call-site bypass remains untested
+
+Shape: bypass path around the check; token-preserving mutant; check present but its production caller can discard refusal.
+
+Scripts/tests/test_release_workflow.py test_workflow_invokes_trust_script_before_any_work asserts only a substring. Behavioral tests run the script directly, so they do not execute the composed workflow run command. In an isolated archive of the exact candidate, changing the actual Validate trusted release tag run command to "'`./Scripts/validate-release-tag.sh || true` preserves the searched token and every script guard, but lets non-main ancestry proceed to release work. All 60 tests still pass (21.078s, exit 0). Independently executing the original and mutated workflow commands with ANCESTRY_EXIT=1 gives exit 1 and exit 0 respectively, with the same refusal stderr. See attached full attack log.
+
+Required rework: add a named regression test that executes the actual workflow run command with refusing trust inputs and verifies the step fails. Include this call-site narrowing mutant and require that regression to fail. Keep this in the same leaf; no separate harness/research task is needed. This is the second consecutive same-class F1 finding.
+
+## Coverage and resolved finding
+
+Producer reports 5 of 6 AC rows driven, one procedural bound. Reviewer finds 4 of 6 adequately evidenced: row 6 remains only script behavior plus static workflow wiring, with the demonstrated caller blind spot; row 5 remains procedural. F2 is resolved in the candidate text: the diagnostic submission is explicitly not a prerequisite, while each actual release artifact requires Accepted and staple verification. No new F2 finding.
+
+## Validation and limits
+
+Personally ran the full 60-test behavioral/static suite against the token-preserving workflow mutant, plus the independent original/mutated composed-step refusal probe. Did not claim a pristine full-suite rerun or rerun prior producer mutants. Reviewed the task-scoped rev2 coverage/mutant report and production delta. Apple notarization, publication, Swift/UI tests, and live runner operations were not exercised. No source edits, tags, commits, publication, secret output, or runner interruption. Run goal queried: not goal-bound.
+
+Route: to-dev. Acceptance is withheld pending F1 regression and another review.
+'"''')
+Path('/tmp/TASK-260916-2vzsmy_review-logbook-rev2.md').write_text('Revision 2 review: repeated F1 call-site bypass. Extracting the trust script closed internal ancestry mutation coverage but left workflow refusal propagation untested. Actual workflow command with || true passes all 60 tests and turns non-main refusal exit 1 into success exit 0. Rework stays in this leaf with named composed-step regression and narrowing mutant. F2 documentation resolved. No release operations performed.\\n')
+PY
+ task-board resource add TASK-260916-2vzsmy /tmp/TASK-260916-2vzsmy_review-attack-rev2.log --type outcome --name TASK-260916-2vzsmy_review-attack-rev2.log -d 'Full surviving workflow call-site mutant suite and refusal probe'
+ task-board resource add TASK-260916-2vzsmy /tmp/TASK-260916-2vzsmy_review-verdict-rev2.md --type outcome --name TASK-260916-2vzsmy_review-verdict-rev2.md -d 'changes_requested; repeat-of rev1 F1; workflow refusal propagation coverage'
+ task-board resource add TASK-260916-2vzsmy /tmp/TASK-260916-2vzsmy_review-logbook-rev2.md --type outcome --name TASK-260916-2vzsmy_review-logbook-rev2.md -d 'Review finding and focused rework decision logbook'" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 1767ms:
+Attached TASK-260916-2vzsmy_review-attack-rev2.log on TASK-260916-2vzsmy as outcome
+Attached TASK-260916-2vzsmy_review-verdict-rev2.md on TASK-260916-2vzsmy as outcome
+Attached TASK-260916-2vzsmy_review-logbook-rev2.md on TASK-260916-2vzsmy as outcome
+
+exec
+/bin/zsh -lc "task-board m 'set_status(TASK-260916-2vzsmy, status=to-dev)'" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 437ms:
+{"ok":true,"result":{"primary":{"action":"status_changed","element_id":"TASK-260916-2vzsmy","field":"status","new_value":"to-dev","old_value":"reviewing"},"side_effects":[{"action":"demoted","element_id":"STORY-260916-1o0gkc","field":"status","new_value":"integrating","old_value":"reviewing"},{"action":"demoted","element_id":"EPIC-260916-3oqyia","field":"status","new_value":"integrating","old_value":"reviewing"}]}}
+
+codex
+Changes requested; task routed to `to-dev`.
+
+- **F1 repeats rev1:** adding `|| true` to the workflow trust call bypasses refusal while all 60 tests pass. Requires a workflow-command regression test and narrowing mutant.
+- **F2 resolved:** notarization documentation correctly distinguishes diagnostic and release artifacts.
+
+Verdict, attack log, and logbook attached. No code changes or publication.
+tokens used
+51,675
+Changes requested; task routed to `to-dev`.
+
+- **F1 repeats rev1:** adding `|| true` to the workflow trust call bypasses refusal while all 60 tests pass. Requires a workflow-command regression test and narrowing mutant.
+- **F2 resolved:** notarization documentation correctly distinguishes diagnostic and release artifacts.
+
+Verdict, attack log, and logbook attached. No code changes or publication.

@@ -1,0 +1,74 @@
+$ swift test --package-path Packages/RunnerControlCore --scratch-path .temp/landing-core-tests
+[0/1] Planning build
+Building for debugging...
+[0/2] Write swift-version--58304C5D6DBC2206.txt
+Build complete! (2.16s)
+Test Suite 'All tests' started at 2026-09-16 06:45:01.257.
+Test Suite 'All tests' passed at 2026-09-16 06:45:01.287.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.030) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1902
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀙟  Test realLaunchAgentLifecycleWithoutGitHubJobs() skipped.
+􀟈  Test commandExecutorHandlesLargeOutputAndExitStatus() started.
+􀟈  Test startWaitsForRunningState() started.
+􀟈  Test flowPublishesFailureAndClearsPendingState() started.
+􀟈  Test discoversManualAndStandardServicesWithoutMachineNames() started.
+􀟈  Test startIsIdempotentAndStopUsesServiceIdentity() started.
+􀟈  Test missingDiscoveryRootsReturnEmpty() started.
+􀟈  Test distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test permissionErrorsNeverTriggerBootstrap() started.
+􀟈  Test canStopAfterRegistrationIsDeleted() started.
+􀟈  Test rejectsSpacesBeforeLaunching(inWorkFolder:) started.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 0, output: "state = running\npid = 23"), RunnerControlCore.Runners.Status.running) to distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test reducerPreservesUnrelatedActionsAndCleansState() started.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 0, output: "state = exited"), RunnerControlCore.Runners.Status.failed) to distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 113, output: "Could not find service foo"), RunnerControlCore.Runners.Status.stopped) to distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 1, output: "Operation not permitted"), RunnerControlCore.Runners.Status.unknown) to distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test case passing 1 argument value → (RunnerControlCore.CommandResult(code: 113, output: "Could not find domain"), RunnerControlCore.Runners.Status.unknown) to distinguishesStoppedFromPermissionFailure(value:) started.
+􀟈  Test case passing 1 argument inWorkFolder → false to rejectsSpacesBeforeLaunching(inWorkFolder:) started.
+􀟈  Test case passing 1 argument inWorkFolder → true to rejectsSpacesBeforeLaunching(inWorkFolder:) started.
+􁁛  Test missingDiscoveryRootsReturnEmpty() passed after 0.012 seconds.
+􁁛  Test distinguishesStoppedFromPermissionFailure(value:) with 5 test cases passed after 0.012 seconds.
+􁁛  Test reducerPreservesUnrelatedActionsAndCleansState() passed after 0.016 seconds.
+􁁛  Test flowPublishesFailureAndClearsPendingState() passed after 0.020 seconds.
+􁁛  Test canStopAfterRegistrationIsDeleted() passed after 0.020 seconds.
+􁁛  Test permissionErrorsNeverTriggerBootstrap() passed after 0.022 seconds.
+􁁛  Test rejectsSpacesBeforeLaunching(inWorkFolder:) with 2 test cases passed after 0.023 seconds.
+􁁛  Test startWaitsForRunningState() passed after 0.025 seconds.
+􁁛  Test startIsIdempotentAndStopUsesServiceIdentity() passed after 0.026 seconds.
+􁁛  Test discoversManualAndStandardServicesWithoutMachineNames() passed after 0.037 seconds.
+􁁛  Test commandExecutorHandlesLargeOutputAndExitStatus() passed after 0.115 seconds.
+􁁛  Test run with 12 tests in 0 suites passed after 0.117 seconds.
+[exit 0]
+$ python3 -m unittest discover -s Scripts/tests -v
+test_appcast_archive_binding (test_release_metadata.ReleaseMetadataTests.test_appcast_archive_binding) ... ok
+test_builds_increase_between_attempts_and_runs (test_release_metadata.ReleaseMetadataTests.test_builds_increase_between_attempts_and_runs) ... ok
+test_rejects_wrong_feed (test_release_metadata.ReleaseMetadataTests.test_rejects_wrong_feed) ... ok
+test_rejects_wrong_tag_or_identity (test_release_metadata.ReleaseMetadataTests.test_rejects_wrong_tag_or_identity) ... ok
+test_release_signs_dmg_with_resolved_team_identity (test_release_metadata.ReleaseWiringTests.test_release_signs_dmg_with_resolved_team_identity) ... ok
+test_rejects_apple_development_only (test_release_metadata.SigningIdentityTests.test_rejects_apple_development_only) ... ok
+test_rejects_missing_team_identity (test_release_metadata.SigningIdentityTests.test_rejects_missing_team_identity) ... ok
+test_rejects_multiple_team_identities (test_release_metadata.SigningIdentityTests.test_rejects_multiple_team_identities) ... ok
+test_rejects_near_match_team (test_release_metadata.SigningIdentityTests.test_rejects_near_match_team) ... ok
+test_rejects_same_team_apple_development (test_release_metadata.SigningIdentityTests.test_rejects_same_team_apple_development) ... ok
+test_returns_team_identity_ignoring_other_teams (test_release_metadata.SigningIdentityTests.test_returns_team_identity_ignoring_other_teams) ... ok
+test_multiple_identities_prevents_packaging_and_output (test_release_packaging.ReleasePackagingTests.test_multiple_identities_prevents_packaging_and_output) ... ok
+test_release_signs_dmg_with_resolved_team_identity (test_release_packaging.ReleasePackagingTests.test_release_signs_dmg_with_resolved_team_identity) ... ok
+test_retry_attempt_signs_with_resolved_team_identity (test_release_packaging.ReleasePackagingTests.test_retry_attempt_signs_with_resolved_team_identity) ... ok
+test_zero_identities_prevents_packaging_and_output (test_release_packaging.ReleasePackagingTests.test_zero_identities_prevents_packaging_and_output) ... ok
+test_failed_identity_read_with_empty_output_is_unknown_not_missing (test_release_preflight.ReleasePreflightTests.test_failed_identity_read_with_empty_output_is_unknown_not_missing) ... ok
+test_failed_identity_read_with_partial_output_is_not_verified (test_release_preflight.ReleasePreflightTests.test_failed_identity_read_with_partial_output_is_not_verified) ... ok
+test_locked_keychain_fails_with_unlock_guidance (test_release_preflight.ReleasePreflightTests.test_locked_keychain_fails_with_unlock_guidance) ... ok
+test_missing_identity_rejected (test_release_preflight.ReleasePreflightTests.test_missing_identity_rejected) ... ok
+test_missing_profile_names_profile_without_locked_guidance (test_release_preflight.ReleasePreflightTests.test_missing_profile_names_profile_without_locked_guidance) ... ok
+test_multiple_team_identities_rejected (test_release_preflight.ReleasePreflightTests.test_multiple_team_identities_rejected) ... ok
+test_preflight_passes_with_valid_credentials (test_release_preflight.ReleasePreflightTests.test_preflight_passes_with_valid_credentials) ... ok
+test_sparkle_key_mismatch_rejected (test_release_preflight.ReleasePreflightTests.test_sparkle_key_mismatch_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 23 tests in 10.208s
+
+OK
+[exit 0]
+coverage_unit=exact_command_shard required=2 green=2 failed=0 missing=0 test_case_coverage=unknown

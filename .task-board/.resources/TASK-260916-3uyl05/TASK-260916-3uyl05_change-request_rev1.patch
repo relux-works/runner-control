@@ -1,0 +1,314 @@
+diff --git a/RELEASING.md b/RELEASING.md
+index f576e28..c5fdf5c 100644
+--- a/RELEASING.md
++++ b/RELEASING.md
+@@ -28,6 +28,37 @@ Each feed points to its immutable version-specific DMG URL. The application foll
+ 
+ Build numbers are derived from the release workflow run number and attempt. Keep this workflow's run counter continuous; do not replace it with a new workflow whose counter starts over without adjusting the build-number scheme.
+ 
++## Failure recovery
++
++Release run 35040921163 (`v1.1.0`) failed in Release prerequisites before any
++build or signing: the login keychain was locked in the runner session, so
++`notarytool` could not read profile `RunnerControl-notary` (`keychainLocked`).
++No draft or published release was created.
++
++To retry an existing tag, unlock the login keychain on macbook-iv with a
++console login as the runner user (no credentials are printed or exported),
++enable the runner in Runner Control, then run **Release DMG** via
++workflow_dispatch with the existing tag. Do not delete or re-push the tag and
++do not create the release by hand; the workflow refuses to overwrite published
++assets. If prerequisites still report a locked keychain, the runner session
++has no unlocked login keychain; unlock it and dispatch again.
++
++Preflight also fails fast when no Developer ID Application identity for team
++`262RZ595FP` is present, when several are present (remove the stale
++certificate so signing is unambiguous), when the notarytool profile is missing
++(recreate it with `xcrun notarytool store-credentials` as above), or when the
++Sparkle private key does not match `SUPublicEDKey`.
++
++Apple notarization waits up to 30 minutes per artifact (app ZIP, then DMG). If
++a wait times out, the submission ID in the release logs can be inspected with
++`xcrun notarytool info <id> --keychain-profile RunnerControl-notary` (status
++only); retrying dispatches a new run with a new monotonic build number. A
++pending signing-check submission is not a release artifact and does not block
++the next release.
++
++No new tag is created and nothing is published until product review and
++coordinator dispatch.
++
+ ## Validation status
+ 
+ Core and release metadata tests pass locally and in GitHub Actions; the Sparkle-enabled app builds successfully. Developer ID signing and the notarytool profile are validated on macbook-iv. The complete notarization and update-install cycle requires the first accepted Apple submission and two published versions. Check GitHub Releases for publication status.
+diff --git a/Scripts/release-preflight.sh b/Scripts/release-preflight.sh
+index 1e279d7..a142a66 100755
+--- a/Scripts/release-preflight.sh
++++ b/Scripts/release-preflight.sh
+@@ -3,15 +3,37 @@ set -euo pipefail
+ for tool in xcodebuild xcrun codesign security hdiutil tuist gh python3; do
+   command -v "$tool" >/dev/null || { echo "Missing release tool: $tool" >&2; exit 1; }
+ done
+-if ! security find-identity -v -p codesigning | grep -E 'Developer ID Application:.*\(262RZ595FP\)' >/dev/null; then
++identities="$(security find-identity -v -p codesigning | grep -E 'Developer ID Application:.*\(262RZ595FP\)' || true)"
++if [ -z "$identities" ]; then
+   echo 'Missing Developer ID Application identity with private key for team 262RZ595FP.' >&2
+   echo 'An Account Holder must issue it; Apple Development or another team cannot be substituted.' >&2
+   exit 1
+ fi
+-xcrun notarytool history --keychain-profile "${NOTARY_PROFILE:-RunnerControl-notary}" --output-format json >/dev/null
++if [ "$(printf '%s\n' "$identities" | grep -c .)" -gt 1 ]; then
++  echo 'Multiple Developer ID Application identities for team 262RZ595FP; remove the stale certificate so release signing is unambiguous.' >&2
++  exit 1
++fi
++profile="${NOTARY_PROFILE:-RunnerControl-notary}"
++history_err="$(mktemp)"
++if ! xcrun notarytool history --keychain-profile "$profile" --output-format json >/dev/null 2>"$history_err"; then
++  if grep -q 'keychainLocked' "$history_err"; then
++    echo "The login keychain is locked in this session, so notarytool profile '$profile' cannot be read." >&2
++    echo 'Unlock the login keychain on macbook-iv (console login as the runner user) and re-run Release DMG via workflow_dispatch with the existing tag. Credentials are never printed or exported.' >&2
++  elif grep -q 'No Keychain password item found for profile' "$history_err"; then
++    echo "notarytool profile '$profile' is missing from the login keychain." >&2
++    echo "Recreate it locally with 'xcrun notarytool store-credentials' (see RELEASING.md), then re-run Release DMG via workflow_dispatch with the existing tag." >&2
++  else
++    echo "notarytool history failed for profile '$profile':" >&2
++    head -n 5 "$history_err" >&2 || true
++  fi
++  rm -f "$history_err"
++  exit 1
++fi
++rm -f "$history_err"
+ root="$(cd "$(dirname "$0")/.." && pwd)"
+ cd "$root"
+ sparkle_bin="$("$root/Scripts/sparkle-tools.sh")"
+ actual="$("$sparkle_bin/generate_keys" --account works.relux.runnercontrol -p)"
+ expected="$(python3 -c 'import json; print(json.load(open("ios-app-manager.json"))["macos"]["info_plist"]["SUPublicEDKey"])')"
+ [ "$actual" = "$expected" ] || { echo 'Sparkle signing key is missing or does not match the app public key.' >&2; exit 1; }
++printf "Release prerequisites verified (team 262RZ595FP, notary profile '%s').\n" "$profile"
+diff --git a/Scripts/release.sh b/Scripts/release.sh
+index 5508acf..31e0781 100755
+--- a/Scripts/release.sh
++++ b/Scripts/release.sh
+@@ -58,7 +58,7 @@ ditto "$app" "$release_root/image/RunnerControl.app"
+ ln -s /Applications "$release_root/image/Applications"
+ hdiutil create -volname 'Runner Control' -srcfolder "$release_root/image" -fs APFS \
+   -format ULFO "$release_root/dist/RunnerControl.dmg"
+-signing_identity="$(security find-identity -v -p codesigning | sed -nE '/Developer ID Application:.*\(262RZ595FP\)/s/.*[0-9]+\) ([A-Fa-f0-9]+) .*/\1/p' | head -n 1)"
++signing_identity="$(security find-identity -v -p codesigning | python3 Scripts/release_metadata.py signing-identity --team 262RZ595FP)"
+ codesign --force --timestamp --sign "$signing_identity" "$release_root/dist/RunnerControl.dmg"
+ notarize "$release_root/dist/RunnerControl.dmg" "$release_root/dmg-notary.json"
+ xcrun stapler staple "$release_root/dist/RunnerControl.dmg"
+diff --git a/Scripts/release_metadata.py b/Scripts/release_metadata.py
+index 7244970..cb7e2c5 100644
+--- a/Scripts/release_metadata.py
++++ b/Scripts/release_metadata.py
+@@ -5,6 +5,7 @@ import base64
+ import json
+ from pathlib import Path
+ import re
++import sys
+ import xml.etree.ElementTree as ET
+ 
+ REPO = 'relux-works/runner-control'
+@@ -28,6 +29,26 @@ def prepare(config, tag, run, attempt):
+     config['project_version'] = f'{100 + run}.{attempt}'
+     return config
+ 
++def resolve_signing_identity(find_identity_output, team):
++    """Return the Developer ID Application SHA-1 for team.
++
++    Parses `security find-identity -v -p codesigning` output. Apple
++    Development and other-team identities are ignored. Zero or several
++    matches fail so release signing never silently picks a wrong key.
++    """
++    matches = []
++    for line in find_identity_output.splitlines():
++        if 'Developer ID Application:' not in line or f'({team})' not in line:
++            continue
++        found = re.search(r'\b([A-F0-9]{40})\b', line)
++        if found:
++            matches.append(found.group(1))
++    if not matches:
++        raise ValueError(f'No Developer ID Application identity for team {team}')
++    if len(matches) > 1:
++        raise ValueError(f'Multiple Developer ID Application identities for team {team}; remove the stale certificate')
++    return matches[0]
++
+ def verify_appcast(path, dmg, tag, build):
+     root = ET.parse(path).getroot()
+     items = root.findall('./channel/item')
+@@ -61,11 +82,15 @@ def main():
+     verify.add_argument('--dmg', type=Path, required=True)
+     verify.add_argument('--tag', required=True)
+     verify.add_argument('--build', required=True)
++    sig = sub.add_parser('signing-identity')
++    sig.add_argument('--team', required=True)
+     args = parser.parse_args()
+     if args.command == 'prepare':
+         data = prepare(json.loads(args.config.read_text()), args.tag, args.run, args.attempt)
+         args.config.write_text(json.dumps(data, indent=2) + '\n')
+         print(data['project_version'])
++    elif args.command == 'signing-identity':
++        print(resolve_signing_identity(sys.stdin.read(), args.team))
+     else:
+         verify_appcast(args.appcast, args.dmg, args.tag, args.build)
+         print('Appcast identity, signature presence, size and minimum OS verified')
+diff --git a/Scripts/tests/test_release_metadata.py b/Scripts/tests/test_release_metadata.py
+index 123e49d..cdb4d7c 100644
+--- a/Scripts/tests/test_release_metadata.py
++++ b/Scripts/tests/test_release_metadata.py
+@@ -42,3 +42,36 @@ class ReleaseMetadataTests(unittest.TestCase):
+                         xml.replace('101.1', '100.1'), xml.replace('14.0', '13.0')]:
+                 feed.write_text(bad)
+                 with self.assertRaises(ValueError): m.verify_appcast(feed, dmg, 'v1.1.0', '101.1')
++
++TEAM = '262RZ595FP'
++EXPECTED_SHA = '267D90FC976A48CF830BE7F41AE612999E025054'
++FIND_IDENTITY = (
++    '  1) 7FB8D981868F2637B75DFD098A1F87E0CC11158D "Apple Development: Ivan Oparin (45W9YW7M6V)"\n'
++    '  2) 08EF92AE3835F98861F51E625FAA9B6900A075C7 "Apple Development: Ivan Oparin (FSPBF3QRXT)"\n'
++    f'  3) {EXPECTED_SHA} "Developer ID Application: Relux Works, LLC ({TEAM})"\n'
++    '  4) C8448515B5871071F90EB0168A79DCD35E7CA9FE "Developer ID Application: SKL VC DMCC (4Y4UJAT8QR)"\n'
++    '     4 valid identities found\n')
++
++class SigningIdentityTests(unittest.TestCase):
++    def test_returns_team_identity_ignoring_other_teams(self):
++        self.assertEqual(m.resolve_signing_identity(FIND_IDENTITY, TEAM), EXPECTED_SHA)
++    def test_rejects_missing_team_identity(self):
++        only_other = '\n'.join(l for l in FIND_IDENTITY.splitlines() if TEAM not in l)
++        with self.assertRaises(ValueError): m.resolve_signing_identity(only_other, TEAM)
++    def test_rejects_apple_development_only(self):
++        dev_only = '\n'.join(l for l in FIND_IDENTITY.splitlines() if 'Apple Development' in l)
++        with self.assertRaises(ValueError): m.resolve_signing_identity(dev_only, TEAM)
++    def test_rejects_near_match_team(self):
++        near = FIND_IDENTITY.replace(f'({TEAM})', '(262RZ595FX)')
++        with self.assertRaises(ValueError): m.resolve_signing_identity(near, TEAM)
++    def test_rejects_multiple_team_identities(self):
++        extra = FIND_IDENTITY.replace('  4) C8448515B5871071F90EB0168A79DCD35E7CA9FE "Developer ID Application: SKL VC DMCC (4Y4UJAT8QR)"',
++                                      f'  4) AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA "Developer ID Application: Relux Works, LLC ({TEAM})"')
++        with self.assertRaises(ValueError): m.resolve_signing_identity(extra, TEAM)
++
++class ReleaseWiringTests(unittest.TestCase):
++    def test_release_signs_dmg_with_resolved_team_identity(self):
++        lines = (Path(__file__).parents[1] / 'release.sh').read_text().splitlines()
++        live = [l for l in lines if not l.lstrip().startswith('#')]
++        self.assertTrue(any('release_metadata.py signing-identity' in l and '--team 262RZ595FP' in l for l in live),
++                        'release.sh must resolve the DMG signing identity through release_metadata.py signing-identity')
+diff --git a/Scripts/tests/test_release_preflight.py b/Scripts/tests/test_release_preflight.py
+new file mode 100644
+index 0000000..cb9defc
+--- /dev/null
++++ b/Scripts/tests/test_release_preflight.py
+@@ -0,0 +1,113 @@
++"""Drive Scripts/release-preflight.sh with stubbed macOS tools.
++
++Each test builds an isolated repo root (preflight + sparkle-tools scripts,
++minimal ios-app-manager.json, stub Sparkle tools so no download happens) and
++a stub bin dir shadowing xcrun/security. Real python3/bash/grep run from PATH.
++No credentials enter the fixtures.
++"""
++import base64
++import json
++import os
++from pathlib import Path
++import shutil
++import subprocess
++import tempfile
++import unittest
++
++REPO = Path(__file__).parents[2]
++PUBKEY = base64.b64encode(bytes(32)).decode()
++WRONG_PUBKEY = base64.b64encode(bytes(range(32))).decode()
++TEAM_LINE = '  3) 267D90FC976A48CF830BE7F41AE612999E025054 "Developer ID Application: Relux Works, LLC (262RZ595FP)"'
++OTHER_LINES = ('  1) 7FB8D981868F2637B75DFD098A1F87E0CC11158D "Apple Development: Ivan Oparin (45W9YW7M6V)"\n'
++               '  4) C8448515B5871071F90EB0168A79DCD35E7CA9FE "Developer ID Application: SKL VC DMCC (4Y4UJAT8QR)"')
++
++
++def write_exe(path, content):
++    path.write_text(content)
++    path.chmod(0o755)
++
++
++class PreflightHarness(unittest.TestCase):
++    def setUp(self):
++        self.tmp = tempfile.TemporaryDirectory()
++        root = Path(self.tmp.name)
++        scripts = root / 'Scripts'
++        scripts.mkdir()
++        for name in ('release-preflight.sh', 'sparkle-tools.sh'):
++            shutil.copy(REPO / 'Scripts' / name, scripts / name)
++        (root / 'ios-app-manager.json').write_text(json.dumps(
++            {'macos': {'info_plist': {'SUPublicEDKey': PUBKEY}}}))
++        sparkle_bin = root / '.temp' / 'tools' / 'Sparkle-2.10.0' / 'bin'
++        sparkle_bin.mkdir(parents=True)
++        write_exe(sparkle_bin / 'generate_appcast', '#!/bin/sh\nexit 0\n')
++        self.sparkle_bin = sparkle_bin
++        self.bindir = root / 'bin'
++        self.bindir.mkdir()
++        for tool in ('xcodebuild', 'codesign', 'hdiutil', 'tuist', 'gh'):
++            write_exe(self.bindir / tool, '#!/bin/sh\nexit 0\n')
++        self.root = root
++
++    def tearDown(self):
++        self.tmp.cleanup()
++
++    def run_preflight(self, security_out, xcrun_script, sparkle_key=PUBKEY, profile=None):
++        write_exe(self.bindir / 'security', '#!/bin/sh\ncat <<\'EOF\'\n' + security_out + '\nEOF\n')
++        write_exe(self.bindir / 'xcrun', xcrun_script)
++        write_exe(self.sparkle_bin / 'generate_keys', '#!/bin/sh\necho ' + sparkle_key + '\n')
++        env = dict(os.environ)
++        env['PATH'] = str(self.bindir) + os.pathsep + env['PATH']
++        if profile is None:
++            env.pop('NOTARY_PROFILE', None)
++        else:
++            env['NOTARY_PROFILE'] = profile
++        return subprocess.run(['bash', str(self.root / 'Scripts' / 'release-preflight.sh')],
++                              capture_output=True, text=True, timeout=60, env=env, cwd=self.tmp.name)
++
++
++class ReleasePreflightTests(PreflightHarness):
++    def test_preflight_passes_with_valid_credentials(self):
++        r = self.run_preflight(OTHER_LINES + '\n' + TEAM_LINE, '#!/bin/sh\nexit 0\n')
++        self.assertEqual(r.returncode, 0, r.stderr)
++        self.assertIn('Release prerequisites verified', r.stdout)
++        self.assertIn('RunnerControl-notary', r.stdout)
++
++    def test_locked_keychain_fails_with_unlock_guidance(self):
++        stub = ('#!/bin/sh\necho \'Error: keychainLocked(keychainName: "default", keychainURL: nil)'
++                ' Use Keychain Access or the `security unlock-keychain` command line tool'
++                ' to unlock the default keychain.\' >&2\nexit 1\n')
++        r = self.run_preflight(OTHER_LINES + '\n' + TEAM_LINE, stub)
++        self.assertNotEqual(r.returncode, 0)
++        self.assertIn('locked', r.stderr)
++        self.assertIn('workflow_dispatch', r.stderr)
++        self.assertIn('RunnerControl-notary', r.stderr)
++
++    def test_missing_profile_names_profile_without_locked_guidance(self):
++        stub = ('#!/bin/sh\necho "Error: No Keychain password item found for profile: Custom-Profile-9" >&2\n'
++                'echo "Run \'notarytool store-credentials\' to create another credential profile." >&2\nexit 1\n')
++        r = self.run_preflight(OTHER_LINES + '\n' + TEAM_LINE, stub, profile='Custom-Profile-9')
++        self.assertNotEqual(r.returncode, 0)
++        self.assertIn('Custom-Profile-9', r.stderr)
++        self.assertIn('store-credentials', r.stderr)
++        self.assertIn('missing from the login keychain', r.stderr)
++        self.assertNotIn('locked', r.stderr)
++
++    def test_missing_identity_rejected(self):
++        r = self.run_preflight(OTHER_LINES, '#!/bin/sh\nexit 0\n')
++        self.assertNotEqual(r.returncode, 0)
++        self.assertIn('Missing Developer ID Application identity', r.stderr)
++
++    def test_multiple_team_identities_rejected(self):
++        second = TEAM_LINE.replace('267D90FC976A48CF830BE7F41AE612999E025054',
++                                   'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA').replace('  3)', '  5)')
++        r = self.run_preflight(OTHER_LINES + '\n' + TEAM_LINE + '\n' + second, '#!/bin/sh\nexit 0\n')
++        self.assertNotEqual(r.returncode, 0)
++        self.assertIn('Multiple Developer ID Application identities', r.stderr)
++
++    def test_sparkle_key_mismatch_rejected(self):
++        r = self.run_preflight(OTHER_LINES + '\n' + TEAM_LINE, '#!/bin/sh\nexit 0\n', sparkle_key=WRONG_PUBKEY)
++        self.assertNotEqual(r.returncode, 0)
++        self.assertIn('Sparkle signing key', r.stderr)
++
++
++if __name__ == '__main__':
++    unittest.main()
