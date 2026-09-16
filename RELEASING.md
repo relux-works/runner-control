@@ -30,4 +30,4 @@ Build numbers are derived from the release workflow run number and attempt. Keep
 
 ## Validation status
 
-Core and release metadata tests pass locally; the Sparkle-enabled app builds successfully. The complete notarization and update-install cycle requires the first accepted Apple submission and two published versions. No notarized public release has been published yet.
+Core and release metadata tests pass locally and in GitHub Actions; the Sparkle-enabled app builds successfully. Developer ID signing and the notarytool profile are validated on macbook-iv. The complete notarization and update-install cycle requires the first accepted Apple submission and two published versions. Check GitHub Releases for publication status.

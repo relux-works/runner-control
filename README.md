@@ -55,4 +55,4 @@ https://github.com/relux-works/runner-control/releases/latest/download/RunnerCon
 The signed update archive is announced at:
 https://github.com/relux-works/runner-control/releases/latest/download/appcast.xml
 
-See [RELEASING.md](RELEASING.md) for host setup and release steps. The first public release is pending Apple signing and notarization credentials; these links are not available until publication.
+See [RELEASING.md](RELEASING.md) for host setup and release steps. Apple signing and notarization credentials are configured on macbook-iv. Download links become available after the first successful release workflow.
