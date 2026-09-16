@@ -4,48 +4,121 @@ public protocol RunnerServicing: Sendable {
     func setEnabled(_ enabled: Bool, id: String) async throws
 }
 public actor LaunchAgentService: RunnerServicing {
-    private let definitions: [Runners.Definition]
+    private let fixedDefinitions: [Runners.Definition]?
+    private let catalog: RunnerCatalogStore?
     private let executor: any CommandExecuting
     private let domain: String
-    public init(definitions: [Runners.Definition] = Runners.Definition.installed(), executor: any CommandExecuting = CommandExecutor(), userID: UInt32 = getuid()) {
-        self.definitions = definitions; self.executor = executor; domain = "gui/\(userID)"
+    private let home: URL
+    public init(definitions: [Runners.Definition] = Runners.Definition.installed(), executor: any CommandExecuting = CommandExecutor(), userID: UInt32 = getuid(), home: URL = FileManager.default.homeDirectoryForCurrentUser) {
+        self.fixedDefinitions = definitions; self.catalog = nil; self.executor = executor; domain = "gui/\(userID)"; self.home = home
+    }
+    /// Catalog-backed service. Snapshots always reflect the current catalog;
+    /// fixed definitions are used only when no catalog is supplied (tests).
+    public init(catalog: RunnerCatalogStore, executor: any CommandExecuting = CommandExecutor(), userID: UInt32 = getuid(), home: URL = FileManager.default.homeDirectoryForCurrentUser) {
+        self.fixedDefinitions = nil; self.catalog = catalog; self.executor = executor; domain = "gui/\(userID)"; self.home = home
     }
     public static func status(from result: CommandResult) -> Runners.Status {
         if result.code == 0 { return result.output.contains("state = running") ? .running : .failed }
         if result.code == 113 && result.output.contains("Could not find service") { return .stopped }
         return .unknown
     }
+    private func currentDefinitions() async -> [Runners.Definition] {
+        if let catalog {
+            let entries = await catalog.load()
+            return entries.map { Self.definition(from: $0) }
+        }
+        return fixedDefinitions ?? []
+    }
+    /// Builds a definition from a catalog entry, resolving the stored
+    /// bookmark when present and refreshing the RunAtLoad policy from disk
+    /// so the UI always shows the preserved policy, never a stale copy.
+    static func definition(from entry: RunnerCatalogStore.Entry) -> Runners.Definition {
+        let directory = RunnerCatalogStore.resolve(entry: entry)
+        let plist = URL(fileURLWithPath: entry.servicePlistPath)
+        let runAtLoad: Bool? = {
+            guard let data = try? Data(contentsOf: plist),
+                  let object = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
+                return entry.runAtLoad
+            }
+            return (object["RunAtLoad"] as? Bool) ?? entry.runAtLoad
+        }()
+        let githubURL: URL = {
+            if let host = entry.serverHost, let scope = entry.scope, let kind = entry.scopeKind {
+                let base = host == "github.com" ? "https://github.com" : "https://\(host)"
+                let path = kind == "org" ? "/organizations/\(scope)/settings/actions/runners" : "/\(scope)/settings/actions/runners"
+                if let url = URL(string: base + path) { return url }
+            }
+            return URL(string: "https://github.com")!
+        }()
+        return Runners.Definition(
+            id: entry.serviceLabel, title: entry.agentName ?? directory.lastPathComponent,
+            detail: entry.scope ?? "", directory: directory, githubURL: githubURL,
+            servicePlist: plist, localID: entry.localID,
+            controllerKind: entry.controllerKind, runAtLoad: runAtLoad,
+            displayName: entry.displayName, serverHost: entry.serverHost,
+            remoteAgentID: entry.remoteAgentID, workFolder: entry.workFolder
+        )
+    }
     private func validate(_ definition: Runners.Definition) throws {
-        let data = try Data(contentsOf: definition.plist)
-        guard let plist = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-              plist["Label"] as? String == definition.id,
-              let args = plist["ProgramArguments"] as? [String],
-              args == [definition.directory.appendingPathComponent("runsvc.sh").path],
-              plist["WorkingDirectory"] as? String == definition.directory.path else {
-            throw RunnerError.message("Настройки службы не соответствуют раннеру \(definition.title).")
-        }
-        guard !definition.directory.path.contains(" ") else { throw RunnerError.message("Путь раннера содержит пробел. Исправьте путь перед запуском.") }
-        let registration = try Data(contentsOf: definition.directory.appendingPathComponent(".runner"))
-        // GitHub writes a UTF-8 BOM; JSONSerialization accepts it.
-        guard let object = try JSONSerialization.jsonObject(with: registration) as? [String: Any],
-              let work = object["workFolder"] as? String, !work.contains(" ") else {
-            throw RunnerError.message("Рабочий каталог раннера отсутствует или содержит пробел.")
-        }
+        try RunnerControllers.validateForStart(definition)
     }
     public func snapshots() async -> [Runners.Snapshot] {
+        let definitions = await currentDefinitions()
+        let now = Date()
+        let home = self.home
         var values: [Runners.Snapshot] = []
-        for d in definitions {
+        for raw in definitions {
+            // Effective login is computed per snapshot so the toggle always
+            // reflects real login behavior, never a stale copy.
+            let d = raw.withLoginEnabled(RunnerControllers.effectiveLogin(raw, home: home))
+            // Unsupported entries are still inspected via launchctl so a
+            // running foreign service is visible; control stays refused.
+            if d.controllerKind == .unsupported {
+                do {
+                    let result = try await executor.run("/bin/launchctl", ["print", domain + "/" + d.id])
+                    let status = Self.status(from: result)
+                    let reason = "Unsupported management: control it with its own supervisor."
+                    let message = status == .unknown ? String(result.output.prefix(300)) : reason
+                    values.append(.init(definition: d, status: status, message: message, observedAt: now))
+                } catch {
+                    values.append(.init(definition: d, status: .unknown, message: error.localizedDescription, observedAt: now))
+                }
+                continue
+            }
+            // Print first so a missing registration or damaged manifest never
+            // hides a running service and its Stop.
+            let printed: CommandResult?
+            do {
+                printed = try await executor.run("/bin/launchctl", ["print", domain + "/" + d.id])
+            } catch {
+                values.append(.init(definition: d, status: .unknown, message: error.localizedDescription, observedAt: now))
+                continue
+            }
+            let launchStatus = Self.status(from: printed!)
             do {
                 try validate(d)
-                let result = try await executor.run("/bin/launchctl", ["print", domain + "/" + d.id])
-                let status = Self.status(from: result)
-                values.append(.init(definition: d, status: status, message: status == .unknown ? String(result.output.prefix(300)) : nil))
-            } catch { values.append(.init(definition: d, status: .missing, message: error.localizedDescription)) }
+                let message = launchStatus == .unknown ? String(printed!.output.prefix(300)) : nil
+                values.append(.init(definition: d, status: launchStatus, message: message, observedAt: now))
+            } catch {
+                // A running service stays visible (and stoppable) even when
+                // registration or manifest is damaged.
+                if launchStatus == .running {
+                    values.append(.init(definition: d, status: .running, message: error.localizedDescription, observedAt: now))
+                } else if let runnerError = error as? RunnerError, case .noSpacePath = runnerError {
+                    values.append(.init(definition: d, status: .needsSetup, message: error.localizedDescription, observedAt: now))
+                } else {
+                    values.append(.init(definition: d, status: .missing, message: error.localizedDescription, observedAt: now))
+                }
+            }
         }
         return values
     }
     public func setEnabled(_ enabled: Bool, id: String) async throws {
+        let definitions = await currentDefinitions()
         guard let d = definitions.first(where: { $0.id == id }) else { throw RunnerError.message("Неизвестный раннер.") }
+        if d.controllerKind == .unsupported {
+            throw RunnerError.unsupported("Runner «\(d.displayTitle)» uses unsupported management. Control it with its own supervisor instead of Runner Control.")
+        }
         // Stop must remain possible even if someone damages registration/plist.
         if enabled { try validate(d) }
         let key = domain + "/" + d.id
@@ -64,6 +137,6 @@ public actor LaunchAgentService: RunnerServicing {
             if Self.status(from: result) == (enabled ? .running : .stopped) { return }
             try await Task.sleep(for: .milliseconds(100))
         }
-        throw RunnerError.message("Служба не подтвердила изменение состояния. Проверьте журнал раннера.")
+        throw RunnerError.message("Не удалось подтвердить остановку. Проверьте журнал раннера и повторите проверку.")
     }
 }

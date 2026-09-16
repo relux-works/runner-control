@@ -7,9 +7,19 @@ public struct CommandResult: Sendable, Equatable {
 public protocol CommandExecuting: Sendable {
     func run(_ executable: String, _ arguments: [String]) async throws -> CommandResult
 }
-public enum RunnerError: LocalizedError, Sendable {
+public enum RunnerError: LocalizedError, Sendable, Equatable {
     case message(String)
-    public var errorDescription: String? { if case .message(let text) = self { text } else { nil } }
+    case noSpacePath(String)
+    case manifestMismatch(String)
+    case unsupported(String)
+    public var errorDescription: String? {
+        switch self {
+        case .message(let text): text
+        case .noSpacePath(let text): text
+        case .manifestMismatch(let text): text
+        case .unsupported(let text): text
+        }
+    }
 }
 public actor CommandExecutor: CommandExecuting {
     public init() {}

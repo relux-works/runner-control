@@ -22,9 +22,11 @@ let project = Project(
             bundleId: "works.relux.runnercontrol", deploymentTargets: .macOS("14.0"),
             infoPlist: .extendingDefault(with: [
                 "LSUIElement": .boolean(true),
-                "CFBundleShortVersionString": .string("1.1.1"),
+                "CFBundleShortVersionString": .string("1.2.0"),
                 "CFBundleVersion": .string("101.99"),
                 "NSHumanReadableCopyright": .string("Relux Works"),
+                "GitHubAppClientID": .string("Iv23ligBUam7vZitsE1G"),
+                "GitHubAppSlug": .string("relux-runner-control"),
                 "SUAutomaticallyUpdate": .boolean(true),
                 "SUEnableAutomaticChecks": .boolean(true),
                 "SUFeedURL": .string("https://github.com/relux-works/runner-control/releases/latest/download/appcast.xml"),
