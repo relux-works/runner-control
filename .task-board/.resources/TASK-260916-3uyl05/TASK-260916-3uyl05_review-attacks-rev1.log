@@ -1,0 +1,35 @@
+ATTACK 1: token-preserving retry-only signing bypass (attempt 2 uses ad-hoc identity)
+test_appcast_archive_binding (test_release_metadata.ReleaseMetadataTests.test_appcast_archive_binding) ... ok
+test_builds_increase_between_attempts_and_runs (test_release_metadata.ReleaseMetadataTests.test_builds_increase_between_attempts_and_runs) ... ok
+test_rejects_wrong_feed (test_release_metadata.ReleaseMetadataTests.test_rejects_wrong_feed) ... ok
+test_rejects_wrong_tag_or_identity (test_release_metadata.ReleaseMetadataTests.test_rejects_wrong_tag_or_identity) ... ok
+test_release_signs_dmg_with_resolved_team_identity (test_release_metadata.ReleaseWiringTests.test_release_signs_dmg_with_resolved_team_identity) ... ok
+test_rejects_apple_development_only (test_release_metadata.SigningIdentityTests.test_rejects_apple_development_only) ... ok
+test_rejects_missing_team_identity (test_release_metadata.SigningIdentityTests.test_rejects_missing_team_identity) ... ok
+test_rejects_multiple_team_identities (test_release_metadata.SigningIdentityTests.test_rejects_multiple_team_identities) ... ok
+test_rejects_near_match_team (test_release_metadata.SigningIdentityTests.test_rejects_near_match_team) ... ok
+test_returns_team_identity_ignoring_other_teams (test_release_metadata.SigningIdentityTests.test_returns_team_identity_ignoring_other_teams) ... ok
+test_locked_keychain_fails_with_unlock_guidance (test_release_preflight.ReleasePreflightTests.test_locked_keychain_fails_with_unlock_guidance) ... ok
+test_missing_identity_rejected (test_release_preflight.ReleasePreflightTests.test_missing_identity_rejected) ... ok
+test_missing_profile_names_profile_without_locked_guidance (test_release_preflight.ReleasePreflightTests.test_missing_profile_names_profile_without_locked_guidance) ... ok
+test_multiple_team_identities_rejected (test_release_preflight.ReleasePreflightTests.test_multiple_team_identities_rejected) ... ok
+test_preflight_passes_with_valid_credentials (test_release_preflight.ReleasePreflightTests.test_preflight_passes_with_valid_credentials) ... ok
+test_sparkle_key_mismatch_rejected (test_release_preflight.ReleasePreflightTests.test_sparkle_key_mismatch_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 16 tests in 2.923s
+
+OK
+
+suite exit: 0
+ATTACK 2: security failure with no output
+security: read failed
+Missing Developer ID Application identity with private key for team 262RZ595FP.
+An Account Holder must issue it; Apple Development or another team cannot be substituted.
+
+preflight exit: 1
+ATTACK 2: security failure with partial valid output
+Release prerequisites verified (team 262RZ595FP, notary profile 'RunnerControl-notary').
+security: read failed
+
+preflight exit: 0

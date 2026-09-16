@@ -1,0 +1,74 @@
+original run: run: ./Scripts/validate-release-tag.sh
+mutant run:   run: ./Scripts/validate-release-tag.sh || true
+token preserved: validate-release-tag.sh present in mutant block: True
+--- regression under mutant ---
+
+test_workflow_trust_step_refuses_non_main_ancestry (Scripts.tests.test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_refuses_non_main_ancestry) ... FAIL
+
+======================================================================
+FAIL: test_workflow_trust_step_refuses_non_main_ancestry (Scripts.tests.test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_refuses_non_main_ancestry)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree/Scripts/tests/test_release_workflow.py", line 300, in test_workflow_trust_step_refuses_non_main_ancestry
+    self.assertNotEqual(r.returncode, 0)
+AssertionError: 0 == 0
+
+----------------------------------------------------------------------
+Ran 1 test in 0.341s
+
+FAILED (failures=1)
+
+regression exit=1
+regression failed as required: True
+--- trusted-path under mutant ---
+
+test_workflow_trust_step_accepts_trusted_tag (Scripts.tests.test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_accepts_trusted_tag) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.491s
+
+OK
+
+trusted exit=0
+--- static wiring under mutant ---
+
+test_workflow_invokes_trust_script_before_any_work (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_workflow_invokes_trust_script_before_any_work) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+OK
+
+static exit=0
+--- full workflow module under mutant ---
+test_existing_release_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_existing_release_refused) ... ok
+test_gh_empty_error_fails_closed (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_empty_error_fails_closed) ... ok
+test_gh_lookup_failure_fails_closed_not_absent (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_lookup_failure_fails_closed_not_absent) ... ok
+test_head_tag_mismatch_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_head_tag_mismatch_refused) ... ok
+test_malformed_tags_refused_before_any_git_work (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_malformed_tags_refused_before_any_git_work) ... ok
+test_missing_release_tag_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_missing_release_tag_refused) ... ok
+test_non_main_ancestry_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_non_main_ancestry_refused) ... ok
+test_trusted_tag_accepted (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_trusted_tag_accepted) ... ok
+test_workflow_trust_step_accepts_trusted_tag (Scripts.tests.test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_accepts_trusted_tag) ... ok
+test_workflow_trust_step_refuses_non_main_ancestry (Scripts.tests.test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_refuses_non_main_ancestry) ... FAIL
+test_gates_precede_packaging_precedes_publish (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_gates_precede_packaging_precedes_publish) ... ok
+test_only_log_preservation_overrides_success_gating (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_only_log_preservation_overrides_success_gating) ... ok
+test_workflow_invokes_trust_script_before_any_work (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_workflow_invokes_trust_script_before_any_work) ... ok
+
+======================================================================
+FAIL: test_workflow_trust_step_refuses_non_main_ancestry (Scripts.tests.test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_refuses_non_main_ancestry)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree/Scripts/tests/test_release_workflow.py", line 300, in test_workflow_trust_step_refuses_non_main_ancestry
+    self.assertNotEqual(r.returncode, 0)
+AssertionError: 0 == 0
+
+----------------------------------------------------------------------
+Ran 13 tests in 2.658s
+
+FAILED (failures=1)
+
+module exit=1
+MUTANT_KILLED=True
+HARNESS_OK=True
+restored byte-identical: True

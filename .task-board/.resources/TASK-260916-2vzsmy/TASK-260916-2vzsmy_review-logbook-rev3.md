@@ -1,0 +1,1 @@
+Review logbook: rev3 resolves repeated F1 caller bypass. Exact-tree 62-test suite passed; || true caller mutant killed solely by new composed ancestry regression. Accept for producer integration; no release authorization exercised. No new findings. See revision 3 verdict and attack log.

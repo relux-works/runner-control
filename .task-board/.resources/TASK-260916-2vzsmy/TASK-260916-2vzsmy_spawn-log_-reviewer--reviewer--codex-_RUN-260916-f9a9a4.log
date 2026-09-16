@@ -1,0 +1,2576 @@
+2026-09-16T03:35:47.385153Z  WARN codex_skills::interface: ignoring interface.icon_small: icon path with '..' must resolve under plugin assets/
+2026-09-16T03:35:47.387173Z  WARN codex_skills::interface: ignoring interface.icon_large: icon path with '..' must resolve under plugin assets/
+OpenAI Codex v0.154.0
+--------
+workdir: /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+model: gpt-6-astra
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: low
+reasoning summaries: none
+session id: 01a0a848-ef3c-7c50-becf-c36d6c28d37f
+--------
+user
+# Agent Task Assignment
+
+## FIRST — Run Immediately
+
+```bash
+task-board m 'set_status(TASK-260916-2vzsmy, status=reviewing)'
+```
+
+## Operational Constraints (Headless Run)
+
+Read this before you run any gate or attach any outcome. A spawned run is
+usually headless: the session ends when your turn ends.
+
+- **Never background a long command and end your turn.** The session terminates
+  with the turn and the process dies with it, while the run is still recorded as
+  completed — a successful-looking run with no evidence attached.
+- **A single shell call is time-bounded (~10 minutes).** Waiting out a longer
+  check inside one call fails too. Split long verification into bounded
+  sequential calls (package subsets, `-run` masks) and state explicitly what you
+  reran yourself versus accepted from already-attached evidence.
+- **Attach evidence before you end the lifecycle, not after.** "I will attach it
+  when the run finishes" is unfulfillable by construction: once your turn ends
+  there is no session left to attach anything.
+
+## Your Role
+# reviewer
+
+## Description
+
+Reviews how a task was implemented and how the solution fits into the project. Does not modify code; records one of the explicit verdict branches below.
+
+When the run is goal-bound, query `task-board spawn goal "$TASK_BOARD_RUN_ID"` before recording the verdict. The reviewer goal is role-derived as `reviewer_verdict/reviewer_verdict`, carries its immutable parent goal ID/revision, and is satisfied only by exactly one verdict branch with evidence. A provider exit or `reviewing` status is not a verdict.
+The runner persists the branch from the accepted board status plus a new or updated task-scoped verdict artifact. Only persisted `accepted` can satisfy the parent delivery goal; `changes_requested` and `stop_the_line` finish the reviewer goal without accepting delivery.
+
+## Deliverable
+
+Verdict branches are explicit:
+
+- accepted → `done`, or `accept_cr` when the run was launched against a Change Request (see below)
+- changes requested → `to-dev` for implementation rework or `analysis` for research/decision work, with verdict evidence for the next producer and another reviewer cycle
+- genuine stop-the-line boundary → `blocked` only for a concrete external blocker or an unresolved human-only platform/product/architecture/tradeoff/approval decision, with evidence, failed assumptions/attempts, viable alternatives and tradeoffs, a recommendation, and the exact human decision or external input needed
+
+Do not leave the task in `reviewing`, and do not use `blocked` for ordinary rework or a recoverable child/runtime failure.
+
+### Accepting a Change Request
+
+The full Change Request contract — how the candidate is snapshotted, what `repository_delta` means, what a `stale` revision is, and every typed refusal you can hit — is `references/tracked-background-spawn.md` of the `project-management` skill, section `Change Requests, review, rework, and checkpoint`. Read it when a refusal surprises you rather than guessing at a retry.
+
+When your prompt carries a `Change Request Under Review` section, record acceptance with the named mutation rather than a status change:
+
+```bash
+task-board m 'accept_cr(<ELEMENT-ID>, revision=<N>, evidence=<ELEMENT-ID>_review-verdict.md)'
+```
+
+The signature is exactly `accept_cr(ID, revision=N, evidence=NAME)`. Do not try to recover it with `task-board q 'schema(mutation=accept_cr)'` — this mutation is registered on the `m` path only, so schema discovery answers `unknown mutation` for it.
+
+Only the run that was handed the revision may accept it. `accept_cr` checks that the calling run is a reviewer-archetype tracked run bound to this element and this revision, and refuses anything else with `change_request_acceptance_unauthorized`. If you see that refusal, do not retry it from a different shell or run id — it means the acceptance would have named a reviewer that never read the candidate.
+
+`accept_cr` writes `accepted` and `integrating` atomically: the Change Request becomes `accepted`, your run is stamped as the reviewer, and it routes the element to `integrating`. That state means "accepted, not landed". The accepted revision is bound to its producer role and archetype, and only a new tracked run carrying that exact producer role and archetype may checkpoint or integrate it; the orchestrator routes that run but does not close the leaf, and an orchestrator run that tries to integrate is refused. `done` is produced only by the integration transaction. Accepted work does **not** stay in `reviewing`, and `accept_cr` never takes a `commit_ack` argument.
+
+A Change Request with `repository_delta=empty` means the producer changed no repository file. That is neither automatically a failure nor automatically acceptable. All three verdicts are available and mean exactly what they always mean, and your verdict evidence must address the emptiness explicitly: accepting one means stating why no repository change was the right outcome for this leaf.
+
+For an enforced Bug/Story `done` transition, a reviewer-archetype run must not supply `commit_ack`, and must never escalate the commit-or-acknowledge decision to the human. Record acceptance evidence and stop there. Under a Change Request the routing above applies: `accept_cr` moves the element to `integrating`, and only the bound producer run may checkpoint or integrate it. For an inline element with no Change Request the acknowledged transition belongs to the producer that owns the committed scope. Never make it yourself.
+
+For board reads, use compact task-specific projections. A concrete review does not need routine `summary()`, `plan()`, `schema()`, or `{ full }`; request scoped schema only after an unknown call.
+
+## Licence To Defeat A Gate
+
+You are explicitly licensed to attempt to DEFEAT any gate, refusal, validation, authorization, or attestation in the change under review, and to reject a change whose only evidence is positive-path. Reading the code is not review; attacking it is.
+
+- Try to make the gate admit what it must reject. Mint the evidence the way a caller could, remove it entirely, narrow the gate instead of deleting it, and reach the protected state through retry, renewal, resume, and recovery paths.
+- Assert against the composed production artifact, not the pieces it is built from, and check every surface that must carry the rule — a clause present in one context profile and absent from the other is a bypass path.
+- Grep for callers before believing a guard is in force. A guard that no production path invokes has never run, and tests that call it directly prove only that it compiles and returns what it is told to.
+- Positive-path-only evidence, a delete-only mutant, or a green suite around a fake is grounds for `changes_requested` with the failing shape named in the verdict.
+- Apply the same standard to reported facts: a failed or partial read presented as an absence, and a property inferred from a proxy signal instead of reported as unknown, are review findings.
+- Check the AC-row coverage ratio before reading any code. An AC row with no named driving test is an unchecked AC row and is `changes_requested` on its own. A mutant table whose entries are all deletions is positive-path evidence wearing a mutant costume — name the shape and reject it.
+- A gate that inspects source text is defeated by a mutant that preserves the searched-for token. Reject a mutant harness that runs the static checker alone: it reports nothing about the class.
+
+The negative shapes vocabulary and the incidents behind each rule are in `references/negative-evidence.md` of the project-management skill; the operative rules reach producers through the spawn template's `Evidence That Counts`. Name the shape rather than restating the rule.
+
+## Execution Rules
+
+Reviews run sequentially in this session. Do not delegate to sub-agents: the verdict is yours to produce and evidence, and a review distributed across children that do not complete produces nothing. A reviewer run that ends without a recorded verdict is a failed run, not a partial one — record the verdict before you finish, even when the finding list is short.
+
+Every `changes_requested` verdict names a `repeat-of:` value — the prior revision and finding ID this repeats, or `none`. The orchestrator routes on that field, and two consecutive same-class findings mean the next revision of the same leaf must carry a named regression test and narrowing mutant for the class; the verdict asks for that test, not for a separate harness or research task.
+
+Reused validation evidence does not narrow your licence: a green result carried over from an unchanged candidate is one more input to attack, and you keep targeted adversarial discretion over it. Reject reuse whose source, test, configuration or environment identity changed, and reject a log that is missing, truncated or ends before its last command as unrun, not passed. Do not demand production coverage from a research leaf, and do not accept a claim that a landing or release happened before the record that proves it exists; an empty-delta research Change Request with its outcomes attached is a legitimate candidate.
+
+A republish of an unchanged, already-accepted tree is an annotation, not a new revision of substance. Do not review it as fresh work and do not count it as rework.
+
+## Status Transitions
+
+- **start_status:** `reviewing`
+- **end_status:** no unconditional default; the reviewer must set exactly one verdict status: `done`, `to-dev`, `analysis`, or evidence-backed `blocked`. For a Change Request run, acceptance is recorded by `accept_cr`, which routes the element to `integrating` on your behalf and binds the revision to its producer role and archetype; the other three branches are unchanged.
+
+## Constraints
+
+Does NOT modify code. Read-only access.
+- Reviewer-archetype runs must not supply `commit_ack` and must not escalate the commit-or-acknowledge decision to the human; record acceptance evidence and leave every `done` transition to the producer side.
+- When your prompt carries a `Change Request Under Review` section, record acceptance with `task-board m 'accept_cr(ID, revision=N, evidence=ID_review-verdict.md)'`. It writes `accepted` and `integrating` atomically and routes the element to `integrating` — accepted work never stays in `reviewing` and never reaches `done` from here. The accepted revision is bound to its producer role and archetype, and only a new tracked run with that exact producer role and archetype may checkpoint or integrate it; the orchestrator routes that run but does not close the leaf. `accept_cr` takes no `commit_ack`, and only the reviewer run that was handed the revision may call it.
+
+## Skills
+
+These role skill references are a lazy catalog, not a mandate to bulk-read every
+body. Before technical work, identify the skills relevant to this task's concrete
+scope and read those full skill bodies. Always read any skill explicitly required
+by the task, user, or project instructions.
+
+
+## Definition of Done
+
+- [ ] Implement the complete scoped production behavior and acceptance criteria
+- [ ] Run relevant tests and record concrete results and remaining bounds
+- [ ] Attach task-prefixed outcome evidence and hand off for independent review
+- [ ] Code written per task description and AC
+- [ ] Relevant tests written for new or changed behavior and passing
+- [ ] In a managed Story worktree the candidate is left UNCOMMITTED in the worktree for the handoff to snapshot — never commit on the Story branch. A producer commit moves the branch tip off the recorded checkpoint and the handoff refuses with change_request_candidate_committed_past_checkpoint; repair with `git reset --soft <checkpoint_oid>` before completing again.
+- [ ] Every command, message, state, or refusal named in the AC is driven through the production entry point by a named committed test, or is declared a stated bound. Report coverage as a ratio — `n of m AC rows driven` — and name the production call site for each. Prose in place of the ratio is not evidence.
+- [ ] Gating, refusing, validating, authorizing, or attesting behavior covered by negative tests that fail when the gate admits what it must reject, with the production call site named
+- [ ] Every gate ships at least one NARROWING mutant — the gate stays present and is weakened to admit exactly one member of the class it must reject, and a named test must fail. A delete-only mutant proves only that the gate exists and is not accepted as evidence.
+- [ ] A gate that inspects source text is additionally attacked by a mutant that PRESERVES the searched-for token and changes behavior, and the mutant harness executes the behavioral suite, not only the static checker.
+- [ ] Lint clean
+- [ ] Relevant build/validation commands run after changes and build not broken
+- [ ] New outcome artifact attached on the board with a task-scoped name when the work produces notes, logs, screenshots, or other deliverables
+- [ ] Important findings, decisions, anomalies, or regressions recorded in logbook when relevant
+- [ ] Implementation matches AC
+- [ ] Solution fits project architecture
+- [ ] Tests green
+- [ ] Gate, refusal, validation, authorization, and attestation behavior attacked, not read — positive-path-only evidence is not accepted
+- [ ] If review does not accept the work — verdict evidence added and status routed by the explicit verdict branches
+## Your Task
+
+- **ID**: TASK-260916-2vzsmy
+- **Title**: TASK-260916-2vzsmy: validate-and-publish-release
+- **Parent**: STORY-260916-1o0gkc
+### Description
+
+Validate repaired release automation, preflight and source documentation after the CI fix checkpoint. Exercise release metadata and packaging gates with focused tests; document exact signing/notarization and Sparkle requirements. This leaf prepares the release machinery for integration; do not tag or publish yet. Final release is a separate delivery Story after both code Stories land. Use Muse Spark max. No UI tests, no production runner interruption, no secret output, no manual Story commits.
+### Acceptance Criteria
+
+Release scripts and preflight are validated and documented, metadata tests pass, candidate ready for review and integration so the subsequent release tag uses the repaired workflow.
+
+## Instructions
+
+The following instructions have been attached to this task:
+
+### approved-design.md
+> Existing design; task brief promotes registration and removal into this release
+
+# Runner Control — универсальное приложение для macOS
+
+Статус: проект поведения и интерфейса, не реализованная функциональность.
+
+## Решение
+
+Runner Control управляет зарегистрированными GitHub Actions runners на текущем Mac. Количество, организации, репозитории, имя компьютера и пути не зашиты в приложение. Управление локальными службами работает без входа в GitHub. Подключение GitHub отдельно добавляет подтверждённые online/busy/labels/group и ссылки.
+
+Основной сценарий: открыть меню → увидеть раннер → включить или выключить. Второй сценарий: открыть «Раннеры и настройки…» → добавить существующий раннер, изучить ошибку, настроить запуск.
+
+Удалённый runner из GitHub нельзя включить локальным переключателем. Он не попадает в управляемый список без локальной установки. Удалённое управление по SSH — отдельное возможное расширение, не обещание текущего дизайна.
+
+## 1. Меню
+
+Ширина около 400 pt; имя компьютера берётся из macOS. При большом списке в нативном приложении список ограничен по высоте и прокручивается. Вверху: Runner Control, «Этот Mac · N служб включено». Счётчик относится к локальным службам, не к доступности в GitHub.
+
+Каждая строка:
+
+- Имя раннера из регистрации, пользовательский псевдоним при наличии.
+- Организация или owner/repository и сервер, если это GitHub Enterprise.
+- Локальное состояние: выключен, запускается, включён, выключается, ошибка, требуется настройка.
+- Отдельная подпись GitHub: занят / готов / не в сети / не подключён / данные устарели.
+- Явная кнопка действия: «Включить» или «Выключить…». Во время операции — индикатор и блокировка повторного действия только для этой строки.
+- Нажатие на название открывает подробности в основном окне.
+
+Кнопки предпочтительнее переключателя: выключение может потребовать решения о прерывании задачи и не завершается мгновенно. В макете предусмотрен вариант с переключателями для сравнения.
+
+Нижняя область: «Включить все», «Выключить все…», «Добавить раннер…», «Раннеры и настройки…». Массовые команды относятся только к добавленным управляемым раннерам. Ошибки показываются по строкам, а не скрываются за общим успехом. Обновления Sparkle и выход переносятся в настройки; не занимают основную панель.
+
+Иконка меню: контурная молния, когда всё выключено; заполненная, когда хотя бы одна служба включена; маленький знак ошибки при проблеме. Доступное описание всегда текстовое. Состояние не передаётся только цветом.
+
+## 2. Добавление существующего раннера
+
+Пустое состояние: «Добавьте раннер на этом Mac», действия «Найти на Mac» и «Выбрать папку…». Учётная запись GitHub не обязательна.
+
+Обнаружение ограниченное, без сканирования всего диска:
+
+1. Каталог установок, которым управляет приложение: ~/Library/GitHubActions.
+2. Известные manifest-файлы служб текущего пользователя в ~/Library/LaunchAgents, связанные с actions.runner.*.
+3. Каталоги, ранее выбранные пользователем.
+4. Любой иной каталог — через системный выбор папки.
+
+Существующие ручные службы manual-service.plist и стандартные пользовательские службы GitHub распознаются отдельными адаптерами. Демоны другого пользователя, запуск через терминал и неизвестные supervisor-системы показываются как неподдерживаемое управление: без притворного переключателя и без попытки создать второй процесс.
+
+Результат поиска — кандидаты с именем, scope, путём и состоянием проверки. Обнаружение не запускает ничего. Пользователь выбирает «Добавить»; приложение объясняет конкретные изменения, если для управления нужно создать службу. Импорт без изменения существующей службы не перерегистрирует runner.
+
+Проверки: .runner можно прочитать; server/scope определены; бинарник и runsvc.sh существуют; путь и рабочий каталог не содержат пробелов; manifest соответствует реальному каталогу/label; runner ещё не добавлен; нет второго управляющего процесса. Не читать и не экспортировать .credentials для обнаружения. Не выполнять скрипты кандидата во время сканирования.
+
+Путь с пробелами → «Нужно изменить расположение» с выбором новой папки. Никакого автоматического переноса работающего runner: это отдельная операция после остановки с возможностью восстановления. Иначе тот же setup-go дефект вернётся.
+
+«Создать новый runner» в первой версии — пошаговая инструкция регистрации в GitHub и последующее добавление выбранной папки. Полная загрузка/регистрация через приложение — следующий этап с отдельными правами и краткоживущим registration token.
+
+## 3. Окно «Раннеры и настройки»
+
+Нативное окно около 760 × 540 pt, доступное также повторным открытием приложения. Разделы:
+
+### Раннеры
+
+Список и панель выбранного runner: имя/псевдоним, адрес регистрации, локальный каталог, рабочий каталог, архитектура, версия, способ управления. Действия: включить/выключить, открыть GitHub, показать каталог, открыть журнал, выбрать перемещённую папку, убрать из приложения.
+
+Для org runner не перечислять статически якобы разрешённые репозитории. При наличии прав показывать группу и полученные из GitHub ограничения с датой обновления; иначе «Доступ к репозиториям настраивается в GitHub». Пригодность к конкретной job зависит также от labels и правил workflow; online не гарантирует, что она попадёт сюда.
+
+### GitHub
+
+Необязательные подключения по серверу и учётной записи; можно подключить несколько. Секреты в Keychain, в настройках только ссылки на записи. Не импортировать молча учётные данные gh.
+
+Основной способ подключения — «Войти через GitHub»: зарегистрированный GitHub App Runner Control и OAuth Device Flow. Ручное создание и вставка PAT не входит в основной сценарий. Вход и установка GitHub App в организацию/аккаунт — разные шаги: после входа приложение проверяет установки и доступ, затем при необходимости открывает установку или запрос одобрения владельцем организации. Требуемые разрешения: для org runners — Self-hosted runners/read; для repository runners — Administration/read. Чтение job/repository details требует дополнительных прав и включается отдельно. Отсутствие прав не означает отсутствие runner.
+
+Локальное включение/выключение не зависит от доступности API. Нет сети / 401 / 403 / rate limit → соответствующая подпись, время последнего успешного обновления и возможность переподключения.
+
+### Основные
+
+«Открывать Runner Control при входе» — отдельно от запуска CI. Для новых управляемых служб запуск раннера при входе выключен. При импорте существующей службы её политика сохраняется и явно показывается, а не молча меняется. Изменение этой политики — самостоятельное действие пользователя.
+
+Обновления: версия приложения, «Проверить обновления», автоматическая проверка и загрузка. Выход/обновление приложения оставляет уже запущенные службы работать; подтверждение выхода не обещает остановить CI. Во время изменения службы обновление откладывается до завершения операции.
+
+## 4. Два независимых источника состояния
+
+| Источник | Что подтверждает | Чего не подтверждает |
+|---|---|---|
+| macOS service/process | Процесс запущен или остановлен, последние ошибки запуска | Готовность принимать jobs в GitHub |
+| GitHub API | Online/offline, busy, registration ID, labels | Мгновенное состояние процесса, гарантированное отсутствие новой job после ответа |
+
+Храним отдельно LocalState, RemoteState, OperationState и время наблюдения. Потеря сети не превращает локальную службу в выключенную. Отсутствие регистрации не скрывает запущенную службу и возможность её остановить. При противоречии показываем оба факта, например «Служба выключена · GitHub: данные обновляются».
+
+Локальное наблюдение: раз в 3 секунды при открытом меню, реже в фоне; немедленно после команды и пробуждения Mac. GitHub: объединённые запросы по scope, ориентировочно раз в 30 секунд при открытом меню с backoff и учётом rate limit. Старше 60 секунд — явно «данные устарели»; устаревшее busy=false не считается доказательством свободного runner.
+
+## 5. Выключение
+
+- Если GitHub сообщает busy: диалог «На раннере выполняется задача», действия «Оставить включённым» и «Прервать и выключить». Название/ссылка задачи — только если действительно получены из API.
+- Если busy неизвестен, данные устарели или GitHub не подключён: «Занятость неизвестна. Выключение может прервать задачу».
+- Даже свежий idle не исключает гонку с выдачей новой задачи. Поэтому первая универсальная версия всегда подтверждает остановку работающей службы.
+- Остановку выполняет только адаптер известного runner; без kill по одному имени процесса и без воздействия на чужие службы.
+- Успех — после подтверждения остановки. При таймауте — «Не удалось подтвердить остановку», повторная проверка, журнал. Не рисовать выключенное состояние заранее.
+
+«Выключить после задачи» не включать в первую версию. Простое ожидание busy=false не запрещает GitHub выдать новую задачу. Нужен отдельно подтверждённый механизм прекращения приёма новых jobs; периодический опрос API сам по себе такой гарантии не даёт.
+
+«Убрать из приложения» удаляет только запись каталога; предупреждает, если служба продолжит работать. Не удаляет файлы, регистрацию GitHub или сертификаты. Удаление runner из GitHub — отдельный будущий сценарий.
+
+## 6. Архитектура и хранение
+
+Сохранить Relux: UI Page → Container → Effect/Flow → actors/services → Action/Reducer → State. Sparkle и AppKit остаются адаптерами платформы.
+
+- RunnerCatalog: versioned persistence, локальный UUID, canonical directory + bookmark, display override, controller kind, preferences. Переименование на GitHub не меняет локальную identity.
+- RunnerDiscovery: ищет кандидатов в разрешённых местах; результат никогда не даёт автоматического разрешения на запуск.
+- RegistrationReader: читает нужные поля .runner; сохраняет server URL, scope, remote agent ID. Не полагается на формат service label для определения организации.
+- RunnerController protocol: inspect/start/stop/capabilities. Адаптеры для управляемой ручной службы и стандартного пользовательского LaunchAgent; unsupported — только чтение. Проверять конфигурацию повторно непосредственно перед действием.
+- GitHubObserver: отдельно сопоставляет local registration и API runner по server + scope + remote ID, не по имени. При неоднозначности не прикрепляет случайный runner.
+- CredentialStore: Keychain references, secret values не входят в Relux state и diagnostic exports.
+- Diagnostics: ограниченный хвост логов с очисткой токенов; каталог _diag и фактические stdout/stderr пути из manifest, без зашитого Library/Logs имени.
+
+Каталог хранится в Application Support/RunnerControl; это допустимо для настроек приложения. Установки и рабочие каталоги runners — в путях без пробелов. JSON не содержит секретов.
+
+## 7. Миграция текущей установки
+
+Однократно найти существующие macbook-iv и cocoaskills через общий discovery. Сохранить обнаруженные реальные каталоги, scope и service label. Не останавливать, не переименовывать, не перерегистрировать и не менять автозапуск. После успешной записи каталога удалить фиксированный список из Definition.installed(). Имя Mac и все строки интерфейса получать динамически.
+
+Если импорт не удался, показать найденную установку с конкретной ошибкой и выбором папки. Не заменять её фиктивным runner и не удалять старые файлы.
+
+## 8. Критерии готовности реализации
+
+1. Чистый Mac показывает понятное пустое состояние; кнопки не подразумевают наличие Relux Works.
+2. Можно добавить произвольный org/repo runner из нестандартного каталога без пересборки приложения.
+3. Два одинаковых имени на разных scopes остаются двумя разными runners; один каталог нельзя импортировать дважды через symlink.
+4. Без GitHub токена доступно локальное управление; busy честно неизвестен.
+5. 401/403/offline и устаревшие данные не включают/выключают службы и не скрывают локальное состояние.
+6. Повторный клик не создаёт дублирующий процесс; ошибка одной строки не блокирует весь список.
+7. Удалённая .runner не мешает остановить уже известную работающую службу; неверный manifest блокирует запуск.
+8. Массовая остановка показывает конкретный список и частичные ошибки.
+9. Импорт не меняет действующие службы и политику входа; перезапуск приложения не включает CI.
+10. Проверки выполняются unit/integration tests с временными безвредными службами; UI проверяется вручную, без UI-тестов согласно запросу.
+
+## Источники API
+
+- GitHub runner state: https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/monitor-and-troubleshoot
+- Runner REST and permissions: https://docs.github.com/en/rest/actions/self-hosted-runners
+- Group repository access: https://docs.github.com/en/rest/actions/self-hosted-runner-groups
+
+
+## 9. Вход через GitHub API — уточнение дизайна
+
+### Пользовательский сценарий
+
+1. В настройках нажать «Войти через GitHub». По умолчанию github.com; Enterprise — отдельное подключение к явно выбранному серверу.
+2. Приложение получает временный код через API и показывает его крупно: «Подтвердите подключение на GitHub». Кнопки «Скопировать код», «Открыть GitHub», «Отмена». Браузер — системный браузер пользователя; если Brave выбран по умолчанию, открывается Brave.
+3. Пользователь вводит код и подтверждает Runner Control на странице GitHub. Пароль и 2FA вводятся только на сайте GitHub.
+4. Приложение получает токены через API, проверяет профиль и показывает «Подключено как @username».
+5. Отдельно показывает доступные установки GitHub App и репозитории. Если нужной организации нет — «Предоставить доступ организации…» / «Запросить одобрение». Не обещать, что простой вход автоматически открывает все организации пользователя.
+6. После предоставления доступа состояния локальных runners дополняются сведениями GitHub. Runner из GitHub без соответствующей локальной установки остаётся информационной записью без кнопок запуска.
+
+### Техническое решение
+
+GitHub App с включённым Device Flow и истекающими user access tokens. В распространяемом macOS-приложении находится только публичный client_id. Client secret и private key GitHub App не включаются в бинарник, ресурсы, Sparkle-архив или исходники. Device Flow позволяет получить user access token без client secret; обновление токена, полученного через Device Flow, также не требует client secret по текущей документации GitHub. Отдельный сервер для этого сценария не нужен.
+
+- POST /login/device/code: запрос к выбранному GitHub server.
+- POST /login/oauth/access_token: опрос с выданным interval, учёт slow_down и expires_in.
+- GET /user: подтверждение учётной записи.
+- GET /user/installations и /user/installations/{installation_id}/repositories: доступные установки и ресурсы.
+- REST runners/groups endpoints: наблюдение в рамках прав пользователя и установки.
+
+Не использовать широкие OAuth scopes admin:org/repo как скрытую замену недостающим GitHub App permissions. Для регистрации новых runners позже потребуется явное повышение разрешений: Self-hosted runners/write для организации либо Administration/write для репозитория, а также соответствующие права пользователя. Эти права не требуются для локального переключателя.
+
+GitHub App нужно один раз зарегистрировать как продукт Relux Works, разрешив установку другим аккаунтам. Каждая организация отдельно управляет установкой и доступом. Для GitHub Enterprise Server нельзя молча использовать client_id от github.com: требуется регистрация App на этом сервере и проверка поддержки Device Flow его версией. Пока она не настроена, локальное управление работает, подключение API показывает конкретное ограничение.
+
+### Состояния авторизации
+
+Не подключён → получаем код → ждём подтверждения → проверяем аккаунт → проверяем установки → подключён.
+
+Отдельные исходы: пользователь отказал; отменено; код истёк (кнопка «Получить новый»); сеть недоступна (повтор с backoff); требуется установка App; требуется одобрение организации; требуется SSO; сессия отозвана (повторный вход). Отмена уничтожает временный device_code и прекращает опрос. HTTP 200 при device flow ещё не означает успех — проверяется тело ответа.
+
+Access/refresh tokens хранятся в Keychain отдельно для server + user ID + app client ID. Refresh выполняет один actor, без конкурирующих обновлений; новая пара сохраняется атомарно. Сроки берутся из ответа API. При истечении refresh token или отзыве авторизации предлагается вход заново. Токены не попадают в Relux state, UI-логи, crash breadcrumbs или диагностические архивы.
+
+«Выйти на этом Mac» удаляет локальные токены и останавливает опрос GitHub, оставляя локальные службы работать. «Отозвать доступ в GitHub…» открывает страницу управления авторизацией. Не выдавать локальный выход за глобальный отзыв или удаление установки App.
+
+### Дополнительные критерии готовности
+
+- Новый пользователь подключает GitHub без ручного создания PAT.
+- Пользователь видит, под каким аккаунтом и к какому серверу выполнен вход.
+- Вход без установки App заканчивается понятным шагом предоставления доступа, а не пустым списком.
+- Отмена, истечение кода и slow_down проверены unit-тестами транспорта с подменяемыми часами.
+- Refresh не дублируется при одновременных API-запросах; logout отменяет фоновые операции.
+- Отсутствие сети и 403 не препятствуют включению/выключению уже добавленного локального runner.
+
+Источники:
+- Device Flow и ограничения доступа: https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app
+- Refresh для Device Flow: https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/refreshing-user-access-tokens
+
+
+
+### release-operational-context.md
+> Clarified release-artifact notarization gate; diagnostic submission is not an extra dependency
+
+Release target is v1.2.0 after product and smoke Stories land. Do not retry/delete v1.1.0. Diagnostic signing-check submission 6d537548-8c24-48ea-89b5-7ebb2dc959d5 was In Progress at 02:49 UTC; do not duplicate that test submission. Clarification of reviewer F2: this diagnostic ZIP is NOT an additional release prerequisite. The actual release app ZIP and DMG must each receive their own Accepted notarization result and pass staple verification before final publication. Submitting genuinely new release artifacts is authorized and is not duplication of the old diagnostic test. Document the diagnostic ID and read-only inspection, and these precise final-artifact gates. Existing generator /Users/iv/Documents/Codex/2026-09-15/new-chat-4/work/ios-app-manager. No tag or publication in this preflight task. Keep existing runner jobs intact.
+
+
+### focused-rev3-wiring-fix.md
+> Single remaining composed workflow call-site regression
+
+Revision 2 review has exactly one remaining F1: test must execute actual YAML workflow run command, not merely validate-release-tag.sh helper or search a substring. Reuse existing git/gh fixtures, extract actual Validate trusted release tag run field and execute under Actions-equivalent bash -e -o pipefail; prove failed ancestry makes the step fail and trusted input succeeds. Kill the exact caller mutant ./Scripts/validate-release-tag.sh || true. This is same-class second finding; named committed regression plus mutant evidence required. Keep correction focused; docs F2 already resolved and prior script gates already accepted. No new runtime redesign, no publication or new notary submission.
+
+
+
+
+## Board CLI Reference
+
+You have access to `task-board` CLI for managing your work. All writes use the `m` (mutation DSL) subcommand:
+
+```bash
+# FIRST/LAST lifecycle commands:
+# Use explicit status changes when the task flow requires it.
+task-board m 'set_status(TASK-260916-2vzsmy, status=analysis)'       # analyst-style work
+task-board m 'set_status(TASK-260916-2vzsmy, status=development)'    # implementation / testing work
+task-board m 'set_status(TASK-260916-2vzsmy, status=reviewing)'      # reviewer handoff
+task-board m 'set_status(TASK-260916-2vzsmy, status=blocked)'        # when blocked
+task-board m 'set_status(TASK-260916-2vzsmy, status=to-review)'      # when your work is ready for review
+
+# Track progress with checklist
+task-board m 'check_item(TASK-260916-2vzsmy, item=1)'                        # check item N
+task-board m 'add_checklist_item(TASK-260916-2vzsmy, text="Write tests")'    # add checklist item
+
+# Add notes about your progress, decisions, blockers, or review findings
+task-board m 'set_notes(TASK-260916-2vzsmy, text="your note here")'
+
+# Save short text directly as outcome resources
+task-board m 'add_resource(TASK-260916-2vzsmy, name=TASK-260916-2vzsmy_results.md, content="...", type=outcome, description="Description")'
+
+# Attach an existing local file (screenshots, PDFs, logs, archives, research docs)
+task-board resource add TASK-260916-2vzsmy ./path/to/file --type outcome --name TASK-260916-2vzsmy_artifact.bin -d "Description"
+```
+
+## Spawn Run Control
+
+Tracked runs expose `TASK_BOARD_RUN_ID`. Check directives at safe checkpoints,
+at most once per 1 minute, never in a loop. Directives have no delivery timer.
+
+```bash
+task-board spawn status "$TASK_BOARD_RUN_ID"
+task-board spawn directives "$TASK_BOARD_RUN_ID"
+```
+
+No inbound push: directives are cooperative checkpoint signals:
+- persist your current notes/artifacts before acting on `cancel`-style requests
+- only honor pause/reroute intent at a safe checkpoint
+- if no directive is present, continue normally
+
+## IMPORTANT: Saving Results
+
+When you produce work products (research documents, design docs, screenshots, logs, archives, implementation notes), you MUST save them as outcome resources with names that include the task ID:
+
+```bash
+task-board m 'add_resource(TASK-260916-2vzsmy, name=TASK-260916-2vzsmy_results.md, content="...", type=outcome, description="Description")'
+task-board resource add TASK-260916-2vzsmy ./path/to/file --type outcome --name TASK-260916-2vzsmy_artifact.bin -d "Description"
+```
+
+If you revise the same artifact later, use `task-board m 'update_resource(...)'` or `task-board resource update ...` instead of creating a silent overwrite.
+
+If you discover important findings, decisions, anomalies, regressions, or non-obvious constraints while working, record them in `logbook` as well as on the board.
+
+This ensures your results persist on the board and are accessible to other agents and the coordinator. Spawn completion is expected to produce at least one new task-scoped outcome artifact before the task can cleanly remain in `to-review`.
+
+## Evidence That Counts
+
+A passing suite means nothing unless something in it would have failed.
+
+- Any behavior that GATES, REFUSES, VALIDATES, AUTHORIZES, or ATTESTS ships with negative tests that fail when the gate admits what it must reject. A positive test proves the gate is reachable, not that it works.
+- Prove a bound by NARROWING the gate, not only by deleting it. A delete-only mutant proves the gate exists and says nothing about the class it covers.
+- Prove behavior by driving the real entry point — launch, materialize, resolve, publish — and name the production call site. A helper that is unit-tested but called from nowhere promises nothing.
+- Standard negative shapes to test and to look for: forged or self-minted evidence; absent evidence treated as satisfied; the check present but uncalled from production; a bypass path around the check; a capability claim that does not reproduce.
+- A gate reports coverage as a measured ratio, not as prose: prose cannot distinguish 7 of 7 from 3 of 7, and "nothing is there" is not "nothing this checker sees". Name the blind spot as a stated bound.
+- An absence and a failure to read are different facts. A failed, partial, or malformed read is never a legitimate absence, and a fallback defined for absence must not fire on a read failure.
+- Prove, or report nothing. Where a property cannot be established, report unknown instead of inferring it from a proxy signal; callers act on a plausible guess.
+
+Shapes vocabulary and the incident record behind each rule: `references/negative-evidence.md` in the project-management skill.
+
+## Stop-The-Line: No Forced Fits
+
+Do not keep implementing when autonomous work starts requiring a forced fit. A forced fit is any path where the task conflicts with a platform/API constraint, product decision, UX state model, ownership boundary, or architecture, and the remaining "solution" is mostly compensating hacks.
+
+Warning signs:
+- each fix needs another flag, stub, priority rule, mock-only behavior, or special-case test
+- the tests can pass only because the test harness avoids the real platform behavior
+- the implementation depends on an assumption you can no longer defend
+- the user-facing behavior cannot be described cleanly without contradicting the product model
+
+When this happens, stop product-code changes before adding another workaround layer. Attach or note:
+- the constraint and evidence
+- the failed assumptions/attempts
+- the viable options and tradeoffs
+- the recommended option
+- the exact human/product/architecture decision needed
+
+Then set the board item to `blocked` and ask only for that exact decision or external input. This stop applies only to a concrete external blocker or an unresolved human-only platform/product/architecture/tradeoff/approval decision; recoverable failures and ordinary rework stay autonomous. Tests and stubs are not proof that a forced-fit design is correct; use them only after the state model and platform assumptions are valid.
+
+## Working Directory
+Board directory: `/Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.task-board`
+
+Work in the project root. Do not modify board files directly — always use the `task-board` CLI.
+
+## Story Workspace
+
+You are running in an isolated Git worktree for STORY-260916-1o0gkc.
+
+- Workspace path: `.temp/STORY-260916-1o0gkc/worktree` (this is your working directory)
+- Branch: `task-board/story/STORY-260916-1o0gkc`, forked from `main`
+- Authoritative board: `/Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.task-board` (already exported as `TASK_BOARD_DIR`)
+
+Make every repository change here. Do not commit, switch, rebase, merge, or delete this branch, and do not run `task-board` against the `.task-board` copy inside this worktree — it is a checkout artifact, not the board. Integration into trunk is the orchestrator's step, not yours.
+
+Leave your work UNCOMMITTED in the worktree — the handoff snapshots the working tree against the recorded checkpoint. A commit of your own on this branch is refused at handoff with `change_request_candidate_committed_past_checkpoint`, and the repair is `git reset --soft <checkpoint_oid>` before completing again.
+
+## Change Request Under Review
+
+- Change Request: `CR-TASK-260916-2vzsmy-3` revision `3` (state `ready`)
+- Element: `TASK-260916-2vzsmy`, integration scope: `STORY-260916-1o0gkc`
+- Branch: `task-board/story/STORY-260916-1o0gkc`
+- Base OID: `7d2126aef02d9bb2c5443f5ef433462fda537732`
+- Candidate tree OID: `612a90caf05473072ec6d00886268d8a4fabee24`
+- Repository delta: `present`
+- Patch resource: `TASK-260916-2vzsmy_change-request_rev3.patch` (sha256 `3ef872e926fd4e53f4fed52b989c952c703cc6cf36e59e5b839d194b8a30b952`)
+
+```bash
+git -C . diff 7d2126aef02d9bb2c5443f5ef433462fda537732 612a90caf05473072ec6d00886268d8a4fabee24          # the exact reviewable delta
+git -C . diff --stat 7d2126aef02d9bb2c5443f5ef433462fda537732 612a90caf05473072ec6d00886268d8a4fabee24   # its shape
+```
+
+Changed paths (11):
+
+- `.github/workflows/release.yml`
+- `RELEASING.md`
+- `Scripts/release-preflight.sh`
+- `Scripts/release.sh`
+- `Scripts/release_metadata.py`
+- `Scripts/tests/test_release_docs.py`
+- `Scripts/tests/test_release_metadata.py`
+- `Scripts/tests/test_release_packaging.py`
+- `Scripts/tests/test_release_preflight.py`
+- `Scripts/tests/test_release_workflow.py`
+- `Scripts/validate-release-tag.sh`
+
+### Recording the verdict
+
+Acceptance is a named mutation, not a status change:
+
+```bash
+task-board m 'accept_cr(TASK-260916-2vzsmy, revision=3, evidence=TASK-260916-2vzsmy_review-verdict-rev3.md)'
+```
+
+`accept_cr` writes `accepted` and `integrating` atomically: the Change Request becomes `accepted`, this run is stamped as the reviewer, and TASK-260916-2vzsmy routes the element to `integrating` — accepted but not landed, and never `done`. The accepted revision is bound to its producer role and archetype (`developer`/`implementer`), and only a new tracked run with that exact producer role and archetype may checkpoint or integrate it. The orchestrator routes that run; it does not close the leaf, and no orchestrator run may execute the integration itself. `done` is produced only by the integration transaction, never by you and never by an acknowledgement. Never supply `commit_ack` yourself.
+
+Changes requested and Stop-The-Line are unchanged: route to `to-dev`/`analysis` or evidence-backed `blocked`. Leaving the element in `reviewing` is still not a verdict and still gets this run cancelled and respawned.
+
+2026-09-16T03:35:47.883150Z  WARN codex_skills::interface: ignoring interface.icon_small: icon path with '..' must resolve under plugin assets/
+2026-09-16T03:35:47.883181Z  WARN codex_skills::interface: ignoring interface.icon_large: icon path with '..' must resolve under plugin assets/
+codex
+I’ll review revision 3’s workflow regression and adversarial evidence using the project-management skill, then record the verdict without changing code or publishing anything.
+
+exec
+/bin/zsh -lc "task-board m 'set_status(TASK-260916-2vzsmy, status=reviewing)'" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 658ms:
+{"ok":true,"result":{"primary":{"action":"status_changed","element_id":"TASK-260916-2vzsmy","field":"status","new_value":"reviewing","old_value":"to-review"},"side_effects":[{"action":"promoted","element_id":"STORY-260916-1o0gkc","field":"status","new_value":"reviewing","old_value":"to-review"}]}}
+
+exec
+/bin/zsh -lc 'cat /Users/iv/.codex/skills/project-management/SKILL.md' in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 0ms:
+---
+name: project-management
+description: >
+  File-backed task boards and spawn-first multi-agent orchestration through
+  task-board. Use for board/spec decomposition, task tracking, planning,
+  status/progress, tracked producer/reviewer runs, and delivery goals. A normal
+  primary session is the Orchestrator; a prompt-assigned role or
+  TASK_BOARD_RUN_ID is a specialist worker. Russian triggers: борд, доска,
+  задачи, эпик, стори, таски, спавн, оркестратор, субагент, статус, прогресс.
+triggers:
+  - task board, epic, story, task, bug, status, progress
+  - spec decomposition, planning, critical path
+  - spawn, orchestrator, coordinator, sub-agent, delivery goal
+  - борд, доска, задачи, эпик, стори, таски, спавн, оркестратор
+---
+
+# Project Management Router
+
+Load only the focused references needed. Use `task-board` for reads/writes;
+never edit `.task-board/` directly.
+
+## Active Role
+
+- **Specialist:** when assigned a role, `TASK_BOARD_RUN_ID` exists, or the
+  human explicitly requests inline execution. Follow lifecycle/evidence gates.
+- **Orchestrator:** otherwise. Detail settled specs inline; route
+  every artifact-producing or validating task through a tracked
+  background child run. `solution-architect` only for genuine
+  architecture decisions.
+
+## Critical Invariants
+
+1. Preflight with `project_config(view=spawn-preflight, role=ROLE, agent=RUNTIME?)`;
+   bare `project_config()` stays the role-optional config surface.
+   Cross-provider ranking requires the agent-less query: omit `agent`, compare
+   recommendations, then narrow with `agent=RUNTIME` for the fresh spawn snapshot.
+   `providers.targeted` names the query's runtime scope; policy-allowed entries
+   outside it use `runtime_not_targeted_by_query`, while policy-excluded entries
+   use `provider_not_allowed_by_preferred_agentic_system`.
+   When workload recommendations are configured: query with `task_class` or an
+   explicit `workload_class`, reason about scope/risk/autonomy/validation and
+   context cost, then spawn an explicit pair with the exact class transport,
+   fresh snapshot digest, and one-line recommendation rationale. A ranking is
+   advice, never authority, a default, or permission to widen the pair.
+   For a proprietary (paid) model, choose the pair that maximises delivered
+   work per token and escalate only for a stated reason.
+   Every child has explicit role, background mode, and a complete
+   model/reasoning-effort pair across its applicable dimensions — model
+   either typed or seeded by a configured per-role default, and, for Codex,
+   Qwen, or a Claude model whose registry row declares a reasoning-effort
+   vocabulary, an in-policy effort either typed or default-seeded the same
+   way. Built-in runtimes: `agy`, `claude`, `codex`, `gemini`, `muse`, `qwen`
+   (plus any runtime declared under `spawn.runtimes`); Gemini, Agy,
+   `muse-spark-1.2-contributor`, and an effortless Claude model take no
+   `--reasoning-effort` at all, while `muse-spark-1.3-contributor` and its
+   `muse-spark` alias REQUIRE one from `high`/`xhigh`/`max`. The
+   versioned-short `muse-spark-1.3` names no registered row and is not
+   spawnable; codex `gpt-6-astra`/`astra` REQUIRE one of `low`/`medium`/`high`/`xhigh`/`max`/`ultra`.
+   Treat the v3 `admitted_pairs` set the
+   preflight reports as the exact admission authority, not `allowed_models`,
+   which is one input form and is `null` when the runtime uses combinable
+   `entries`; when preflight reports a v2 migration warning, use the
+   full read-only migration snapshot for an explicit reviewed repository edit.
+   Never infer admission from `PolicyRank` or silently migrate config.
+   Spawn is idempotent per element while a RUN is `queued` or `running`: a
+   repeat returns that RUN and its observation hints without writes;
+   `--allow-parallel` explicitly creates another RUN.
+   Codex-only `fast_mode` defaults false; authority schema v1 authorizes no
+   per-board backend policy route, so never infer or add one. See
+   [canonical config reference](references/task-board-config.md) and
+   [README](README.md) for `service_tier`/remote-v4 provenance.
+2. Workers use compact, task-specific projections. Skip routine
+   `summary()`, `plan()`, `schema()`, and `{ full }`; scoped schema only
+   repairs an unknown call.
+   Under managed Story isolation, `.planning/` belongs to the authoring Story
+   worktree, never the control root. Before that worktree exists, persist the
+   canonical plan as a task-scoped board resource; after provisioning,
+   materialize it in the worktree while retaining the explicit board/config
+   bindings. Never bypass control-root cleanliness to make planning spawnable.
+3. In a manager-hosted session (`task-board claude`/`codex` primary) never
+   wait for a spawned run in a foreground tool call: the Session Manager
+   types the terminal run state in as a notice, and an unbounded `spawn
+   wait`/`observe --until terminal` refuses there (`--allow-blocking`
+   overrides). No foreground `until`/`sleep` loops on `spawn status`.
+   Observe/wait serve unmanaged sessions, replay and diagnosis; an
+   unavoidable wait is a harness background task (`run_in_background`/
+   Monitor) while the session keeps reading owner messages. Route the handoff.
+4. The Orchestrator owns producer -> reviewer -> rework -> reviewer until the
+   configured review policy is satisfied and the board reaches `done`.
+   `to-review` is a routing trigger, not human acceptance. Commit
+   decomposition is that same Orchestrator's own call, never a per-commit
+   human checkpoint. That chain lives only in the live session: a restarted
+   or resumed primary session runs `task-board worktree obligations` BEFORE
+   spawning anything new and routes every listed ready-without-reviewer or
+   accepted-without-checkpoint revision first.
+5. Handoff needs a task-scoped outcome and `task-board handoff TASK-ID --role
+   ROLE`. Early exits and intermediate parked states are
+   retried, or rerouted through a focused child; routine work is never handed to the human.
+   Producer `set_status(to-review)`
+   is refused, and reviewer `accept_cr` requires its live merged checklist.
+   Attach artifacts through resource CRUD under
+   `.task-board/.resources/<ELEMENT-ID>/`, optionally in safe nested paths;
+   never write that tree directly or attach directories.
+6. `blocked` needs an evidence-backed external blocker or a
+   human-only product/platform/architecture/approval decision. Persist
+   constraint, evidence, failed assumptions, viable alternatives, tradeoffs,
+   recommendation, and the exact decision or external input needed. Linked
+   `blocked` lifts when its last blocker is done.
+7. At `to-review` say **ready for review** / **handed off to review**;
+   done/complete/final only for `done`.
+8. `board-goal-v2` is authoritative: `goal` owns `parent/primary`; `spawn goal`
+   owns `run/RUN-*`. V1 shapes are compatibility-only.
+   Local goal/query/status reads require an existing board and do not migrate
+   legacy goals. Goal writes initialize and validate the board before migration.
+9. `openai-board` / `anthropic-board` launch the primary `task-board
+   codex|claude` sessions.
+   agents-infra composes; `tb-sessiond` owns goal bind, location-scoped
+   `openai-board|anthropic-board resume [SES-*]`, native identity restart, and
+   session operations. Provider-native adoption remains explicit as
+   `codex resume THREAD_ID` (compatibility form) or `codex --resume THREAD_ID`,
+   and `claude --resume UUID`.
+   Bad records move to private `<state>/quarantine/`; listen continues and
+   status/list report them.
+10. Freeze stable project/config/runtime/control roots and one binding+digest.
+    Explicit config must exist; direct/managed children override ambient roots.
+    `TASK_BOARD_DIR` stores, not authority. Resolve authority from a
+    binding via fresh `git ls-remote --symref <authorized-url> HEAD`,
+    exact-ref fetch, and equal advertised/fetched OIDs. Never use cached/local
+    refs, tracking, caller/config fields, or prior tuples. Cross-check
+    `integration_base_branch` against the independent branch/remote
+    pair. Zero/multiple/unavailable/indeterminate evidence refuses.
+    Producer publishes a Change Request, reviewer runs `accept_cr`,
+    then Orchestrator checkpoints leaves and integrates the Story. Managed
+    commits use `-S` with repository human identity/key; index failures never
+    justify broad reset. See
+    [tracked background spawn](references/tracked-background-spawn.md#story-worktree-isolation).
+11. Cross-Story `set_parent` and integration are durable and fail closed; move
+    evidence never widens source-tombstone admission. See
+    [tracked background spawn](references/tracked-background-spawn.md#what-the-board-state-commit-covers-and-what-it-leaves-alone).
+12. Board validation stays strict by default. The project setting
+    `validation.allow_legacy_empty_done_containers=true` suppresses only the
+    historical empty-`done` Story/Epic aggregate mismatch; active or
+    child-backed containers remain strict.
+13. Transaction-owned `.activity/<ID>/events.ndjson` forbids caller logging.
+    Reads are bounded; corrections privileged/append-only. Transfer/worktrees
+    reject foreign history, preserve legacy/deletion boundaries, and never backfill.
+    See [file format](references/file-formats.md#activity-streams),
+    [query](references/querying.md), and
+    [coverage](docs/activity-mutation-coverage.md).
+14. Never run `make install*`, `scripts/setup.sh`, or `task-board self-update`
+    from inside a manager-hosted session. A Claude host's PTY master lives in
+    the `tb-sessiond` process, so replacing that daemon hangs up every hosted
+    session including the caller's own. A binary swap is a human action taken
+    between sessions; the manager restarts from an outside shell with
+    `task-board session restart`. See
+    [goals recovery](references/goals-recovery.md#1-a-skill-reinstall-beside-a-running-tb-sessiond).
+
+## Decision Tree
+
+```text
+Prompt-assigned role or TASK_BOARD_RUN_ID? -> work as that specialist
+Artifact, test, docs, research, or review? -> tracked role-based spawn
+Primary session restarted or resumed? -> `task-board worktree obligations` first
+Producer reached to-review? -> spawn reviewer, route verdict
+Concrete stop boundary? -> persist packet, then blocked
+Known structured board operation? -> q/m DSL with narrow projection
+Unknown name/field? -> schema(); known call syntax? -> schema(operation|mutation=NAME); see querying recovery examples
+```
+
+## Lazy Reference Routes
+
+| Need | Read |
+| --- | --- |
+| Queries, observability, goals, estimates, deps | [querying](references/querying.md), [file formats](references/file-formats.md) |
+| Status, review, recovery, Stop-The-Line | [statuses](references/statuses.md) |
+| Resources, bugs | [resources and bugs](references/resources-and-bugs.md) |
+| Detailing, plans, execution | [planning workflow](references/planning-workflow.md) |
+| Research budgets, exit, first slice | [research workflow](references/research-workflow.md) |
+| Roles, task classes, DoD | [roles](references/roles.md) |
+| Negative tests, gate proofs, refusal rows | [negative evidence](references/negative-evidence.md) |
+| Spawned goals, selection, runs, recovery, Story worktrees | [tracked background spawn](references/tracked-background-spawn.md) |
+| CR order, checkpoint, repeat-of, reuse, landing proofs | [CR lifecycle](references/change-request-lifecycle.md) |
+| Session Manager wrappers, goal runtimes | [codex goal runtime](docs/codex-goal-runtime.md), [claude goal runtime](docs/claude-goal-runtime.md) |
+| Templates, reviewer routing | [sub-agent templates](references/sub-agent-templates.md) |
+| Context budgets | [context efficiency](references/context-efficiency.md) |
+| Config feature gates | [config features](references/config-features.md) |
+| Goal daemon skew, native recovery | [goals recovery](references/goals-recovery.md) |
+| Project config refusals/schema/examples, authority envelopes, guarded alias migration, spawn supervision in minutes | [canonical config reference](references/task-board-config.md); persist a matching scoped selection before removing legacy `remote.user`, preview with `task-board migrate-project-config`, then apply only with its reviewed `--expected-digest` |
+| Install/bootstrap | [setup](references/setup.md) |
+| Remote auth/admin/ops | [remote board runbook](docs/remote-board-operations.md) |
+| CLI/deploy overview | [README](README.md) |
+| Developing task-board itself (this repo) | [CLAUDE.md](CLAUDE.md) |
+
+Runtime changes follow canonical `.specs/` contracts.
+
+Gemini CLI 0.54.4 is deprecated in favour of Antigravity (`agy`); both remain
+supported. `agy` effort is encoded in its model ID, not `--reasoning-effort`.
+See [README](README.md#antigravity-cli-agy) for the command, models, argv
+budget, and JSON contract.
+
+exec
+/bin/zsh -lc "task-board q 'task(TASK-260916-2vzsmy) { status resources checklist }'" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ exited 1 in 0ms:
+query error: parse error at 1:1: unknown operation "task" (got "task"); known operations: activity, agents, context, context_boundary, context_candidates, context_retention, contexts, count, get, list, models, plan, project_config, provider_limits, schema, summary, whoami; see schema() for the contract and schema(operation=NAME) for one signature
+
+exec
+/bin/zsh -lc "cat /Users/iv/.codex/skills/project-management/references/negative-evidence.md; rg --files -g AGENTS.md -g '*release*' Scripts; git diff --stat 7d2126aef02d9bb2c5443f5ef433462fda537732 612a90caf05473072ec6d00886268d8a4fabee24" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 0ms:
+# Negative Evidence Contract
+
+A passing suite means nothing unless something in it would have failed. This
+file is the single source of truth for the rules that make a green check mean
+something, and for the incident record behind each one. The operative wording
+that reaches every spawned child lives in the spawn template section
+`Evidence That Counts`; the reviewer's licence lives in `.roles/reviewer/role.md`;
+the repeated-variant heuristic lives in `.roles/orchestrator/role.md`. Read this
+file when you need the shapes, the failure vocabulary, or the incidents that
+produced a rule — do not restate these rules in other documents.
+
+| Rule | Operative statement | Evidence record |
+| --- | --- | --- |
+| Negative tests for gates | spawn template, `Evidence That Counts` | this file |
+| Narrowing, not deleting | spawn template, `Evidence That Counts` | this file |
+| Production call site | spawn template, `Evidence That Counts` | this file |
+| Absence vs failure to read | spawn template, `Evidence That Counts` | this file |
+| Prove, or report nothing | spawn template, `Evidence That Counts` | this file |
+| Reviewer licence to defeat a gate | `.roles/reviewer/role.md` | this file |
+| Many variants, one unowned decision | `.roles/orchestrator/role.md` | this file |
+
+## Negative Tests For Gates
+
+Any feature that GATES, REFUSES, VALIDATES, AUTHORIZES, or ATTESTS must ship
+with negative tests that fail when the gate admits what it is supposed to
+reject. A positive test proving the happy path passes is not evidence that the
+gate works; it is evidence that the gate is reachable.
+
+This is the dominant defect class in this repository's 2026-07-28..08-03 waves.
+Every instance below was found because a reviewer deliberately attacked the
+gate, not because anyone read the code:
+
+- the fact-assay attested a COLD child that never inherited the context, because
+  it checked inventory, session id, digests, and output shape, but never
+  inheritance;
+- the assay fork had repository tool access, so it could answer from disk while
+  the base was false;
+- the builder attestation accepted a correctly-shaped forged digest that the
+  caller minted itself;
+- clearance enforcement existed but no production path called it, and counting
+  tests around a fake proved nothing;
+- an unknown assay event preserved a false zero-tool observation;
+- a provider capability was declared absent to disable a flaky check, and the
+  claim did not reproduce (9/11 success).
+
+## Standard Negative Shapes
+
+Use these names in checklists, verdicts, and test names. They are the shapes a
+negative test must cover and the shapes a reviewer looks for first.
+
+| Shape | What it looks like when nobody tests for it | What the negative test must do |
+| --- | --- | --- |
+| Forged or self-minted evidence | The caller supplies the proof that the gate checks, and a correctly-shaped value passes. | Mint the evidence in the test the way a caller could, and require refusal. |
+| Absent evidence treated as satisfied | Missing input takes the permissive branch; the suite only ever supplies the input. | Remove the evidence entirely and require refusal, not a default-pass. |
+| Check present but uncalled from production | The guard is implemented and unit-tested by direct call; no production path invokes it. | Drive the real entry point — launch, materialize, resolve, publish — and name the production call site. |
+| Bypass path around the check | One entry point enforces; a second, older, or retry/renewal path does not. | Exercise every entry point that reaches the protected state, including retry, renewal, resume, and recovery, and every delivery surface that carries the rule — a contract clause reaching one context profile and not the other is this shape. |
+| Capability claim that does not reproduce | A capability is declared absent or present to make a flaky check go away. | Re-run the claim enough times to state a real rate, or report unknown. |
+
+## Derive Completeness From An Independent Source
+
+Completeness is derived from the pinned source or generated artifact, never
+enumerated by hand. When a registry, schema set, or declared scope defines the
+members, derive the expected set from that source and fail when any member lacks
+enforcement. This rule comes from five consecutive review rounds that each
+closed exactly the hand-picked members named by the previous reviewer; the next
+unlisted member defeated every list.
+
+A completeness test that reads the implementation's own table is circular and
+can never detect a missing entry: removing the entry also removes it from the
+test's expected set. Derive the expectation from the normative source of truth,
+not from the code under test. This distinction was what let the next Story's
+round-1 review demand a source-derived completeness test instead of accepting
+the producer's two selected cases.
+
+## Prove Exact Bounds At The Production Entry
+
+Prove every bound in both directions at the production entry: accept at the
+limit and refuse past the limit. Character bounds count characters rather than
+bytes. The motivating failure was a value containing 3,999 characters but
+5,999 bytes that production rejected with a byte comparison even though the
+normative `string[1..4096]` bound permitted it; helper-only or ASCII-only tests
+could not expose that narrowing.
+
+## Disable Every Refusal Clause
+
+Disable each refusal clause individually. If the suite stays green, that clause
+is a hole unless the test or evidence documents it as provably subsumed and
+names the check that subsumes it. This is measured rather than hypothetical: in
+one file, disabling 110 clause sites produced 45 surviving mutants, and 12 of
+those survivors were genuine widenings.
+
+Numeric-bound mutation and clause-disablement are different classes, and one
+harness rarely generates both. Numeric mutation finds off-by-one defects but
+cannot express disabling a tagged-union arm, cross-field equality, or grammar
+predicate; clause disablement finds those omissions but cannot move a numeric
+boundary. The 110-site clause run exposed widenings that the numeric harness
+could not generate, so run both classes.
+
+## Check Refusals Against The Normative Source
+
+A green test can defend a bug when it asserts a refusal that the normative
+source does not require. One observed test required production to reject values
+that the pinned specification permitted, so the suite protected the narrowing
+instead of detecting it. Whenever a test encodes a refusal, check that refusal
+against the pinned source rather than copying current behaviour into the
+assertion.
+
+## Eliminate Ambient Test Inputs
+
+No test may depend on ambient environment. Fixtures set explicit identity and
+all other values that could otherwise come from global configuration, the OS,
+or developer-machine state. A developer machine let Git derive an author name
+from the OS and passed the suite, while a CI runner with an empty GECOS field
+failed with `empty ident name`; only CI can catch this class, so the fixture
+must make its identity deterministic before CI exercises it.
+
+## Prove A Bound By Narrowing, Not By Deleting
+
+A test that removes a gate entirely proves only that the gate exists. It says
+nothing about whether the gate covers the right class. Restrict the gate to a
+narrower condition instead and require a named test to fail.
+
+Two repository incidents where a narrowed gate survived a green suite:
+
+- **BUG-260801-3kiloe F1** — the recovery successor cap was proven only by total
+  removal. Narrowing it to provider-limit signals left every other recoverable
+  failure unbounded, with the whole suite still green.
+- **TASK-260802-17wetr F16** — thirteen cycles later, the same shape: the
+  probe-lease cap survived deletion tests while the renewal path escaped it.
+- **TASK-260730-2c1e8l cycle 1** — this contract itself. The reviewer clauses
+  landed in the role body and the shipped test checked the role file and the
+  lite template separately, so both halves were green while the composed lite
+  prompt carried neither. Assert on the composed production artifact, not on the
+  pieces it is built from.
+- **TASK-260730-2c1e8l cycle 2** — the same contract, one level up, and the
+  clearest statement of the difference between the two shapes. The cycle-1 fix
+  did assert on the composed prompt, but it called the composition helper
+  directly and handed it the role, task-class filter, and profile itself.
+  Production builds those inputs inside the spawn entry point, so a mutant
+  narrowing only the real lite-reviewer routing just before composition left the
+  test green while an actual lite reviewer lost its gate-defeat licence. A test
+  that supplies the inputs is testing the helper, not the path. Obtain the
+  artifact the way the consumer does — here, read the prompt file recorded on
+  the run manifest after driving the entry point — so role resolution, the
+  task-class filter, and profile resolution are all under test rather than
+  assumed.
+
+Three traps when running the mutants themselves, all hit while proving this file:
+
+- **The mutant must be re-run with `-count=1`.** `go test` caches on package
+  sources; a test that reads `.roles/*.md` or any file outside its package at
+  runtime returns a stale cached PASS after that file is mutated. A cached green
+  is not a surviving mutant, it is an unexecuted test.
+- **A passing assertion may be satisfied by the wrong source.** Two mutants of
+  the producer DoD entries survived because the phrase asserted also appears,
+  differently worded, in the shared spawn template. Choose assertion wording
+  that only the intended source can supply, then narrow that source and require
+  the named test to fail.
+- **Restore the mutant from a copy, not from git.** `git checkout <file>`
+  restores from the index, which silently discards uncommitted work in that file
+  — during this task it reverted the whole cycle-2 change, not just the mutant.
+  Copy the file aside before mutating, restore from the copy, and verify the
+  restoration by diffing against it before rerunning the gates.
+
+## A Gate Publishes Its Coverage As A Ratio
+
+Prose about what a gate checks cannot distinguish 7 of 7 from 3 of 7. Every
+statement such a description makes is usually true — it is true of what the gate
+can see, and silent about what it cannot. The longer and more careful the
+description, the more thorough the gate looks.
+
+Report the fraction of intended targets the gate actually reaches, and assert
+that fraction so it reddens when a target drops out of reach. A target no mutant
+can redden is not covered, however elaborate the structure around it.
+
+Three defects of this exact shape, each found only once a ratio existed:
+
+- an AST call graph that recorded an edge only for a direct identifier call
+  covered 3 of 7 guarded functions while every pin passed; the package's real
+  dispatch was a function-value table, and the blind spot was invisible from
+  inside;
+- a classifier keyed on prose that a sibling gate was actively rewriting silently
+  dropped 8 rows, taking a suite from 107 executed subtests to 66, while its
+  completeness check `count == 0` reported nothing, because four is not zero;
+- an ownership gate that proved a symbol exists and a case is linked reported 48
+  sections as owned; measured against the specification, those bindings
+  discharged 2 of 394 normative clauses.
+
+A non-empty check on a derived set is the recurring form. `len(x) > 0` answers a
+different question from `len(x) == expected`, and only the second notices a
+narrowing.
+
+## A Blind Spot Is Not An Empty Set
+
+"Nothing is there" and "nothing this checker can see" are different facts, and
+only the second is a statement about the checker. Reporting the first when you
+mean the second converts a limitation into a clean bill of health, and the reader
+has no way to tell.
+
+An ownership gate scanned for uppercase RFC 2119 keywords. Sections stating their
+obligations in declarative present tense scored zero, were bucketed as carrying
+no obligations, and were admitted with no evidence required. Its documentation
+said "there is no obligation to enumerate". The true sentence was "the section
+carries no keyword line, so the scanner cannot see its obligations" — and 19 of
+151 headings were free-admission surface the moment they were bound, including a
+19-row exit-code registry and a closed manifest specification.
+
+Two rules follow:
+
+- State the bound of what the checker can see, next to what it reports. A
+  residual class that is named can be attacked later; one that is implied cannot.
+- Do not let the bucket for "nothing to check" also be the bucket that skips the
+  check. Where absence of measurable obligation is a legitimate state, require an
+  explicit reviewed justification for it, so the weakest entries are the ones
+  that must say the most rather than the least.
+
+## An Absence And A Failure To Read Are Different Facts
+
+Absence is a legitimate state with a defined fallback. A failed, partial, or
+malformed read is evidence of a problem. Treating the second as the first lets
+the fallback launder a fault into a normal-looking value, and a fallback defined
+for absence must never fire on a read failure.
+
+Each of these was a separate defect in this repository:
+
+- a non-empty value read as verified;
+- an unknown scanner version read as clean;
+- a partial provenance record read as absent;
+- a zero pid start time read as alive;
+- a malformed `api_error_status` read as missing;
+- an unparsed envelope read as no envelope — this one produced a false provider
+  suppression that would have hidden a healthy provider for hours.
+
+## Prove, Or Report Nothing
+
+Where a property cannot be established, report unparsed or unknown rather than
+inferring it from a proxy signal. A plausible guess is worse than an explicit
+unknown, because callers act on it.
+
+Incident: headless top-level inference in the Claude classifier was unsound in
+principle and produced six variants before it was deleted rather than
+strengthened.
+
+## Many Variants, One Unowned Decision
+
+A long run of same-shaped variants usually means a decision has more than one
+owner, not that there are many bugs. Eleven framing variants stopped reproducing
+only when structure got a single scanner and a single state type; every per-site
+patch before that produced the next variant. The operative wording is in
+`.roles/orchestrator/role.md`: unify the decision, do not patch each site.
+
+## Reviewer Licence
+
+Reviewers are explicitly licensed to attempt to defeat a gate and to reject a
+change whose only evidence is positive-path. Grep for callers before believing a
+guard is in force. The operative wording is in `.roles/reviewer/role.md`.
+
+## Exact-Evidence Reuse Is Not Full Replay
+
+A green validation result is evidence about ONE candidate: the source and test
+tree it ran against, the suite and configuration it ran with, and the
+environment it ran in. Progressive checks may reuse that exact result while
+all four identities are unchanged; the moment any of them differs, the result
+is evidence about a different candidate and a rerun is required. The runtime
+binding — which identities are hashed, what `reused_from_revision` records,
+and why an absent or malformed environment identity forces a reasoned rerun —
+is [docs/delivery-validation.md](../docs/delivery-validation.md). This page
+states the shapes a plan and a reviewer check against.
+
+- **Freeze the candidate before execution.** Evidence is bound to a captured
+  tree, never to "the worktree as it is now". A result produced while the tree
+  was still moving is evidence about no candidate at all.
+- **Full replay needs a reason.** Re-running the whole configured suite is
+  justified by exactly three things: a changed input identity, coverage the
+  reused evidence does not carry, or a recorded diagnostic reason. "To be
+  safe", "the runbook always does", or a retry that lost track of what already
+  ran are not reasons, and each burns the same budget the incident measured.
+- **Reuse never disarms the reviewer.** An independent reviewer retains
+  targeted adversarial discretion over a reused green: the attack described in
+  `Licence To Defeat A Gate` is against the candidate, not against the log,
+  and a reused result is one more input to attack, not a waiver.
+- **References and digests replace duplicated corpora.** A manifest of
+  content digests proves what was checked; a second copy of the corpus proves
+  only that the bytes were attached again. Portable archives are for a named
+  consumer that cannot resolve references, and for nothing else.
+
+## Refusal Rows: Research And Validation Budgets
+
+The rows below are what the guidance REFUSES, and the two controls are what it
+must keep admitting. Check a research plan, a rework brief, or a validation
+decision against both halves: a rule that refuses everything satisfies the
+first half and fails the second. Each refusal row names the observed incident
+behind it (`TASK-260909-2ax2l1` retrospective and addendum).
+
+| # | Scenario | Verdict | Why, and what the incident looked like |
+| --- | --- | --- | --- |
+| R1 | An agent justifies a second serial research prerequisite by consistency alone — "the sibling leaf has a gate, so this class needs one too", "the harness should also cover", symmetry with a prior leaf | **Refused.** A second serial prerequisite needs a checked spec gap (`solution-architect` rule 3: the missing piece, the requirement left incomplete, the spec sections checked) and its own budget; otherwise the finding is a focused regression in the owning leaf | Three nested gate leaves (contract gate, atom shapes, codepoints) were spawned from `repeat-of:` verdicts; production coverage stayed 0/28 vectors, 0/32 guards |
+| R2 | Reuse of a green result after the harness, the source tree, the test tree, the configuration or the environment changed | **Refused.** Any changed identity makes the evidence about a different candidate; rerun with the diagnostic reason recorded. An earlier empty candidate never exempts a later source change | Reviewer anchors on a stale producer/revision are documented in two verdicts; a candidate was reviewed against a tree it no longer was |
+| R3 | A gate claimed green with logs missing, truncated, unreadable, or ending before the last command | **Refused.** A failed or partial read is not a pass and not an absence; report which commands ran, which exit codes were observed, and mark the rest unrun. A cached `ok` on a package that reads files outside its module is this row | A 20-command suite timed out at command 13 of 20 after twelve greens; the seven unrun commands are unrun, not passed |
+| R4 | A retry, resume, recovery or republish that starts its budgets from zero | **Refused.** Worker time, artifact bytes and serial depth accumulate across every continuation of the same leaf; a continuation inherits the budget position it was cancelled at | 13 of 42 runs were cancelled continuations; the chain re-entered full publication validation on an empty-delta research handoff until an operator directive stopped it |
+| C1 | An unchanged green candidate: the same frozen tree, suite, configuration and environment, presented again for a later check | **Admissible.** Reuse the exact evidence; do not replay. The reviewer may still attack the candidate | The positive control for R2 and R3: identical identities, readable digest-matching log |
+| C2 | A legitimate research-only Change Request with an empty `repository_delta`, whose task-scoped outcomes are attached and whose decision is recorded | **Admissible.** Publish it for independent review, skip source validation as `docs/delivery-validation.md` records, and route to the first implementation slice | The positive control for R1 and R4: one bounded contract task is the intended shape; twelve consecutive empty revisions with no consuming slice is what R1 and R4 refuse |
+
+Scripts/validate-release-tag.sh
+Scripts/release.sh
+Scripts/release_metadata.py
+Scripts/release-preflight.sh
+Scripts/tests/test_release_docs.py
+Scripts/tests/test_release_packaging.py
+Scripts/tests/test_release_metadata.py
+Scripts/tests/test_release_preflight.py
+Scripts/tests/test_release_workflow.py
+ .github/workflows/release.yml           |  10 +-
+ RELEASING.md                            |  65 +++++++
+ Scripts/release-preflight.sh            |  35 +++-
+ Scripts/release.sh                      |   2 +-
+ Scripts/release_metadata.py             |  25 +++
+ Scripts/tests/test_release_docs.py      |  92 ++++++++++
+ Scripts/tests/test_release_metadata.py  | 107 ++++++++++-
+ Scripts/tests/test_release_packaging.py | 276 ++++++++++++++++++++++++++++
+ Scripts/tests/test_release_preflight.py | 171 ++++++++++++++++++
+ Scripts/tests/test_release_workflow.py  | 307 ++++++++++++++++++++++++++++++++
+ Scripts/validate-release-tag.sh         |  38 ++++
+ 11 files changed, 1115 insertions(+), 13 deletions(-)
+
+exec
+/bin/zsh -lc "task-board q 'get(TASK-260916-2vzsmy) { status resources checklist }'" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ exited 1 in 4ms:
+query error: parse error at 1:36: unknown field "resources" (got "resources"); see schema() for valid fields and preset names
+
+exec
+/bin/zsh -lc 'task-board spawn goal "$TASK_BOARD_RUN_ID"; rg --files -g AGENTS.md -g '"'*rev3*' -g '*coverage*' .; git status --short" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 232ms:
+Active Goal: none (run is not goal-bound)
+ M .github/workflows/release.yml
+ M RELEASING.md
+ M Scripts/tests/test_release_metadata.py
+ M Scripts/tests/test_release_packaging.py
+ M Scripts/tests/test_release_preflight.py
+?? Scripts/tests/test_release_docs.py
+?? Scripts/tests/test_release_workflow.py
+?? Scripts/validate-release-tag.sh
+
+exec
+/bin/zsh -lc "task-board q 'schema(operation=get)'" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 0ms:
+{"description":"Get a single element by ID","examples":["get(TASK-XX) { overview }"],"kind":"operation","name":"get","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID"}],"signature":"get(id:string)","syntax":"OPERATION(element-or-identifier, key=value, key=\"quoted string\") { field preset }; statements separated by ';'; the first bare positional value is the element/identifier argument; remaining arguments use key=value (no operators or lists); string escapes: \\\" \\\\ \\n \\t"}
+
+exec
+/bin/zsh -lc 'task-board resource --help' in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 0ms:
+Manage attached resources such as screenshots, docs, logs, and other files.
+
+Use "task-board resource add" to create a new attached resource, "task-board
+resource adopt" to register an orphaned local payload, "task-board resource
+update" to replace an existing one, "task-board resource delete" to remove it,
+and "task-board resource get" to materialize a resource back to the local
+filesystem for inspection.
+
+Usage:
+  task-board resource [command]
+
+Available Commands:
+  add         Attach a new file resource to an element
+  adopt       Register an existing unreferenced local resource payload
+  delete      Delete a resource from an element (requires --confirm)
+  get         Download a resource to the local filesystem
+  update      Replace an existing file resource on an element
+
+Flags:
+  -h, --help   help for resource
+
+Global Flags:
+      --board-dir string         Path to the board directory (overrides TASK_BOARD_DIR and config local.board_dir) (default ".task-board")
+      --context-profile string   Agent context profile override: full or lite
+      --insecure                 Skip TLS certificate verification (for self-signed certs)
+      --json                     Output in JSON format
+      --no-update-check          Disable automatic update check
+      --remote string            Remote board server URL (overrides TASK_BOARD_REMOTE)
+      --remote-board string      Remote board ID (overrides TASK_BOARD_ID)
+
+Use "task-board resource [command] --help" for more information about a command.
+
+exec
+/bin/zsh -lc "task-board q 'get(TASK-260916-2vzsmy) { overview artifacts checks }'" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ exited 1 in 115ms:
+query error: parse error at 1:38: unknown field "artifacts" (got "artifacts"); see schema() for valid fields and preset names
+
+exec
+/bin/zsh -lc 'cat /Users/iv/.codex/skills/project-management/references/querying.md' in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 0ms:
+# Querying & Mutating the Board
+
+Three primary access modes following the [agent-facing-api](https://github.com/relux-works/skill-agent-facing-api) pattern, plus CLI for humans:
+
+## Concrete Assignment Default
+
+When a prompt already supplies a Task/Bug ID and task inputs, query only fields
+needed for the next decision:
+
+```bash
+task-board q --format compact 'get(TASK-260211-abc) { status checklist outcomeResources }'
+task-board q --format compact 'get(TASK-260211-abc) { status blockedBy derivedBlockedBy }'
+```
+
+Do not add routine `summary()`, `plan()`, `schema()`, or `{ full }` orientation.
+Use `schema(operation=NAME)` or `schema(mutation=NAME)` only after an unknown
+call. Board-wide observability and plans belong to an orchestrator routing
+decision; full reads remain explicit audit/debug surfaces.
+
+## DSL Queries — primary read approach for agents
+
+Compact queries that return structured output. Zero session overhead (no MCP handshake), batch multiple queries in a single call. **This is what agents should use for all structured reads.**
+
+**Output format:** Use `--format compact` for token-efficient output (~40% fewer tokens). Default is `--format json`.
+
+```bash
+# Board overview
+task-board q --format compact 'summary()'
+
+# Whole-project readiness with the existing summary folded in
+task-board q --format compact 'summary() { observability-project }'
+
+# Scoped readiness at each board level
+task-board q --format compact 'list(type=epic) { observability-epic }'
+task-board q --format compact 'get(STORY-260211-def) { observability-story }'
+task-board q --format compact 'list(type=task, status=development) { observability-task }'
+
+# Single element lookup
+task-board q --format compact 'get(TASK-260211-abc) { status assignee }'
+
+# Bounded activity history (continue with cursor=<next_cursor>)
+task-board q --format compact \
+  'activity(TASK-260211-abc, limit=25, order=descending, kinds="progress,content", view=effective)'
+
+# Filtered listing with field preset
+task-board q --format compact 'list(type=task, status=development) { overview }'
+
+# Agent monitoring
+task-board q --format compact 'agents(stale=60)'
+
+# Batch: multiple queries in one call (semicolon-separated)
+task-board q --format compact 'get(T1) { status }; get(T2) { status }; get(T3) { status }'
+
+# Zero-argument and parameterized operations can share a batch
+task-board q --format compact 'project_config(); models(agent=codex)'
+
+# Execution plan
+task-board q --format compact 'plan(EPIC-01, mode=children)'
+
+# Schema introspection — discover available fields, presets, operations, and mutations
+task-board q 'schema()'
+task-board q 'schema(operation=project_config)'
+task-board q 'schema(mutation=set_status)'
+
+# Target-only spawn policy (explicit opt-in in every profile)
+task-board q --format compact 'project_config(view=spawn-preflight, role=developer, agent=codex)'
+```
+
+**Operations:** `get(ID)`, `activity(ID, cursor?, limit?, order?, kinds?, view?)`, `list(filters...)`, `count(filters...)`, `summary()`, `plan(scope?, mode=?, active=?)`, `agents(stale=N?)`, `models(agent?)`, `project_config(view?, role?, agent?)`, `whoami()`, `schema(operation?|mutation?)`
+**Field projection:** `{ id status assignee }`; base presets: `minimal`, `default`, `overview`, `full`, `progress`, `planning`; observability presets: `observability-project`, `observability-epic`, `observability-story`, `observability-task`
+**Batching:** semicolons between queries. Statements and results preserve source order. JSON batches return an ordered top-level array; compact batches format each result normally and separate adjacent results with one blank line. A single query remains unwrapped. Syntax and unknown-operation errors reject the whole batch before execution instead of returning partial output; handler errors remain ordered in-band error results and later statements continue. Element mutations in one batch run inside one activity transaction: when any statement is refused, the refused statements keep their own errors, every statement that would otherwise have succeeded is reported as `ok:false` with code `batch_rolled_back`, and nothing is persisted. A clean batch commits every statement and records one activity event per affected element, so a batch may change an element's checklist only once; issue further checklist changes as separate commands. Local and remote mutation commands both print that complete envelope before returning a nonzero exit, so the envelope always describes exactly what was persisted.
+**Format:** `--format compact` (agent default) or `--format json` (TUI/programmatic)
+
+**First-time setup:** Under the full profile, `schema()` returns the complete API contract. Under lite, skip the proactive full read and request only the failed/unknown call with `schema(operation=NAME)` or `schema(mutation=NAME)`. Parser errors for a known call include that same typed signature directly.
+
+`activity()` is deliberately separate from element projections: ordinary
+`get`/`list` reads never embed history. Its `limit` defaults to 50 and is bounded
+to 1..100. `order` accepts `ascending` or `descending`, `view` accepts `raw` or
+`effective`, and `kinds` accepts a comma-separated operation filter. Reuse only
+the opaque `next_cursor` returned by the previous page and keep the same order;
+the cursor is direction-bound and sequence-anchored for stable traversal across
+concurrent appends. The local CLI and remote `/q` endpoint share this contract.
+Activity is automatic infrastructure output; callers must not append routine
+history themselves. An explicit `legacy_pre_feature` boundary means older
+events are unavailable, not that they should be inferred. Deletion retains the
+terminal typed history. Operators correct a bad record only with confirmed,
+append-only `correct_activity`; the original remains in `view=raw`, while
+`view=effective` applies the correction, and remote correction requires Admin.
+Never replace bounded pages with `get(...){full}` or an unbounded filesystem
+read.
+
+`kinds` also selects the three DERIVED control-plane planes. `run` returns the
+spawn run lifecycle mirrored onto the run's task, `change_request` returns the
+Change Request transitions mirrored onto the element the CR is attached to, and
+`workspace` returns the Story workspace operations mirrored onto the Story:
+
+```bash
+task-board q --format compact 'activity(TASK-260211-abc, kinds="run,change_request", limit=25)'
+task-board q --format compact 'activity(STORY-260211-abc, kinds=workspace, limit=25)'
+```
+
+These events carry one typed `ledger_event` change — domain, ledger id,
+enumerated event token, sequence, revision, from/to state tokens, a UTC
+instant, and typed `oid`/`ref`/`id`/`token` facts. They never carry a summary,
+message or reason: each ledger keeps its own human-readable text and the mirror
+cannot transport it. The default unfiltered view includes them alongside board
+mutations, and filtering by a board kind such as `kinds=progress` returns
+exactly what it returned before the planes existed.
+
+The runtime emits them automatically at the moment each ledger row is written.
+`record_ledger_event` exists so the local and remote transports share one
+statement and one validator, and it refuses any free-text payload.
+
+**It is not an agent-facing mutation.** `task-board m 'record_ledger_event(...)'`
+is refused, on a local and a remote board alike, with a
+`ledger_mirror_unauthorized` error: a mirror is DERIVED from a ledger row, so
+one appended by hand asserts a control-plane fact that never happened. On a
+local board the refusal is enforced twice over — once on the CLI mutation
+surface and once in the shared activity layer, which admits only the runtime's
+derived-mirror sink as the source entrypoint.
+
+**Stated bound — board-server boards.** The prevention above is a property of
+the CLI, not of the server. A mirror bound for a remote board is relayed over
+the same `m` transport, authenticating as the same principal, through the same
+handler entrypoint, as any other mutation that principal could send, so the
+server cannot tell a relayed mirror from one a write-capable principal composed
+by hand — and it admits both. What the remote plane holds instead is
+attribution: every mirror records the authenticated principal that sent it, so
+a hand-minted one is traceable to its author even though it is not prevented.
+Preventing it would need per-record attestation the transport has no field for;
+admin-gating the operation would break the ordinary agent's mirror, which is
+the behaviour the remote plane exists to provide.
+
+**Server capability is proven, never assumed.** Before sending a mirror to a
+board-server the CLI reads `/v1/version` and requires the `ledger_mirror`
+contract. A server that advertises none, or a different version, is refused
+with a message naming what it advertised — a server that cannot persist a
+mirror would refuse `record_ledger_event` as an unknown operation, which looks
+exactly like a mirror that was never attempted. A `/version` read that FAILS is
+refused too, and separately: a failed read is not an absence, and treating it
+as one would silently drop mirrors a capable server would have accepted.
+
+Run heartbeats are deliberately not mirrored, and run `progress` rows are
+mirrored only when the project sets `validation.mirror_run_progress_rows=true`
+— see `docs/activity-mutation-coverage.md` for those bounds and for what
+`task-board validate` reports when a ledger row has no mirror.
+
+### Scoped signatures
+
+`schema(operation=NAME)` and `schema(mutation=NAME)` return one flat signature object: `kind`, `name`, a typed `signature`, description, parameters, and examples; mutations also report `destructive` and `idempotent`. They do not include unrelated fields, presets, operations, or mutation contracts. Provide exactly one scope. `schema()` without a scope retains the full legacy response.
+
+Known-operation parser failures preserve the underlying typed parse error and append the relevant signature. This lets an agent repair a call without reading the full schema.
+
+### Recovery examples from the Story binary
+
+Captured at Story commit `13afc672f01a38d5748cca533f33524aec8080d9`.
+From the repository root, build without installing:
+
+```bash
+(cd tools/board-cli && go build -o ../../.temp/TASK-260907-bg79el/task-board .)
+```
+
+The commands below use that binary and the authoritative board selected by
+`TASK_BOARD_DIR`. IDs refer to this Story's board; substitute existing IDs on
+another board. Output blocks quote the exact emitted text (errors are stderr).
+Exit 1 is an expected refusal, not a passing command.
+
+#### Unknown operation
+
+An unknown operation lists the known query operations and points to `schema()` for discovery and `schema(operation=NAME)` for one signature.
+
+```bash
+.temp/TASK-260907-bg79el/task-board q 'fetch()'
+```
+
+Output (exit 1):
+
+```text
+query error: parse error at 1:1: unknown operation "fetch" (got "fetch"); known operations: activity, agents, context, context_boundary, context_candidates, context_retention, contexts, count, get, list, models, plan, project_config, provider_limits, schema, summary, whoami; see schema() for the contract and schema(operation=NAME) for one signature
+```
+
+#### Statement grammar and bare positional arguments
+
+The scoped signature includes `syntax`: the first bare positional value is the element/identifier argument, and subsequent arguments use `key=value`. Thus `get(TASK-260907-bg79el)` matches `get(id:string)`.
+
+```bash
+.temp/TASK-260907-bg79el/task-board q 'schema(operation=get)'
+```
+
+Output (exit 0):
+
+```text
+{"description":"Get a single element by ID","examples":["get(TASK-XX) { overview }"],"kind":"operation","name":"get","parameters":[{"name":"id","type":"string","optional":false,"description":"Element ID"}],"signature":"get(id:string)","syntax":"OPERATION(element-or-identifier, key=value, key=\"quoted string\") { field preset }; statements separated by ';'; the first bare positional value is the element/identifier argument; remaining arguments use key=value (no operators or lists); string escapes: \\\" \\\\ \\n \\t"}
+```
+
+#### Unknown projection field
+
+A misspelled projection field suggests `updated` and points to `schema()` for valid fields and presets.
+
+```bash
+.temp/TASK-260907-bg79el/task-board q 'get(TASK-260907-bg79el) { updated_at }'
+```
+
+Output (exit 1):
+
+```text
+query error: parse error at 1:29: unknown field "updated_at" (got "updated_at"); did you mean `updated`?; see schema() for valid fields and preset names
+```
+
+#### Bare element ID
+
+An element ID alone is refused; wrap it in `get(ID) { fields }`.
+
+```bash
+.temp/TASK-260907-bg79el/task-board q 'TASK-260907-bg79el'
+```
+
+Output (exit 1):
+
+```text
+query error: an element ID is not an operation; use get(ID) { fields }
+```
+
+#### Keyword IDs on mutations
+
+Every id-first mutation accepts `id=...` (bare or quoted) as well as the first positional argument. This includes `link`, `add_checklist_item`, and `set_status`; supplying both forms is rejected. These successful dry runs preview without persisting changes.
+
+```bash
+.temp/TASK-260907-bg79el/task-board m --dry-run 'link(id=TASK-260907-bg79el, blocked_by=TASK-260211-1saw6h)'
+```
+
+Output (exit 0):
+
+```text
+{"ok":true,"result":{"blocked_by":"TASK-260211-1saw6h","dry_run":true,"id":"TASK-260907-bg79el"}}
+```
+
+```bash
+.temp/TASK-260907-bg79el/task-board m --dry-run 'add_checklist_item(id=TASK-260907-bg79el, text="Verify recovery guidance")'
+```
+
+Output (exit 0):
+
+```text
+{"ok":true,"result":{"dry_run":true,"id":"TASK-260907-bg79el","text":"Verify recovery guidance"}}
+```
+
+```bash
+.temp/TASK-260907-bg79el/task-board m --dry-run 'set_status(id=TASK-260907-bg79el, status=development)'
+```
+
+Output (exit 0):
+
+```text
+{"ok":true,"result":{"dry_run":true,"id":"TASK-260907-bg79el","status":"development"}}
+```
+
+### `project_config()` runtime shape
+
+`project_config()` is always resolved by the local CLI, including when normal
+board reads and writes target a remote server. Its current top-level keys are
+`configured_mode`, `effective_mode`, `board_source`,
+`explicit_remote_override`, `project_root`, `config_path`, `config_exists`,
+`local`, `remote`, `whoami`, `goals`, `spawn`, `codex`, and `version_control`.
+
+The no-argument shape remains the role-optional general config surface in every
+profile, including the full default. For a spawn decision, opt in explicitly:
+
+```bash
+task-board q --format compact 'project_config(view=spawn-preflight, role=developer, agent=codex)'
+```
+
+`role` is required. `agent` is optional and otherwise follows the same
+preferred-provider/schedule/runtime-affinity resolver as `task-board spawn`.
+The narrow result contains `enabled`, `max_parallel`, a small effective
+agent-context profile/source header, the effective allowed and target providers,
+the active schedule window, canonical role, merged role ceiling for the target
+provider, provider selection mode, and launch-composition enabled/status. It
+excludes local/remote auth, `whoami`, Codex session, nested agent-context policy,
+project paths, all unrelated provider ceilings, and version-control fields.
+Active schedule allow-sets and provider refusals use the same fail-closed
+resolver as spawn.
+
+For Codex, `resolved_role_ceiling` includes the resolved boolean `fast_mode`,
+`fast_mode_source` (`default` or `configured`), and `provenance.fast_mode` with
+the exact root or remote key. Durable spawn status and JSON run state carry
+`service_tier`, `fast_mode`, `fast_mode_source`, and `fast_mode_config_key`;
+provider-limit retries update them to describe the provider currently being
+launched, while each `provider_attempts[]` entry preserves the tier evidence
+carried by that historical launch.
+
+The lite profile's resolved `queries.project_config=spawn-preflight` setting
+guides agents toward the target-specific call; it does not rewrite a bare
+`project_config()` invocation. Supplying a view or target argument opts into
+the narrow projection, whose role remains mandatory.
+
+The policy members relevant to spawning and status mutation are:
+
+| Path | Shape |
+|---|---|
+| `spawn.preferred_agent` | Legacy configured provider string, or `null`. It is retained only as compatibility evidence. |
+| `spawn.preferred_agentic_system` | Currently effective `{mode, allowed_providers, source, config_key}`, or `null`. During an active schedule window, `source` is `schedule`. |
+| `spawn.schedule` | `{configured, timezone, config_key, windows, active_window, base_preferred_agentic_system}`. `timezone` is always `UTC`; every projected window also carries its normalized bounds, key, and provider-system projection. |
+| `spawn.launch_composition` | `{enabled, config_key, contract, schema_version, degradation}` without invoking `agents-infra`. |
+| `spawn.ceilings` | Always reports effective `contract_version`, `authority`, `configured`, and `config_path`. V3 providers expose normalized `allowed_models` or `entries`, nullable `resolution_model`, confirmation mode, effort direction, merged role-effective policy, and exact provenance. Every contract version and input form reports `admitted_pairs`, the canonical admitted `(model, effort)` set with its digest — the field to read when deciding what a policy admits, since `allowed_models` is `null` under the entries form. An entries policy also reports `entries_expanded`, `entries_expansion_pinned`, and any unreachable/redundant entry `warnings`. V2 exposes `snapshot_version`, `snapshot_allowed_models`, `migration_required`, stable actionable warnings, and exact read-only v3 `migration` objects. |
+| `spawn.selection` | Required flags plus provider effort vocabularies and supported model criteria. |
+| `spawn.execution` / `spawn.tracking` | Executable background mode and durable run-observation contract. |
+| `goals` | Static compact `board-goal-v2` capability with required Session Manager native reflection and the one-release `primary-goal-v1` / `board-goal-v1` adapters. The legacy `goals.primary` descriptor remains nested alongside the v2 fields for the compatibility release. It never embeds the current objective and is omitted from `view=spawn-preflight`. |
+| `version_control` | `{configured, confirm, desired_commit_time, enforced_types, owner_message, acknowledgement_parameter, acknowledgement_value, config_key}`. |
+
+Local mode uses `spawn.*` keys. Remote mode uses `remote.spawn.*` when that
+object is present and non-null; otherwise it falls back to the whole root
+`spawn` object. The reported `spawn.config_key_prefix` and nested `config_key`
+values always identify the effective source. `preferred_agentic_system` is the
+canonical config spelling; `preferred_agent_system` is not an alias.
+
+`spawn-policy-v3` admission is exact membership in the effective
+`allowed_models` set. `PolicyRank`, lifecycle, recommendation, registry order,
+and price are not policy inputs. A v2 projection is compatibility evidence,
+not an automatic migration: setup, query, spawn, and install never rewrite the
+repository. For an explicit migration, copy the full projection's provider and
+role `migration` objects under `contract_version: spawn-policy-v3`, review the
+diff, then repeat full and target-role preflight queries. An effort-only v2
+warning uses reason `spawn_policy_v2_effort_only_migration_required` and
+explicitly says to omit `resolution_model` unless a fallback is intended.
+
+### Project observability preset family
+
+`summary() { observability-project }` returns the whole-project view. The
+element presets work with the existing `get` and `list` operations; the task
+preset also applies to Bugs because Tasks and Bugs share the leaf estimate
+contract.
+
+Every preset exposes the same nested `observability` field:
+
+- `scope` identifies the project or selected Epic/Story/Task/Bug.
+- `summary` carries the existing `byType`, `active`, and `blocked` summary,
+  scoped to that element and its descendants.
+- `readiness.estimateKind` carries the leaf or calculated
+  Story/Epic/project projection state without dumping every missing leaf.
+- `readiness.coverage` always reports `estimated`, `unestimated`, `total`,
+  `ratio`, and `complete`, including fully estimated scopes.
+- `readiness.rolledEstimate` is the known Fibonacci sum even when coverage is
+  partial. Query the separate `estimate` field on the incomplete Story/Epic to
+  retrieve its exact `unestimatedTaskIds` drill-down list.
+- `isBlocked` / `blockedElementIds` aggregate hard dependency state across the
+  scope, while `isAdvisoryBlocked` / `advisoryBlockedElementIds` aggregate
+  derived cross-container waiting. The nested summary retains blocker details.
+- Only the project preset adds `primary_goal`. Its active form is
+  `{active:true,id,revision,objective,updated_at}`; after a clear or before
+  any creation it is `{active:false,latest_ref}` (where `latest_ref` can be
+  `null`). Epic, Story, Task, and Bug observability deliberately do not repeat
+  this board-wide parent intent or treat it as element acceptance.
+
+Plain `summary()` keeps its legacy response shape for compatibility.
+
+## DSL Mutations — structured writes for agents
+
+Write operations through the same DSL engine. All mutations support `--dry-run` preview. Destructive mutations require `--confirm`.
+
+Element-ID mutations accept the first positional argument or `id=ID` (bare or quoted), matching their schema signatures: `link(ID, blocked_by=OTHER)` and `link(id="ID", blocked_by=OTHER)` are equivalent. Supplying both forms is rejected. `create(type=..., parent=...)` retains its keyword syntax.
+
+```bash
+# Status changes
+task-board m 'set_status(TASK-12, status=development)'
+
+# Evidence-backed role handoff (preferred producer end transition)
+task-board handoff TASK-12 --role developer
+
+# Task/Bug estimate enum
+task-board m 'set_estimate(TASK-12, estimate=notEstimated)'
+task-board m 'set_estimate(TASK-12, estimate=estimated, scale=fibonacci, number=5)'
+
+# Create elements
+task-board m 'create(type=task, parent=STORY-05, name=new-task)'
+task-board m 'create(type=task, parent=STORY-05, name=new-task, description="Implement feature", scope="Backend only", ac="Tests pass")'
+
+# Update README fields
+task-board m 'set_details(TASK-12, title="New title", description="Updated desc")'
+
+# Rename overview name/slug while preserving ID, README, progress, children, and resources
+task-board m 'rename(TASK-12, name=better-task-name)'
+
+# Assignment
+task-board m 'assign(TASK-12, agent=claude-opus)'
+task-board m 'unassign(TASK-12)'
+
+# Dependencies
+task-board m 'link(TASK-13, blocked_by=TASK-12)'
+task-board m 'unlink(TASK-13, blocked_by=TASK-12)'
+
+# Checklist
+task-board m 'check_item(TASK-12, item=1)'
+task-board m 'uncheck_item(TASK-12, item=1)'
+task-board m 'add_checklist_item(TASK-12, text="Write tests")'
+
+# Notes
+task-board m 'set_notes(TASK-12, text="Progress update")'        # append
+task-board m 'set_notes(TASK-12, text="Replace all", set=true)'  # replace
+
+# Move to new parent
+task-board m 'set_parent(TASK-12, parent=STORY-03)'
+
+# Resources
+task-board m 'add_resource(TASK-12, name="TASK-12_design.md", type=precondition, content="...", description="Design doc")'
+task-board m 'update_resource(TASK-12, name="TASK-12_design.md", type=precondition, content="revised", description="Design doc v2")'
+task-board m --confirm 'delete_resource(TASK-12, name="TASK-12_design.md")'
+
+# Destructive — preview first, then confirm
+task-board m --dry-run 'remove_checklist_item(TASK-12, item=2)'
+task-board m --confirm 'remove_checklist_item(TASK-12, item=2)'
+task-board m --dry-run 'delete(TASK-12)'
+task-board m --confirm 'delete(TASK-12)'
+
+# Batch mutations (semicolon-separated)
+task-board m 'set_status(TASK-12, status=done); set_status(TASK-13, status=development)'
+```
+
+**Safety flags:**
+- `--dry-run` — preview mutation without applying. Returns what would change
+- `--confirm` — required for destructive mutations (`delete`, `delete_resource`)
+- Mutation arguments are schema-checked. Unknown named arguments and extra positional fragments are rejected with typed errors before any write runs.
+- Without `--confirm`, destructive mutations are rejected with an error
+
+**Format:** `--format json` (default) or `--format compact`
+
+**Introspection:** Run `task-board q 'schema(mutation=NAME)'` for one mutation signature, or full `schema()` for the entire contract.
+
+`task-board handoff` resolves the role's configured end status, verifies all
+checklist items plus an actual stored task-scoped outcome, and serializes that
+decision with the ordinary status transition. The underlying shared `handoff`
+mutation carries the already-resolved role/status for remote execution; use the
+CLI facade so callers do not have to reproduce role-policy resolution.
+
+The `estimate` q field is a nested enum. Task/Bug values are either
+`{"kind":"notEstimated"}` or
+`{"kind":"estimated","scale":{"kind":"fibonacci","number":5}}`.
+Story/Epic values are calculated, never persisted or hand-set. Full coverage
+returns the same `estimated` shape with the descendant sum. Partial coverage
+returns
+`{"kind":"partiallyEstimated","rolledEstimate":{"kind":"estimated","scale":{"kind":"fibonacci","number":5}},"notEstimatedCount":"1/3","unestimatedTaskIds":["TASK-..."]}`.
+Story counts direct Task/Bug children; Epic rolls up descendant Task/Bug values.
+New Task/Bug records must be estimated before entering `development`; legacy
+records with no persisted Estimate section remain compatible and count as
+unestimated in container projections.
+
+## Grep — unstructured text search
+
+When DSL can't help — searching for arbitrary text across board files.
+
+```bash
+# Find mentions of a term
+task-board grep "AudioRecorder"
+
+# Search in specific file type
+task-board grep "blocked.*deployment" --file progress.md
+
+# Case-insensitive search in descriptions
+task-board grep "TODO" -i --file README.md
+
+# With context lines
+task-board grep "error" -C 2
+```
+
+## CLI — human-facing output and complex operations
+
+CLI text output with ANSI colors is designed for humans. Use for operations not covered by DSL, or when human-readable output is needed.
+
+When reporting board state to a person, reference each epic, story, task, or bug with both its concrete ID and its human-readable title/name. In practice, that usually means carrying both `id` and `name` in your query output, or using a preset such as `default` or `overview` that already includes them. ID-only references are not enough for chat summaries because readers should not have to resolve identifiers manually.
+
+```bash
+# Good human-facing summary inputs
+task-board q --format compact 'list(type=task, status=development) { id name status }'
+task-board q --format compact 'list(type=story, parent=EPIC-260218-abc123) { overview }'
+```
+
+### Parent alignment in the unified goal ledger
+
+Use the top-level `goal` group to maintain one provider-neutral, board-scoped
+statement of the current `parent/primary` owner's complete objective. It
+survives a parent-session replacement, records immutable `board-goal-v2`
+revisions, and never changes a board element's status or acceptance evidence.
+The command group is the one-release `primary-goal-v1` compatibility adapter.
+
+```bash
+# Create only when no primary goal is active.
+task-board goal set-primary \
+  --objective "Keep the parent goal aligned with the current user requirements." \
+  --reason "First actionable requirement"
+
+# CAS-replace the whole objective. Repeating the same objective is idempotent
+# once the installed row already carries the routing-duty condition; on a board
+# upgraded with a pre-fix goal it mints the forward-looking default instead.
+task-board goal update --if-revision 1 \
+  --objective "Keep the parent goal aligned with the current user requirements and active delivery work." \
+  --reason "Requirement expanded"
+
+# Optional: override the native evaluator condition the bound parent session
+# is installed with. The default is the forward-looking routing-duty
+# condition (every terminal run notice routed, no dispatchable leaf
+# undispatched, or explicitly waiting on a human) — a condition that is
+# still unmet at install time, unlike the retired "has handled this
+# revision" acknowledgement. Non-empty, no colon; omitted on update keeps
+# the active revision's condition.
+task-board goal update --if-revision 2 \
+  --objective "Keep the parent goal aligned with the current user requirements and active delivery work." \
+  --provider-condition "Every review chain on this board has a filed verdict and no leaf is unassigned" \
+  --reason "Board-specific remaining duty"
+
+# Read current state, immutable audit history, or one immutable revision.
+task-board goal get
+task-board goal get --history
+task-board goal get --goal-id PRIMARY-GOAL-260723-a1b2c3 --revision 1
+
+# Clear only with the observed revision and an explicit disposition reason.
+task-board goal clear --if-revision 2 --reason "Parent intent superseded"
+```
+
+`goal get` is read-only and remains available inside a spawned run. When
+`TASK_BOARD_RUN_ID` is set, `set-primary`, `update`, and `clear` return the
+typed `primary_goal_parent_context_required` failure with no side effects;
+spawned owners must use `task-board spawn goal` or `task-board spawn goal
+upsert` for their `run/RUN-*` owner. Both commands use `board-goal-v2`; owner
+isolation prevents either compatibility adapter from silently updating or
+clearing the other.
+
+Every successful JSON response has `ok`, `board_scope`, `primary_goal`, and
+`latest_ref`; mutations additionally carry `mutation`. Exact revision reads
+add `primary_goal_revision`, and history reads add newest-first `history`
+summaries. Typed failures use
+`{ok:false,error:{code,message,current_ref,side_effects:false,remediation?}}`.
+Remote primary-adapter mutations accept authoritative `goal=board-v2` or the
+one-release `primary_goal=board-v1` compatibility capability. Direct v2
+mutations require `goal=board-v2`, and reads never create a local shadow
+ledger.
+
+## Decision table
+
+| Need | Tool | Example |
+|------|------|---------|
+| Discover full API contract | DSL | `task-board q 'schema()'` |
+| Repair one operation/mutation call | DSL | `task-board q 'schema(operation=NAME)'` / `schema(mutation=NAME)` |
+| Preflight one spawn target | DSL | `task-board q 'project_config(view=spawn-preflight, role=ROLE, agent=PROVIDER)'` |
+| Structured query (status, filter, lookup) | DSL query | `task-board q --format compact 'list(type=task, status=development) { overview }'` |
+| Structured write (status, assign, link, create) | DSL mutation | `task-board m 'set_status(TASK-XX, status=development)'` |
+| Evidence-backed producer handoff | CLI facade over shared mutation | `task-board handoff TASK-XX --role developer` |
+| Board parent intent | CLI primary-goal group | `task-board goal get` / `task-board goal update --if-revision N ...` |
+| Preview write without applying | DSL mutation | `task-board m --dry-run 'delete(TASK-XX)'` |
+| Text search across elements | Grep | `task-board grep "AudioRecorder"` |
+| **Phase planning (canonical API)** | **DSL query** | **`task-board q 'plan(EPIC-XX, mode=children)'`** |
+| **Pretty-print / render / save a plan** | **CLI facade** | **`task-board plan EPIC-XX --render --format png`** |
+| Resource management | DSL mutation / CLI | `task-board m 'add_resource(TASK-XX, name=TASK-XX_results.md, content="...", type=outcome)'` |
+
+### Plan dependency diagnostics
+
+The JSON `plan()` result includes `plan.projection_cycles` (an empty array when
+none exist). Each entry contains container `members`, a closed `chain`, inducing
+stored `links`, and projected `edges` with their `sources`. Compact output emits
+one advisory line when projection cycles exist. **Compatibility:** the Go plan
+model's `CycleNodes` now carries task/bug cycles only; consumers must use
+`projection_cycles` for container cycles.
+
+Cross-parent task/bug links derive story/epic edges at read time as
+`derivedBlockedBy` / `derivedBlocks`; they do not write container links. Explicit
+legacy container links remain stored as `blockedBy` / `blocks` and participate
+in container ordering. Active derived waiting sets `isAdvisoryBlocked`; active
+explicit blocking sets `isBlocked`. Task link/unlink and reparenting preserve
+explicit container links.
+
+`task-board validate` reports `PROJECTION_CYCLE_DETECTED` as an advisory warning
+for container cycles (including those involving explicit legacy links),
+`TASK_CYCLE_DETECTED` as an error for task/bug cycles, and
+`UNSUPPORTED_CONTAINER_LINK` as a separate warning for stored container links
+without task-level support. A task DAG can have a container projection cycle
+and still produce a plan. `task-board repair-links` lists unsupported stored
+container links; confirmation removes only selected links still unsupported at
+write time, never derived edges or task-cycle links. See the
+[storage and repair contract](file-formats.md#container-dependency-projection).
+
+**IMPORTANT:** Canonical planning lives in `task-board q 'plan(...)'`. Use `task-board plan` only as a local pretty-print / render / save facade over that same planning model. Never manually create phase breakdowns or write `.planning/` files from scratch.
+
+exec
+/bin/zsh -lc "task-board q 'get(TASK-260916-2vzsmy) { overview }'" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 283ms:
+{"assignee":"[reviewer] reviewer (codex)","id":"TASK-260916-2vzsmy","name":"release-preflight-and-documentation","parent":"STORY-260916-1o0gkc","status":"reviewing"}
+
+exec
+/bin/zsh -lc "task-board q 'get(TASK-260916-2vzsmy) { checklist outcomeResources }'" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 333ms:
+{"checklist":[{"text":"Implement the complete scoped production behavior and acceptance criteria","done":true},{"text":"Run relevant tests and record concrete results and remaining bounds","done":true},{"text":"Attach task-prefixed outcome evidence and hand off for independent review","done":true},{"text":"Code written per task description and AC","done":true},{"text":"Relevant tests written for new or changed behavior and passing","done":true},{"text":"In a managed Story worktree the candidate is left UNCOMMITTED in the worktree for the handoff to snapshot — never commit on the Story branch. A producer commit moves the branch tip off the recorded checkpoint and the handoff refuses with change_request_candidate_committed_past_checkpoint; repair with `git reset --soft \u003ccheckpoint_oid\u003e` before completing again.","done":true},{"text":"Every command, message, state, or refusal named in the AC is driven through the production entry point by a named committed test, or is declared a stated bound. Report coverage as a ratio — `n of m AC rows driven` — and name the production call site for each. Prose in place of the ratio is not evidence.","done":true},{"text":"Gating, refusing, validating, authorizing, or attesting behavior covered by negative tests that fail when the gate admits what it must reject, with the production call site named","done":true},{"text":"Every gate ships at least one NARROWING mutant — the gate stays present and is weakened to admit exactly one member of the class it must reject, and a named test must fail. A delete-only mutant proves only that the gate exists and is not accepted as evidence.","done":true},{"text":"A gate that inspects source text is additionally attacked by a mutant that PRESERVES the searched-for token and changes behavior, and the mutant harness executes the behavioral suite, not only the static checker.","done":true},{"text":"Lint clean","done":true},{"text":"Relevant build/validation commands run after changes and build not broken","done":true},{"text":"New outcome artifact attached on the board with a task-scoped name when the work produces notes, logs, screenshots, or other deliverables","done":true},{"text":"Important findings, decisions, anomalies, or regressions recorded in logbook when relevant","done":true},{"text":"Implementation matches AC","done":true},{"text":"Solution fits project architecture","done":true},{"text":"Tests green","done":true},{"text":"Gate, refusal, validation, authorization, and attestation behavior attacked, not read — positive-path-only evidence is not accepted","done":true},{"text":"If review does not accept the work — verdict evidence added and status routed by the explicit verdict branches","done":true}],"outcomeResources":[{"name":"TASK-260916-2vzsmy_spawn-log_-implementer--developer--muse-_RUN-260916-07794b.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_spawn-log_-implementer--developer--muse-_RUN-260916-07794b.log","description":"System spawn log captured by task-board"},{"name":"TASK-260916-2vzsmy_validation.md","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_validation.md","description":"Release validation evidence: 51 green tests, 11 narrowing mutants killed, exact-requirements docs, stated bounds"},{"name":"TASK-260916-2vzsmy_change-request_rev1.patch","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_change-request_rev1.patch","description":"Change Request CR-TASK-260916-2vzsmy-1 revision 1 candidate patch (repository_delta=present, 9 changed paths)"},{"name":"TASK-260916-2vzsmy_change-request_rev1-validation.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_change-request_rev1-validation.log","description":"Change Request CR-TASK-260916-2vzsmy-1 revision 1 bounded validation log"},{"name":"TASK-260916-2vzsmy_spawn-log_-reviewer--reviewer--codex-_RUN-260916-9c9be5.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_spawn-log_-reviewer--reviewer--codex-_RUN-260916-9c9be5.log","description":"System spawn log captured by task-board"},{"name":"TASK-260916-2vzsmy_review-attack-rev1.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_review-attack-rev1.log","description":"Token-preserving ancestry mutant survives all 51 tests; production shell behavior differs"},{"name":"TASK-260916-2vzsmy_review-verdict-rev1.md","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_review-verdict-rev1.md","description":"changes_requested; F1 workflow behavioral coverage, F2 notarization recovery instruction conflict"},{"name":"TASK-260916-2vzsmy_review-logbook-rev1.md","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_review-logbook-rev1.md","description":"Review logbook findings and rework decisions"},{"name":"TASK-260916-2vzsmy_spawn-log_-implementer--developer--muse-_RUN-260916-ae7c5b.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_spawn-log_-implementer--developer--muse-_RUN-260916-ae7c5b.log","description":"System spawn log captured by task-board"},{"name":"TASK-260916-2vzsmy_rework-validation-rev2.md","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_rework-validation-rev2.md","description":"F1/F2 rework evidence: 60 green tests, 6 narrowing mutants killed, exact notarization docs, stated bounds"},{"name":"TASK-260916-2vzsmy_mutants-rev2.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_mutants-rev2.log","description":"Mutant harness log: M12-M17 killed with named failing tests, restores verified"},{"name":"TASK-260916-2vzsmy_suite-rev2.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_suite-rev2.log","description":"Full 60-test suite verbose log, exit 0"},{"name":"TASK-260916-2vzsmy_change-request_rev2.patch","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_change-request_rev2.patch","description":"Change Request CR-TASK-260916-2vzsmy-2 revision 2 candidate patch (repository_delta=present, 11 changed paths)"},{"name":"TASK-260916-2vzsmy_change-request_rev2-validation.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_change-request_rev2-validation.log","description":"Change Request CR-TASK-260916-2vzsmy-2 revision 2 bounded validation log"},{"name":"TASK-260916-2vzsmy_spawn-log_-reviewer--reviewer--codex-_RUN-260916-e5db1a.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_spawn-log_-reviewer--reviewer--codex-_RUN-260916-e5db1a.log","description":"System spawn log captured by task-board"},{"name":"TASK-260916-2vzsmy_review-attack-rev2.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_review-attack-rev2.log","description":"Full surviving workflow call-site mutant suite and refusal probe"},{"name":"TASK-260916-2vzsmy_review-verdict-rev2.md","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_review-verdict-rev2.md","description":"changes_requested; repeat-of rev1 F1; workflow refusal propagation coverage"},{"name":"TASK-260916-2vzsmy_review-logbook-rev2.md","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_review-logbook-rev2.md","description":"Review finding and focused rework decision logbook"},{"name":"TASK-260916-2vzsmy_spawn-log_-implementer--developer--muse-_RUN-260916-614d69.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_spawn-log_-implementer--developer--muse-_RUN-260916-614d69.log","description":"System spawn log captured by task-board"},{"name":"TASK-260916-2vzsmy_rework-validation-rev3.md","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_rework-validation-rev3.md","description":"F1 call-site regression: 62 green tests, M18 caller mutant killed, AC 5of6"},{"name":"TASK-260916-2vzsmy_mutants-rev3.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_mutants-rev3.log","description":"Mutant harness log: M18 killed with named failing test, restore verified"},{"name":"TASK-260916-2vzsmy_suite-rev3.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_suite-rev3.log","description":"Full 62-test suite verbose log, exit 0"},{"name":"TASK-260916-2vzsmy_change-request_rev3.patch","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_change-request_rev3.patch","description":"Change Request CR-TASK-260916-2vzsmy-3 revision 3 candidate patch (repository_delta=present, 11 changed paths)"},{"name":"TASK-260916-2vzsmy_change-request_rev3-validation.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_change-request_rev3-validation.log","description":"Change Request CR-TASK-260916-2vzsmy-3 revision 3 bounded validation log"},{"name":"TASK-260916-2vzsmy_spawn-log_-reviewer--reviewer--codex-_RUN-260916-f9a9a4.log","uri":"file://TASK-260916-2vzsmy/TASK-260916-2vzsmy_spawn-log_-reviewer--reviewer--codex-_RUN-260916-f9a9a4.log","description":"System spawn log captured by task-board"}]}
+
+exec
+/bin/zsh -lc 'task-board resource get TASK-260916-2vzsmy TASK-260916-2vzsmy_rework-validation-rev3.md; task-board resource get TASK-260916-2vzsmy TASK-260916-2vzsmy_review-verdict-rev2.md' in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 223ms:
+.temp/resources/TASK-260916-2vzsmy/TASK-260916-2vzsmy_rework-validation-rev3.md
+.temp/resources/TASK-260916-2vzsmy/TASK-260916-2vzsmy_review-verdict-rev2.md
+
+exec
+/bin/zsh -lc 'cat .temp/resources/TASK-260916-2vzsmy/TASK-260916-2vzsmy_rework-validation-rev3.md .temp/resources/TASK-260916-2vzsmy/TASK-260916-2vzsmy_review-verdict-rev2.md; cat Scripts/tests/test_release_workflow.py' in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 0ms:
+# TASK-260916-2vzsmy rev3: workflow call-site regression — validation evidence
+
+Rework of review rev2 (`changes_requested`, `repeat-of: rev1 F1`). Single
+remaining finding F1: composed workflow call-site bypass untested. Adds named
+regression that extracts the actual `Validate trusted release tag` run field
+from `release.yml` and executes it under Actions-equivalent
+`bash -e -o pipefail`; kills the exact caller mutant
+`./Scripts/validate-release-tag.sh || true`. Docs F2 already resolved in rev2;
+prior script gates already accepted. No production change in this rev, no tag,
+no publication, no notary submission, no runner interruption, no secrets.
+
+## Changes (uncommitted in story worktree)
+
+Tests only, one file:
+
+- `Scripts/tests/test_release_workflow.py`: +2 composed-step tests and one
+  extractor helper (62 total, was 60).
+  - `trust_run_command()`: reads the production workflow file at test time
+    and returns the actual `Validate trusted release tag` run field verbatim.
+    Supports inline and block-scalar `run:` forms. No hardcoded command, so a
+    call-site mutant changes what the tests execute.
+  - `ReleaseWorkflowComposedStepTests.test_workflow_trust_step_refuses_non_main_ancestry`:
+    regression for rev2 F1. Reuses existing `GIT_STUB`/`GH_STUB` fixtures,
+    sets `ANCESTRY_EXIT=1`, executes the extracted run field via
+    `bash -e -o pipefail -c <run>` with cwd at a fixture root containing
+    `Scripts/validate-release-tag.sh`, and requires nonzero exit plus the
+    ancestry refusal on stderr. Fails (exit 0) under the `|| true` mutant.
+  - `ReleaseWorkflowComposedStepTests.test_workflow_trust_step_accepts_trusted_tag`:
+    same composed path with trusted inputs; requires exit 0 and the
+    `Trusted release tag v1.2.0 verified` stdout. Proves the regression is
+    not a test that always fails.
+
+Production unchanged in rev3: `Scripts/validate-release-tag.sh` and
+`.github/workflows/release.yml` are byte-identical to the rev2 candidate.
+`RELEASING.md` untouched (F2 stays resolved).
+
+## AC coverage: 5 of 6 rows driven, 1 procedural bound
+
+AC: "Release scripts and preflight are validated and documented, metadata
+tests pass, candidate ready for review and integration so the subsequent
+release tag uses the repaired workflow."
+
+| # | AC row | Named committed test(s) | Production call site |
+|---|---|---|---|
+| 1 | Release scripts validated | test_release_signs_dmg_with_resolved_team_identity, test_tag_marketing_mismatch_prevents_packaging, test_notarization_rejection_prevents_publish, test_appcast_tamper_prevents_publish (+7 more packaging) | `Scripts/release.sh` end to end |
+| 2 | Preflight validated | test_preflight_passes_with_valid_credentials + 11 refusal tests | `Scripts/release-preflight.sh` |
+| 3 | Validated and documented | 6 ReleaseDocsTests incl. test_docs_state_notarization_gates_and_diagnostic_handling | `RELEASING.md` vs `Scripts/*`, `release.yml`, `release.sh` |
+| 4 | Metadata tests pass | full `Scripts/tests` suite, 62 green, exit 0 | `python3 -m unittest discover -s Scripts/tests` |
+| 5 | Candidate ready for review and integration | PROCEDURAL BOUND, not a committed test: tree uncommitted (`git status`), suite green, this artifact attached, handoff mechanics | `task-board handoff --role developer` |
+| 6 | Subsequent tag uses repaired workflow; nothing published yet | test_workflow_invokes_trust_script_before_any_work + 8 ReleaseTagTrustBehaviorTests + 2 ReleaseWorkflowComposedStepTests (composed run-field accept + refuse) + `git tag -l` shows only v1.1.0 | `.github/workflows/release.yml` Validate trusted release tag run field via `bash -e -o pipefail -c` + `Scripts/validate-release-tag.sh` |
+
+Row 6 was 4-of-6 per rev2 review (caller blind spot). The two composed-step
+tests close that spot: row 6 is now behavioral at the caller as well as the
+script. Row 5 stays procedural by nature.
+
+## Validation commands (real exit codes observed)
+
+- `python3 -m unittest discover -s Scripts/tests -v` → exit 0, 62 tests OK (24.0s). Full log: `TASK-260916-2vzsmy_suite-rev3.log`.
+- `python3 -m unittest Scripts.tests.test_release_workflow -v` → exit 0, 13 OK (2.3s).
+- `python3 -m unittest Scripts.tests.test_release_workflow.ReleaseWorkflowComposedStepTests -v` → exit 0, 2 OK.
+- `python3 /tmp/rev3-mutant-harness.py` (M18, see below) → exit 0, `MUTANT_KILLED=True`, `HARNESS_OK=True`, restored byte-identical True. Full log: `TASK-260916-2vzsmy_mutants-rev3.log`.
+- `bash -n` on validate-release-tag.sh, release.sh, release-preflight.sh, sparkle-tools.sh → exit 0 each.
+- `python3 -m py_compile` on release_metadata.py + all 5 test modules → exit 0.
+- `git tag -l 'v*'` → only pre-existing `v1.1.0`; no v1.2.0 created (exit 0).
+- `git status --short` → 5 modified + 3 untracked, nothing committed (exit 0).
+- Extraction probe: original run → `'./Scripts/validate-release-tag.sh'`; mutant text → `'./Scripts/validate-release-tag.sh || true'` (exit 0).
+- Lint: no linter configured (no Makefile, pyproject, ruff/eslint/flake8 config in repo root); syntax gates above are the validation. Swift suite not run (Python-only test change; see B6).
+
+## Narrowing mutants: 1 of 1 killed in this rework, 0 survivors
+
+Harness `/tmp/rev3-mutant-harness.py` mutates the real workflow file in place,
+runs the full workflow module per mutant (not only the static checker), then
+restores byte-identical content. The mutant preserves the searched-for token
+so the static wiring checker still passes; only the composed behavioral test
+kills it. Full log: `TASK-260916-2vzsmy_mutants-rev3.log`. Prior M12–M17
+(rev2) accepted with production gates unchanged and their killing tests
+unchanged; not rerun in this focused rev per the rev3 brief.
+
+| Mutant | Narrowed gate (admits exactly) | Named failing test(s) | Module result |
+|---|---|---|---|
+| M18 (rev2 F1 exact) | workflow trust call `run: ./Scripts/validate-release-tag.sh \|\| true` (token `validate-release-tag.sh` kept; refusal exit 1 masked to 0): admits non-main ancestry at the caller | test_workflow_trust_step_refuses_non_main_ancestry | failures=1 (only the regression); trusted-path composed test still ok; static wiring still ok |
+
+No survivors in this rework. No `repeat-of` survivor bound to state.
+
+## Stated bounds (unknown, not inferred)
+
+- B1–B14 from rev2 unchanged (malformed-XML ParseError, KeyError on missing
+  config keys, uppercase-only identity hash, Sparkle download path, real Apple
+  notarization/staple/spctl, Swift suite not run, local-only run, no linter
+  configured, publish never executed, gh absence marker, origin/main assumed,
+  rev-parse hard-fail shape, push/dispatch paths not executed, diagnostic ID
+  operational fact).
+- B15 Composed harness runs `bash -e -o pipefail -c <run>` (bash 3.2.57 on
+  macOS) with stubbed git/gh, not a full Actions runner. The trust step has
+  no `${{ }}` expressions, so expression substitution is unexercised by
+  construction.
+- B16 Extractor supports inline and block-scalar `run:` forms; YAML
+  anchors/aliases or multi-step composition beyond the single trust step are
+  untested.
+
+## Findings
+
+- Rev2 F1 reproduced as specified before the fix by construction: the static
+  test asserts a substring and the behavioral tests invoke the script
+  directly, so neither executes the composed `run:` string. After the fix,
+  M18 fails exactly one test (the new refusal regression) while trusted and
+  static checks still pass, proving the gate is narrowing at the caller.
+- No forced fit encountered. Fixture reuse required making the tmp
+  `Scripts/validate-release-tag.sh` copy explicitly executable (the composed
+  `./Scripts/...` invocation needs +x; direct `bash <script>` did not).
+- Candidate left uncommitted for handoff snapshot; no Story branch commit.
+# Review verdict: changes_requested
+
+Candidate: CR-TASK-260916-2vzsmy-2 revision 2, tree 0acdbb9b6db1b5f08efd76595f458e22f5434679; repository_delta=present.
+repeat-of: rev1 F1
+
+## F1 — workflow call-site bypass remains untested
+
+Shape: bypass path around the check; token-preserving mutant; check present but its production caller can discard refusal.
+
+Scripts/tests/test_release_workflow.py test_workflow_invokes_trust_script_before_any_work asserts only a substring. Behavioral tests run the script directly, so they do not execute the composed workflow run command. In an isolated archive of the exact candidate, changing the actual Validate trusted release tag run command to `./Scripts/validate-release-tag.sh || true` preserves the searched token and every script guard, but lets non-main ancestry proceed to release work. All 60 tests still pass (21.078s, exit 0). Independently executing the original and mutated workflow commands with ANCESTRY_EXIT=1 gives exit 1 and exit 0 respectively, with the same refusal stderr. See attached full attack log.
+
+Required rework: add a named regression test that executes the actual workflow run command with refusing trust inputs and verifies the step fails. Include this call-site narrowing mutant and require that regression to fail. Keep this in the same leaf; no separate harness/research task is needed. This is the second consecutive same-class F1 finding.
+
+## Coverage and resolved finding
+
+Producer reports 5 of 6 AC rows driven, one procedural bound. Reviewer finds 4 of 6 adequately evidenced: row 6 remains only script behavior plus static workflow wiring, with the demonstrated caller blind spot; row 5 remains procedural. F2 is resolved in the candidate text: the diagnostic submission is explicitly not a prerequisite, while each actual release artifact requires Accepted and staple verification. No new F2 finding.
+
+## Validation and limits
+
+Personally ran the full 60-test behavioral/static suite against the token-preserving workflow mutant, plus the independent original/mutated composed-step refusal probe. Did not claim a pristine full-suite rerun or rerun prior producer mutants. Reviewed the task-scoped rev2 coverage/mutant report and production delta. Apple notarization, publication, Swift/UI tests, and live runner operations were not exercised. No source edits, tags, commits, publication, secret output, or runner interruption. Run goal queried: not goal-bound.
+
+Route: to-dev. Acceptance is withheld pending F1 regression and another review.
+"""Release workflow wiring and tag-trust behavior.
+
+The workflow delegates tag trust to the production script
+Scripts/validate-release-tag.sh. Wiring tests prove the workflow invokes that
+script before any work and preserves gate order and publish gating. Behavioral
+tests execute the production script with stubbed git/gh and prove it accepts a
+trusted tag while refusing malformed tags, HEAD/tag mismatch, non-main
+ancestry, existing releases, and unknown lookup failures (fail closed).
+Composed-step tests extract the actual Validate trusted release tag run field
+from release.yml and execute it under Actions-equivalent bash -e -o pipefail,
+proving the caller propagates refusal instead of discarding it.
+"""
+from pathlib import Path
+import os
+import re
+import shutil
+import subprocess
+import tempfile
+import unittest
+
+WORKFLOW = Path(__file__).parents[2] / '.github' / 'workflows' / 'release.yml'
+SCRIPT = Path(__file__).parents[1] / 'validate-release-tag.sh'
+ORDER = ['Validate trusted release tag', 'Release prerequisites', 'Unit tests',
+         'Build, notarize, staple and sign appcast', 'Publish complete GitHub Release']
+
+GIT_STUB = '''#!/bin/bash
+printf '%s\\n' "$*" >> "$GIT_LOG"
+if [ "$1" = "rev-parse" ] && [ "$2" = "HEAD" ]; then
+  printf '%s\\n' "${HEAD_SHA:-abc123}"
+  exit 0
+fi
+if [ "$1" = "rev-parse" ]; then
+  printf '%s\\n' "${TAG_SHA:-abc123}"
+  exit 0
+fi
+if [ "$1" = "merge-base" ]; then
+  exit "${ANCESTRY_EXIT:-0}"
+fi
+exit 0
+'''
+
+GH_STUB = '''#!/bin/bash
+printf '%s\\n' "$*" >> "$GH_LOG"
+if [ "${GH_MODE:-absent}" = "exists" ]; then
+  exit 0
+fi
+if [ -n "${GH_TEXT:-}" ]; then
+  printf '%s\\n' "$GH_TEXT" >&2
+fi
+exit 1
+'''
+
+
+def blocks(text):
+    starts = [m.start() for m in re.finditer(r'^      - ', text, re.M)]
+    return [text[s:e] for s, e in zip(starts, starts[1:] + [len(text)])]
+
+
+def block_named(blocks, name):
+    found = [b for b in blocks if b.splitlines()[0].endswith(f'- name: {name}')]
+    assert len(found) == 1, name
+    return found[0]
+
+
+def write_exe(path, content):
+    path.write_text(content)
+    path.chmod(0o755)
+
+
+def trust_run_command(text=None):
+    """Extract the actual Validate trusted release tag run field.
+
+    Reads the production workflow file (not a hardcoded command) so a
+    call-site mutant that keeps the script token but discards its exit status
+    changes what the composed-step tests execute. Supports both inline and
+    block-scalar run fields.
+    """
+    raw = WORKFLOW.read_text() if text is None else text
+    block = block_named(blocks(raw), 'Validate trusted release tag')
+    lines = block.splitlines()
+    run_idx = None
+    run_value = None
+    for i, line in enumerate(lines):
+        matched = re.match(r'\s*run:\s*(.*)$', line)
+        if matched:
+            run_idx = i
+            run_value = matched.group(1).strip()
+            break
+    assert run_idx is not None, 'Validate trusted release tag run field missing'
+    if run_value in ('|', '>', '|-', '|+', '>-', '>+'):
+        run_indent = len(lines[run_idx]) - len(lines[run_idx].lstrip())
+        collected = []
+        for line in lines[run_idx + 1:]:
+            if line.strip() == '':
+                collected.append('')
+                continue
+            indent = len(line) - len(line.lstrip())
+            if indent <= run_indent:
+                break
+            collected.append(line)
+        non_empty = [entry for entry in collected if entry.strip() != '']
+        assert non_empty, 'empty block-scalar run field'
+        floor = min(len(entry) - len(entry.lstrip()) for entry in non_empty)
+        dedented = [entry[floor:] if entry.strip() != '' else '' for entry in collected]
+        while dedented and dedented[-1] == '':
+            dedented.pop()
+        command = '\n'.join(dedented)
+        assert command.strip() != '', 'empty run command'
+        return command
+    value = run_value
+    if len(value) >= 2 and ((value[0] == '"' and value[-1] == '"')
+                            or (value[0] == "'" and value[-1] == "'")):
+        value = value[1:-1]
+    assert value.strip() != '', 'empty run command'
+    return value
+
+
+class ReleaseWorkflowTests(unittest.TestCase):
+    def test_gates_precede_packaging_precedes_publish(self):
+        text = WORKFLOW.read_text()
+        positions = [text.index(f'- name: {name}') for name in ORDER]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_only_log_preservation_overrides_success_gating(self):
+        gated = set()
+        for block in blocks(WORKFLOW.read_text()):
+            name = block.splitlines()[0]
+            if any(re.match(r'\s*if\s*:', line) for line in block.splitlines()[1:]):
+                gated.add(name)
+        self.assertEqual(len(gated), 1)
+        self.assertTrue(next(iter(gated)).endswith('- name: Preserve release logs'))
+
+    def test_workflow_invokes_trust_script_before_any_work(self):
+        block = block_named(blocks(WORKFLOW.read_text()), 'Validate trusted release tag')
+        self.assertIn('Scripts/validate-release-tag.sh', block)
+        self.assertTrue(SCRIPT.exists(), 'production trust script missing')
+        self.assertTrue(os.access(SCRIPT, os.X_OK), 'trust script must be executable')
+        body = SCRIPT.read_text()
+        for token in (r'^v[0-9]+\.[0-9]+\.[0-9]+$', 'git rev-parse',
+                      'merge-base --is-ancestor', 'gh release view',
+                      'release not found', 'Could not verify'):
+            self.assertIn(token, body)
+
+
+class ReleaseTagTrustBehaviorTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        scripts = root / 'Scripts'
+        scripts.mkdir()
+        shutil.copy(SCRIPT, scripts / 'validate-release-tag.sh')
+        bindir = root / 'bin'
+        bindir.mkdir()
+        write_exe(bindir / 'git', GIT_STUB)
+        write_exe(bindir / 'gh', GH_STUB)
+        self.root = root
+        self.bindir = bindir
+        self.git_log = root / 'git.log'
+        self.gh_log = root / 'gh.log'
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_trust(self, tag='v1.2.0', head='abc123def', tag_sha='abc123def',
+                  ancestry_exit=0, gh_mode='absent',
+                  gh_text='release not found', unset_tag=False):
+        env = dict(os.environ)
+        env['PATH'] = str(self.bindir) + os.pathsep + env['PATH']
+        if unset_tag:
+            env.pop('RELEASE_TAG', None)
+        else:
+            env['RELEASE_TAG'] = tag
+        env['HEAD_SHA'] = head
+        env['TAG_SHA'] = tag_sha
+        env['ANCESTRY_EXIT'] = str(ancestry_exit)
+        env['GH_MODE'] = gh_mode
+        env['GH_TEXT'] = gh_text
+        env['GIT_LOG'] = str(self.git_log)
+        env['GH_LOG'] = str(self.gh_log)
+        return subprocess.run(['bash', str(self.root / 'Scripts' / 'validate-release-tag.sh')],
+                              capture_output=True, text=True, timeout=60,
+                              env=env, cwd=self.tmp.name)
+
+    def test_trusted_tag_accepted(self):
+        r = self.run_trust()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('Trusted release tag v1.2.0 verified', r.stdout)
+
+    def test_non_main_ancestry_refused(self):
+        r = self.run_trust(ancestry_exit=1)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('not on origin/main ancestry', r.stderr)
+        self.assertNotIn('Trusted release tag', r.stdout)
+
+    def test_head_tag_mismatch_refused(self):
+        r = self.run_trust(head='aaa111', tag_sha='bbb222')
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('does not match tag commit', r.stderr)
+        self.assertNotIn('Trusted release tag', r.stdout)
+
+    def test_malformed_tags_refused_before_any_git_work(self):
+        for tag in ['v1.2', 'v1.2.3.4', 'main', '1.2.0', 'v1.2.0 ',
+                    'v1.2.0;echo', 'v1.2.0\nv9.9.9']:
+            if self.git_log.exists():
+                self.git_log.unlink()
+            if self.gh_log.exists():
+                self.gh_log.unlink()
+            r = self.run_trust(tag=tag)
+            self.assertNotEqual(r.returncode, 0, tag)
+            self.assertIn('must be vMAJOR.MINOR.PATCH', r.stderr, tag)
+            self.assertNotIn('Trusted release tag', r.stdout, tag)
+            self.assertFalse(self.git_log.exists(), f'git reached for {tag!r}')
+            self.assertFalse(self.gh_log.exists(), f'gh reached for {tag!r}')
+
+    def test_missing_release_tag_refused(self):
+        r = self.run_trust(unset_tag=True)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('RELEASE_TAG', r.stderr)
+        self.assertFalse(self.git_log.exists())
+
+    def test_existing_release_refused(self):
+        r = self.run_trust(gh_mode='exists')
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('Release already exists', r.stderr)
+        self.assertNotIn('Trusted release tag', r.stdout)
+
+    def test_gh_lookup_failure_fails_closed_not_absent(self):
+        for text in ['Error: HTTP 500 from the GitHub API',
+                     "GraphQL: Could not resolve to a Repository with the name 'x/y'."]:
+            r = self.run_trust(gh_text=text)
+            self.assertNotEqual(r.returncode, 0, text)
+            self.assertIn('Could not verify release absence', r.stderr, text)
+            self.assertIn(text.split(':')[0] if ':' in text else text[:20], r.stderr, text)
+            self.assertNotIn('Trusted release tag', r.stdout, text)
+            self.assertNotIn('Release already exists', r.stderr, text)
+
+    def test_gh_empty_error_fails_closed(self):
+        r = self.run_trust(gh_text='')
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('Could not verify release absence', r.stderr)
+        self.assertNotIn('Trusted release tag', r.stdout)
+
+
+class ReleaseWorkflowComposedStepTests(unittest.TestCase):
+    """Execute the actual workflow trust run field (rev2 F1 regression).
+
+    Production call site: .github/workflows/release.yml step Validate trusted
+    release tag, run field, executed as Actions does with bash -e -o pipefail.
+    Reuses the git/gh fixtures above. Kills the call-site narrowing mutant
+    run: ./Scripts/validate-release-tag.sh || true, which preserves the
+    searched token while discarding refusal.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        scripts = root / 'Scripts'
+        scripts.mkdir()
+        target = scripts / 'validate-release-tag.sh'
+        shutil.copy(SCRIPT, target)
+        target.chmod(0o755)
+        bindir = root / 'bin'
+        bindir.mkdir()
+        write_exe(bindir / 'git', GIT_STUB)
+        write_exe(bindir / 'gh', GH_STUB)
+        self.root = root
+        self.bindir = bindir
+        self.git_log = root / 'git.log'
+        self.gh_log = root / 'gh.log'
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_workflow_trust_step(self, tag='v1.2.0', head='abc123def',
+                                tag_sha='abc123def', ancestry_exit=0,
+                                gh_mode='absent', gh_text='release not found'):
+        command = trust_run_command()
+        self.assertIn('validate-release-tag.sh', command)
+        env = dict(os.environ)
+        env['PATH'] = str(self.bindir) + os.pathsep + env['PATH']
+        env['RELEASE_TAG'] = tag
+        env['HEAD_SHA'] = head
+        env['TAG_SHA'] = tag_sha
+        env['ANCESTRY_EXIT'] = str(ancestry_exit)
+        env['GH_MODE'] = gh_mode
+        env['GH_TEXT'] = gh_text
+        env['GIT_LOG'] = str(self.git_log)
+        env['GH_LOG'] = str(self.gh_log)
+        return subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', command],
+                              capture_output=True, text=True, timeout=60,
+                              env=env, cwd=self.tmp.name)
+
+    def test_workflow_trust_step_accepts_trusted_tag(self):
+        r = self.run_workflow_trust_step()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('Trusted release tag v1.2.0 verified', r.stdout)
+
+    def test_workflow_trust_step_refuses_non_main_ancestry(self):
+        r = self.run_workflow_trust_step(ancestry_exit=1)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('not on origin/main ancestry', r.stderr)
+        self.assertNotIn('Trusted release tag', r.stdout)
+        self.assertTrue(self.git_log.exists())
+
+
+if __name__ == '__main__':
+    unittest.main()
+
+codex
+Revision 3 reports 5 of 6 AC rows covered by tests, with integration readiness treated as a procedural bound. The new tests execute the workflow’s actual `run` command. I’ll verify that they pass on the candidate and catch the previously surviving `|| true` bypass.
+
+exec
+/bin/zsh -lc 'git diff --stat 0acdbb9b6db1b5f08efd76595f458e22f5434679 612a90caf05473072ec6d00886268d8a4fabee24; git show 612a90caf05473072ec6d00886268d8a4fabee24:.github/workflows/release.yml; git diff 7d2126aef02d9bb2c5443f5ef433462fda537732 612a90caf05473072ec6d00886268d8a4fabee24 -- RELEASING.md' in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 0ms:
+ Scripts/tests/test_release_workflow.py | 113 +++++++++++++++++++++++++++++++++
+ 1 file changed, 113 insertions(+)
+name: Release DMG
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing vMAJOR.MINOR.PATCH tag on main
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: runner-control-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: [self-hosted, macOS, ARM64, macbook-iv]
+    environment: release
+    timeout-minutes: 90
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      NOTARY_PROFILE: RunnerControl-notary
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+      - name: Validate trusted release tag
+        run: ./Scripts/validate-release-tag.sh
+      - name: Release prerequisites
+        run: ./Scripts/release-preflight.sh
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.25.5'
+          cache: false
+      - name: Build pinned scaffold generator
+        shell: bash
+        run: |
+          git clone https://github.com/relux-works/skill-ios-app-manager.git "$RUNNER_TEMP/runner-control-generator-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          cd "$RUNNER_TEMP/runner-control-generator-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          git checkout --detach 755a29538dfe0867671ac4291b016bf42d93a299
+          cd tuist-starter
+          env -u GOROOT go build -o "$RUNNER_TEMP/runner-control-ios-app-manager" ./cmd/ios-app-manager
+          echo "IOS_APP_MANAGER=$RUNNER_TEMP/runner-control-ios-app-manager" >> "$GITHUB_ENV"
+      - name: Unit tests
+        run: |
+          swift test --package-path Packages/RunnerControlCore --scratch-path "$RUNNER_TEMP/runner-control-release-tests"
+          python3 -m unittest discover -s Scripts/tests -v
+      - name: Build, notarize, staple and sign appcast
+        id: package
+        run: ./Scripts/release.sh
+      - name: Publish complete GitHub Release
+        env:
+          RELEASE_DIST: ${{ steps.package.outputs.dist }}
+        shell: bash
+        run: |
+          gh release create "$RELEASE_TAG" --verify-tag --draft --title "Runner Control $RELEASE_TAG" --generate-notes
+          gh release upload "$RELEASE_TAG" "$RELEASE_DIST/RunnerControl.dmg" "$RELEASE_DIST/appcast.xml" "$RELEASE_DIST/SHA256SUMS"
+          gh release edit "$RELEASE_TAG" --draft=false --latest
+      - name: Preserve release logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .temp/release-*/archive.log
+            .temp/release-*/export.log
+            .temp/release-*/*-notary.json
+          if-no-files-found: ignore
+          retention-days: 14
+diff --git a/RELEASING.md b/RELEASING.md
+index f576e28..37bdab8 100644
+--- a/RELEASING.md
++++ b/RELEASING.md
+@@ -28,6 +28,71 @@ Each feed points to its immutable version-specific DMG URL. The application foll
+ 
+ Build numbers are derived from the release workflow run number and attempt. Keep this workflow's run counter continuous; do not replace it with a new workflow whose counter starts over without adjusting the build-number scheme.
+ 
++## Exact requirements reference
++
++Every value below is enforced by the named script and covered by `Scripts/tests`. If a value changes, update the script, this section, and the tests together.
++
++| Requirement | Exact value | Enforced by |
++|---|---|---|
++| Signing identity | Exactly one `Developer ID Application` certificate with private key for team `262RZ595FP`; Apple Development and other teams are refused | `release-preflight.sh`, `release_metadata.py signing-identity`, `release.sh` DMG signing |
++| Bundle and team | `works.relux.runnercontrol` / `262RZ595FP` | `release_metadata.py prepare` |
++| Release tag | `vMAJOR.MINOR.PATCH`, equal to `marketing_version`, on `main` ancestry at `HEAD`; an existing release refuses the run; unknown `gh` lookup failures refuse instead of passing as absent | `validate-release-tag.sh` (invoked by `release.yml`), `prepare` |
++| Build number | `project_version` = `(100 + run).attempt` with run 1..9899 and attempt 1..99 (for example run 1 attempt 1 → `101.1`) | `release_metadata.py prepare` |
++| Notary profile | `RunnerControl-notary` in the runner's login keychain, unlocked in the runner session; `notarytool` waits up to 30 minutes per artifact (app ZIP, then DMG), each needs its own `Accepted` plus `stapler staple`/`validate` before publication | `release-preflight.sh`, `release.sh` notarize |
++| Sparkle account and feed | Account `works.relux.runnercontrol`; private key must match `SUPublicEDKey`; feed `https://github.com/relux-works/runner-control/releases/latest/download/appcast.xml` | `release-preflight.sh`, `prepare` |
++| Sparkle tools | Version `2.10.0`, SHA-256 `c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c` | `sparkle-tools.sh` |
++| Appcast | Exactly one item; `sparkle:version` = build, `shortVersionString` = marketing version, enclosure URL `https://github.com/relux-works/runner-control/releases/download/<tag>/RunnerControl.dmg`, 64-byte `edSignature`, `length` = DMG bytes, minimum macOS 14 | `release_metadata.py verify` |
++| Scaffold generator | `skill-ios-app-manager` at `755a29538dfe0867671ac4291b016bf42d93a299`, built with Go `1.25.5` | `release.yml` |
++| Host tools | Xcode, Tuist 4.9.0, GitHub CLI, Python 3, plus `xcodebuild xcrun codesign security hdiutil tuist gh python3` on `PATH` | `release-preflight.sh` |
++| Publish order | Preflight → unit tests → package/notarize/verify → draft → upload DMG + appcast + SHA256SUMS → publish as latest; the publish step runs only after a successful package and never overwrites published assets | `release.yml`, `release.sh` |
++
++## Failure recovery
++
++Release run 35040921163 (`v1.1.0`) failed in Release prerequisites before any
++build or signing: the login keychain was locked in the runner session, so
++`notarytool` could not read profile `RunnerControl-notary` (`keychainLocked`).
++No draft or published release was created.
++
++Per coordinator directive, `v1.1.0` is neither retried nor deleted: the tag
++stays as-is with no release, and the approved next release is new `v1.2.0`
++after product integration. No new tag is created and nothing is published
++until product review and coordinator dispatch.
++
++If a future run reports a locked keychain in Release prerequisites, unlock
++the login keychain on macbook-iv with a console login as the runner user (no
++credentials are printed or exported), enable the runner in Runner Control,
++then run **Release DMG** via workflow_dispatch with the existing tag. Do not
++delete or re-push the tag and do not create the release by hand; the workflow
++refuses to overwrite published assets. If prerequisites still report a locked
++keychain, the runner session has no unlocked login keychain; unlock it and
++dispatch again.
++
++Preflight also fails fast when no Developer ID Application identity for team
++`262RZ595FP` is present, when several are present (remove the stale
++certificate so signing is unambiguous), when the notarytool profile is missing
++(recreate it with `xcrun notarytool store-credentials` as above), when the
++Sparkle private key does not match `SUPublicEDKey`, or when signing
++identities cannot be read at all (a failed read is reported as unknown,
++never as missing or verified).
++
++Apple notarization waits up to 30 minutes per artifact (app ZIP, then DMG).
++Each artifact must receive its own `Accepted` result and pass `stapler staple`
++plus `stapler validate` before final publication; `release.sh` enforces this
++and only `Accepted` proceeds for each submission. If a wait times out, the
++submission ID in the release logs can be inspected read-only with
++`xcrun notarytool info <id> --keychain-profile RunnerControl-notary` (status
++only); retrying dispatches a new run with a new monotonic build number.
++
++Diagnostic signing-check submission `6d537548-8c24-48ea-89b5-7ebb2dc959d5`
++was `In Progress` at 02:49 UTC. Do not duplicate that test submission and do
++not treat it as a release prerequisite: it is not a release artifact and its
++state does not gate the next release. Inspect it read-only only if needed
++(`xcrun notarytool info 6d537548-8c24-48ea-89b5-7ebb2dc959d5
++--keychain-profile RunnerControl-notary`, status only). Submitting the
++genuinely new release app ZIP and DMG for `v1.2.0` is authorized and is not
++duplication; each must still reach its own `Accepted` and pass staple
++verification before the draft is published.
++
+ ## Validation status
+ 
+ Core and release metadata tests pass locally and in GitHub Actions; the Sparkle-enabled app builds successfully. Developer ID signing and the notarytool profile are validated on macbook-iv. The complete notarization and update-install cycle requires the first accepted Apple submission and two published versions. Check GitHub Releases for publication status.
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import pathlib, tempfile, subprocess, tarfile, io
+root=pathlib.Path(tempfile.mkdtemp(prefix='review-rev3-'))
+data=subprocess.check_output(['git','archive','612a90caf05473072ec6d00886268d8a4fabee24'])
+with tarfile.open(fileobj=io.BytesIO(data)) as t: t.extractall(root)
+pathlib.Path('/tmp/review-rev3-root').write_text(str(root))
+log=root/'review-evidence.log'
+with log.open('w') as f:
+ p=subprocess.run(['python3','-m','unittest','discover','-s','Scripts/tests','-v'],cwd=root,stdout=f,stderr=subprocess.STDOUT)
+ f.write(f'\\nPRISTINE_EXIT={p.returncode}\\n')
+print(root)
+print(log.read_text()[-1500:])
+PY" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+exec
+/bin/zsh -lc 'task-board spawn directives "$TASK_BOARD_RUN_ID"; task-board resource get TASK-260916-2vzsmy TASK-260916-2vzsmy_mutants-rev3.log' in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 268ms:
+Active Goal: none (run is not goal-bound)
+No directives recorded for RUN-260916-f9a9a4
+.temp/resources/TASK-260916-2vzsmy/TASK-260916-2vzsmy_mutants-rev3.log
+
+exec
+/bin/zsh -lc 'cat .temp/resources/TASK-260916-2vzsmy/TASK-260916-2vzsmy_mutants-rev3.log; git diff --check 7d2126aef02d9bb2c5443f5ef433462fda537732 612a90caf05473072ec6d00886268d8a4fabee24' in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 0ms:
+original run: run: ./Scripts/validate-release-tag.sh
+mutant run:   run: ./Scripts/validate-release-tag.sh || true
+token preserved: validate-release-tag.sh present in mutant block: True
+--- regression under mutant ---
+
+test_workflow_trust_step_refuses_non_main_ancestry (Scripts.tests.test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_refuses_non_main_ancestry) ... FAIL
+
+======================================================================
+FAIL: test_workflow_trust_step_refuses_non_main_ancestry (Scripts.tests.test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_refuses_non_main_ancestry)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree/Scripts/tests/test_release_workflow.py", line 300, in test_workflow_trust_step_refuses_non_main_ancestry
+    self.assertNotEqual(r.returncode, 0)
+AssertionError: 0 == 0
+
+----------------------------------------------------------------------
+Ran 1 test in 0.341s
+
+FAILED (failures=1)
+
+regression exit=1
+regression failed as required: True
+--- trusted-path under mutant ---
+
+test_workflow_trust_step_accepts_trusted_tag (Scripts.tests.test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_accepts_trusted_tag) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.491s
+
+OK
+
+trusted exit=0
+--- static wiring under mutant ---
+
+test_workflow_invokes_trust_script_before_any_work (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_workflow_invokes_trust_script_before_any_work) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+OK
+
+static exit=0
+--- full workflow module under mutant ---
+test_existing_release_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_existing_release_refused) ... ok
+test_gh_empty_error_fails_closed (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_empty_error_fails_closed) ... ok
+test_gh_lookup_failure_fails_closed_not_absent (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_lookup_failure_fails_closed_not_absent) ... ok
+test_head_tag_mismatch_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_head_tag_mismatch_refused) ... ok
+test_malformed_tags_refused_before_any_git_work (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_malformed_tags_refused_before_any_git_work) ... ok
+test_missing_release_tag_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_missing_release_tag_refused) ... ok
+test_non_main_ancestry_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_non_main_ancestry_refused) ... ok
+test_trusted_tag_accepted (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_trusted_tag_accepted) ... ok
+test_workflow_trust_step_accepts_trusted_tag (Scripts.tests.test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_accepts_trusted_tag) ... ok
+test_workflow_trust_step_refuses_non_main_ancestry (Scripts.tests.test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_refuses_non_main_ancestry) ... FAIL
+test_gates_precede_packaging_precedes_publish (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_gates_precede_packaging_precedes_publish) ... ok
+test_only_log_preservation_overrides_success_gating (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_only_log_preservation_overrides_success_gating) ... ok
+test_workflow_invokes_trust_script_before_any_work (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_workflow_invokes_trust_script_before_any_work) ... ok
+
+======================================================================
+FAIL: test_workflow_trust_step_refuses_non_main_ancestry (Scripts.tests.test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_refuses_non_main_ancestry)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree/Scripts/tests/test_release_workflow.py", line 300, in test_workflow_trust_step_refuses_non_main_ancestry
+    self.assertNotEqual(r.returncode, 0)
+AssertionError: 0 == 0
+
+----------------------------------------------------------------------
+Ran 13 tests in 2.658s
+
+FAILED (failures=1)
+
+module exit=1
+MUTANT_KILLED=True
+HARNESS_OK=True
+restored byte-identical: True
+
+ succeeded in 28193ms:
+/var/folders/v5/c7x5kxfd2dvc6gmb1772xdp00000gn/T/review-rev3-ghu16smg
+d (test_release_workflow.ReleaseTagTrustBehaviorTests.test_head_tag_mismatch_refused) ... ok
+test_malformed_tags_refused_before_any_git_work (test_release_workflow.ReleaseTagTrustBehaviorTests.test_malformed_tags_refused_before_any_git_work) ... ok
+test_missing_release_tag_refused (test_release_workflow.ReleaseTagTrustBehaviorTests.test_missing_release_tag_refused) ... ok
+test_non_main_ancestry_refused (test_release_workflow.ReleaseTagTrustBehaviorTests.test_non_main_ancestry_refused) ... ok
+test_trusted_tag_accepted (test_release_workflow.ReleaseTagTrustBehaviorTests.test_trusted_tag_accepted) ... ok
+test_workflow_trust_step_accepts_trusted_tag (test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_accepts_trusted_tag) ... ok
+test_workflow_trust_step_refuses_non_main_ancestry (test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_refuses_non_main_ancestry) ... ok
+test_gates_precede_packaging_precedes_publish (test_release_workflow.ReleaseWorkflowTests.test_gates_precede_packaging_precedes_publish) ... ok
+test_only_log_preservation_overrides_success_gating (test_release_workflow.ReleaseWorkflowTests.test_only_log_preservation_overrides_success_gating) ... ok
+test_workflow_invokes_trust_script_before_any_work (test_release_workflow.ReleaseWorkflowTests.test_workflow_invokes_trust_script_before_any_work) ... ok
+
+----------------------------------------------------------------------
+Ran 62 tests in 27.828s
+
+OK
+
+PRISTINE_EXIT=0
+
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+from pathlib import Path
+p=Path(Path('/tmp/review-rev3-root').read_text())
+print((p/'review-evidence.log').read_text()[-1800:])
+PY" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 0ms:
+mpty_error_fails_closed (test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_empty_error_fails_closed) ... ok
+test_gh_lookup_failure_fails_closed_not_absent (test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_lookup_failure_fails_closed_not_absent) ... ok
+test_head_tag_mismatch_refused (test_release_workflow.ReleaseTagTrustBehaviorTests.test_head_tag_mismatch_refused) ... ok
+test_malformed_tags_refused_before_any_git_work (test_release_workflow.ReleaseTagTrustBehaviorTests.test_malformed_tags_refused_before_any_git_work) ... ok
+test_missing_release_tag_refused (test_release_workflow.ReleaseTagTrustBehaviorTests.test_missing_release_tag_refused) ... ok
+test_non_main_ancestry_refused (test_release_workflow.ReleaseTagTrustBehaviorTests.test_non_main_ancestry_refused) ... ok
+test_trusted_tag_accepted (test_release_workflow.ReleaseTagTrustBehaviorTests.test_trusted_tag_accepted) ... ok
+test_workflow_trust_step_accepts_trusted_tag (test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_accepts_trusted_tag) ... ok
+test_workflow_trust_step_refuses_non_main_ancestry (test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_refuses_non_main_ancestry) ... ok
+test_gates_precede_packaging_precedes_publish (test_release_workflow.ReleaseWorkflowTests.test_gates_precede_packaging_precedes_publish) ... ok
+test_only_log_preservation_overrides_success_gating (test_release_workflow.ReleaseWorkflowTests.test_only_log_preservation_overrides_success_gating) ... ok
+test_workflow_invokes_trust_script_before_any_work (test_release_workflow.ReleaseWorkflowTests.test_workflow_invokes_trust_script_before_any_work) ... ok
+
+----------------------------------------------------------------------
+Ran 62 tests in 27.828s
+
+OK
+
+PRISTINE_EXIT=0
+
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+from pathlib import Path
+import subprocess
+root=Path(Path('/tmp/review-rev3-root').read_text())
+p=root/'.github/workflows/release.yml'
+original=p.read_bytes()
+assert original.count(b'run: ./Scripts/validate-release-tag.sh\\n')==1
+p.write_bytes(original.replace(b'run: ./Scripts/validate-release-tag.sh\\n',b'run: ./Scripts/validate-release-tag.sh || true\\n'))
+try:
+ r=subprocess.run(['python3','-m','unittest','Scripts.tests.test_release_workflow','-v'],cwd=root,capture_output=True,text=True)
+ with (root/'review-evidence.log').open('a') as f:
+  f.write('\\nEXACT TOKEN-PRESERVING CALLER MUTANT: || true\\n'+r.stdout+r.stderr+f'\\nMUTANT_EXIT={r.returncode}\\n')
+ print(r.stderr[-1800:]);print('MUTANT_EXIT='+str(r.returncode))
+ assert r.returncode==1 and 'FAILED (failures=1)' in r.stderr and 'test_workflow_trust_step_refuses_non_main_ancestry' in r.stderr
+finally:
+ p.write_bytes(original)
+ with (root/'review-evidence.log').open('a') as f:f.write('RESTORED_BYTE_IDENTICAL='+str(p.read_bytes()==original)+'\\n')
+PY" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 2680ms:
+pts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_non_main_ancestry_refused) ... ok
+test_trusted_tag_accepted (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_trusted_tag_accepted) ... ok
+test_workflow_trust_step_accepts_trusted_tag (Scripts.tests.test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_accepts_trusted_tag) ... ok
+test_workflow_trust_step_refuses_non_main_ancestry (Scripts.tests.test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_refuses_non_main_ancestry) ... FAIL
+test_gates_precede_packaging_precedes_publish (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_gates_precede_packaging_precedes_publish) ... ok
+test_only_log_preservation_overrides_success_gating (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_only_log_preservation_overrides_success_gating) ... ok
+test_workflow_invokes_trust_script_before_any_work (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_workflow_invokes_trust_script_before_any_work) ... ok
+
+======================================================================
+FAIL: test_workflow_trust_step_refuses_non_main_ancestry (Scripts.tests.test_release_workflow.ReleaseWorkflowComposedStepTests.test_workflow_trust_step_refuses_non_main_ancestry)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/var/folders/v5/c7x5kxfd2dvc6gmb1772xdp00000gn/T/review-rev3-ghu16smg/Scripts/tests/test_release_workflow.py", line 300, in test_workflow_trust_step_refuses_non_main_ancestry
+    self.assertNotEqual(r.returncode, 0)
+AssertionError: 0 == 0
+
+----------------------------------------------------------------------
+Ran 13 tests in 2.423s
+
+FAILED (failures=1)
+
+MUTANT_EXIT=1
+
+codex
+All 62 tests passed against an isolated copy of the exact candidate tree. The `|| true` mutant failed the new ancestry regression while the trusted-input and static wiring tests still passed. This closes F1; I’ll attach the evidence and record acceptance for integration.
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+from pathlib import Path
+import subprocess
+root=Path(Path('/tmp/review-rev3-root').read_text())
+verdict='''# Review verdict: accepted
+
+Candidate: CR-TASK-260916-2vzsmy-3 revision 3, tree 612a90caf05473072ec6d00886268d8a4fabee24; repository_delta=present.
+
+## Finding resolution
+
+Rev2 F1 (repeat of rev1 F1) is resolved. The named regression ReleaseWorkflowComposedStepTests.test_workflow_trust_step_refuses_non_main_ancestry reads the actual Validate trusted release tag run field from .github/workflows/release.yml and executes it through bash -e -o pipefail with the production trust script and controlled git/gh fixtures. Its companion test_workflow_trust_step_accepts_trusted_tag confirms trusted input succeeds.
+
+Independently archived the exact candidate tree, ran all 62 tests successfully (27.828s, exit 0), then applied the exact token-preserving caller mutant "'`./Scripts/validate-release-tag.sh || true` only in the disposable archive. The 13-test workflow module failed exactly the new ancestry regression (2.423s, exit 1); trusted input and static wiring still passed. Restored the archived workflow byte-identically. Shape attacked: bypass path around the check at the production caller. Full output is attached as TASK-260916-2vzsmy_review-attack-rev3.log.
+
+Diff against rev2 tree 0acdbb9b6db1b5f08efd76595f458e22f5434679 confirms only Scripts/tests/test_release_workflow.py changed (+113 lines). Prior production script gates and the resolved F2 documentation remain unchanged. No new finding. git diff --check against the task base passed.
+
+## Coverage and bounds
+
+5 of 6 AC rows driven, 1 procedural bound, matching the producer coverage matrix inspected before code review. Release packaging: test_release_signs_dmg_with_resolved_team_identity and refusal cases drive Scripts/release.sh. Preflight: test_preflight_passes_with_valid_credentials and refusal cases drive Scripts/release-preflight.sh. Documentation: ReleaseDocsTests check RELEASING.md against release sources. Metadata: the full Scripts/tests suite drives release_metadata.py. Workflow: the two named composed-step tests above now drive the actual trust run field, supplemented by ReleaseTagTrustBehaviorTests. Candidate review/integration readiness remains procedural, not a test claim.
+
+Personally reran the entire 62-test release suite and the exact workflow caller attack; prior M12-M17 attacks were not rerun, and no new execution is claimed for them. Consulted rev2 verdict and rev3 producer evidence and mutant log. No Swift/UI tests, real Apple notarization, publication, live runner operations, tag creation or manual Story commits. Stubbed git/gh and packaging tools establish local behavior, not a full hosted Actions or Apple round trip. Extractor limitations for other YAML forms remain stated bounds; the current inline production command is extracted exactly. Actual release artifacts still require their own Accepted notarization and staple verification; diagnostic submission is not an extra prerequisite.
+
+Run goal queried before verdict: not goal-bound. Acceptance routes through accept_cr to integrating, meaning accepted but not landed or published.
+'"'''
+p=root/'TASK-260916-2vzsmy_review-verdict-rev3.md';p.write_text(verdict)
+for path,name,desc in [(root/'review-evidence.log','TASK-260916-2vzsmy_review-attack-rev3.log','Independent exact-tree 62-test pass and token-preserving workflow caller mutant killed'),(p,p.name,'Accepted revision 3: composed workflow F1 regression independently verified')]:
+ subprocess.run(['task-board','resource','add','TASK-260916-2vzsmy',str(path),'--type','outcome','--name',name,'-d',desc],check=True)
+log=root/'TASK-260916-2vzsmy_review-logbook-rev3.md'
+log.write_text('Review logbook: rev3 resolves repeated F1 caller bypass. Exact-tree 62-test suite passed; || true caller mutant killed solely by new composed ancestry regression. Accept for producer integration; no release authorization exercised. No new findings. See revision 3 verdict and attack log.\\n')
+subprocess.run(['task-board','resource','add','TASK-260916-2vzsmy',str(log),'--type','outcome','--name',log.name,'-d','Reviewer logbook: repeated F1 resolved, acceptance for integration'],check=True)
+PY" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 2132ms:
+Attached TASK-260916-2vzsmy_review-attack-rev3.log on TASK-260916-2vzsmy as outcome
+Attached TASK-260916-2vzsmy_review-verdict-rev3.md on TASK-260916-2vzsmy as outcome
+Attached TASK-260916-2vzsmy_review-logbook-rev3.md on TASK-260916-2vzsmy as outcome
+
+exec
+/bin/zsh -lc 'task-board spawn goal "$TASK_BOARD_RUN_ID"; task-board m '"'accept_cr(TASK-260916-2vzsmy, revision=3, evidence=TASK-260916-2vzsmy_review-verdict-rev3.md)'" in /Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree
+ succeeded in 4440ms:
+Active Goal: none (run is not goal-bound)
+{"ok":true,"result":{"cr_id":"CR-TASK-260916-2vzsmy-3","cr_state":"accepted","evidence":"TASK-260916-2vzsmy_review-verdict-rev3.md","id":"TASK-260916-2vzsmy","next":"route a new integration run using the accepted revision's bound producer role and archetype","primary":{"action":"status_changed","element_id":"TASK-260916-2vzsmy","field":"status","new_value":"integrating","old_value":"reviewing"},"producer_archetype":"implementer","producer_role":"developer","repository_delta":"present","reviewer_run_id":"RUN-260916-f9a9a4","revision":3,"status":"integrating"}}
+
+codex
+Accepted revision 3 for TASK-260916-2vzsmy, release preflight and documentation.
+
+- All 62 tests passed independently.
+- The new regression caught the exact `|| true` workflow bypass, resolving F1.
+- Verdict, test evidence, and logbook attached.
+- Status: `integrating`—accepted, not landed or published.
+tokens used
+53,593
+Accepted revision 3 for TASK-260916-2vzsmy, release preflight and documentation.
+
+- All 62 tests passed independently.
+- The new regression caught the exact `|| true` workflow bypass, resolving F1.
+- Verdict, test evidence, and logbook attached.
+- Status: `integrating`—accepted, not landed or published.

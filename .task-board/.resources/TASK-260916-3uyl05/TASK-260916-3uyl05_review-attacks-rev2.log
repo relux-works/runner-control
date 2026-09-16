@@ -1,0 +1,96 @@
+Frozen candidate suite
+test_appcast_archive_binding (test_release_metadata.ReleaseMetadataTests.test_appcast_archive_binding) ... ok
+test_builds_increase_between_attempts_and_runs (test_release_metadata.ReleaseMetadataTests.test_builds_increase_between_attempts_and_runs) ... ok
+test_rejects_wrong_feed (test_release_metadata.ReleaseMetadataTests.test_rejects_wrong_feed) ... ok
+test_rejects_wrong_tag_or_identity (test_release_metadata.ReleaseMetadataTests.test_rejects_wrong_tag_or_identity) ... ok
+test_release_signs_dmg_with_resolved_team_identity (test_release_metadata.ReleaseWiringTests.test_release_signs_dmg_with_resolved_team_identity) ... ok
+test_rejects_apple_development_only (test_release_metadata.SigningIdentityTests.test_rejects_apple_development_only) ... ok
+test_rejects_missing_team_identity (test_release_metadata.SigningIdentityTests.test_rejects_missing_team_identity) ... ok
+test_rejects_multiple_team_identities (test_release_metadata.SigningIdentityTests.test_rejects_multiple_team_identities) ... ok
+test_rejects_near_match_team (test_release_metadata.SigningIdentityTests.test_rejects_near_match_team) ... ok
+test_rejects_same_team_apple_development (test_release_metadata.SigningIdentityTests.test_rejects_same_team_apple_development) ... ok
+test_returns_team_identity_ignoring_other_teams (test_release_metadata.SigningIdentityTests.test_returns_team_identity_ignoring_other_teams) ... ok
+test_multiple_identities_prevents_packaging_and_output (test_release_packaging.ReleasePackagingTests.test_multiple_identities_prevents_packaging_and_output) ... ok
+test_release_signs_dmg_with_resolved_team_identity (test_release_packaging.ReleasePackagingTests.test_release_signs_dmg_with_resolved_team_identity) ... ok
+test_retry_attempt_signs_with_resolved_team_identity (test_release_packaging.ReleasePackagingTests.test_retry_attempt_signs_with_resolved_team_identity) ... ok
+test_zero_identities_prevents_packaging_and_output (test_release_packaging.ReleasePackagingTests.test_zero_identities_prevents_packaging_and_output) ... ok
+test_failed_identity_read_with_empty_output_is_unknown_not_missing (test_release_preflight.ReleasePreflightTests.test_failed_identity_read_with_empty_output_is_unknown_not_missing) ... ok
+test_failed_identity_read_with_partial_output_is_not_verified (test_release_preflight.ReleasePreflightTests.test_failed_identity_read_with_partial_output_is_not_verified) ... ok
+test_locked_keychain_fails_with_unlock_guidance (test_release_preflight.ReleasePreflightTests.test_locked_keychain_fails_with_unlock_guidance) ... ok
+test_missing_identity_rejected (test_release_preflight.ReleasePreflightTests.test_missing_identity_rejected) ... ok
+test_missing_profile_names_profile_without_locked_guidance (test_release_preflight.ReleasePreflightTests.test_missing_profile_names_profile_without_locked_guidance) ... ok
+test_multiple_team_identities_rejected (test_release_preflight.ReleasePreflightTests.test_multiple_team_identities_rejected) ... ok
+test_preflight_passes_with_valid_credentials (test_release_preflight.ReleasePreflightTests.test_preflight_passes_with_valid_credentials) ... ok
+test_sparkle_key_mismatch_rejected (test_release_preflight.ReleasePreflightTests.test_sparkle_key_mismatch_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 23 tests in 8.461s
+
+OK
+
+exit=0
+
+Token-preserving retry narrowing mutant
+test_appcast_archive_binding (test_release_metadata.ReleaseMetadataTests.test_appcast_archive_binding) ... ok
+test_builds_increase_between_attempts_and_runs (test_release_metadata.ReleaseMetadataTests.test_builds_increase_between_attempts_and_runs) ... ok
+test_rejects_wrong_feed (test_release_metadata.ReleaseMetadataTests.test_rejects_wrong_feed) ... ok
+test_rejects_wrong_tag_or_identity (test_release_metadata.ReleaseMetadataTests.test_rejects_wrong_tag_or_identity) ... ok
+test_release_signs_dmg_with_resolved_team_identity (test_release_metadata.ReleaseWiringTests.test_release_signs_dmg_with_resolved_team_identity) ... ok
+test_rejects_apple_development_only (test_release_metadata.SigningIdentityTests.test_rejects_apple_development_only) ... ok
+test_rejects_missing_team_identity (test_release_metadata.SigningIdentityTests.test_rejects_missing_team_identity) ... ok
+test_rejects_multiple_team_identities (test_release_metadata.SigningIdentityTests.test_rejects_multiple_team_identities) ... ok
+test_rejects_near_match_team (test_release_metadata.SigningIdentityTests.test_rejects_near_match_team) ... ok
+test_rejects_same_team_apple_development (test_release_metadata.SigningIdentityTests.test_rejects_same_team_apple_development) ... ok
+test_returns_team_identity_ignoring_other_teams (test_release_metadata.SigningIdentityTests.test_returns_team_identity_ignoring_other_teams) ... ok
+test_multiple_identities_prevents_packaging_and_output (test_release_packaging.ReleasePackagingTests.test_multiple_identities_prevents_packaging_and_output) ... ok
+test_release_signs_dmg_with_resolved_team_identity (test_release_packaging.ReleasePackagingTests.test_release_signs_dmg_with_resolved_team_identity) ... ok
+test_retry_attempt_signs_with_resolved_team_identity (test_release_packaging.ReleasePackagingTests.test_retry_attempt_signs_with_resolved_team_identity) ... FAIL
+test_zero_identities_prevents_packaging_and_output (test_release_packaging.ReleasePackagingTests.test_zero_identities_prevents_packaging_and_output) ... ok
+test_failed_identity_read_with_empty_output_is_unknown_not_missing (test_release_preflight.ReleasePreflightTests.test_failed_identity_read_with_empty_output_is_unknown_not_missing) ... ok
+test_failed_identity_read_with_partial_output_is_not_verified (test_release_preflight.ReleasePreflightTests.test_failed_identity_read_with_partial_output_is_not_verified) ... ok
+test_locked_keychain_fails_with_unlock_guidance (test_release_preflight.ReleasePreflightTests.test_locked_keychain_fails_with_unlock_guidance) ... ok
+test_missing_identity_rejected (test_release_preflight.ReleasePreflightTests.test_missing_identity_rejected) ... ok
+test_missing_profile_names_profile_without_locked_guidance (test_release_preflight.ReleasePreflightTests.test_missing_profile_names_profile_without_locked_guidance) ... ok
+test_multiple_team_identities_rejected (test_release_preflight.ReleasePreflightTests.test_multiple_team_identities_rejected) ... ok
+test_preflight_passes_with_valid_credentials (test_release_preflight.ReleasePreflightTests.test_preflight_passes_with_valid_credentials) ... ok
+test_sparkle_key_mismatch_rejected (test_release_preflight.ReleasePreflightTests.test_sparkle_key_mismatch_rejected) ... ok
+
+======================================================================
+FAIL: test_retry_attempt_signs_with_resolved_team_identity (test_release_packaging.ReleasePackagingTests.test_retry_attempt_signs_with_resolved_team_identity)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/var/folders/v5/c7x5kxfd2dvc6gmb1772xdp00000gn/T/release-review-r2-2827w5hf/Scripts/tests/test_release_packaging.py", line 195, in test_retry_attempt_signs_with_resolved_team_identity
+    self.assertIn(f'--sign {EXPECTED_SHA}', self.codesign_log.read_text())
+AssertionError: '--sign 267D90FC976A48CF830BE7F41AE612999E025054' not found in '--verify --deep --strict /var/folders/v5/c7x5kxfd2dvc6gmb1772xdp00000gn/T/tmp9m_yliwz/.temp/release-201.2/export/RunnerControl.app\n--force --timestamp --sign - /var/folders/v5/c7x5kxfd2dvc6gmb1772xdp00000gn/T/tmp9m_yliwz/.temp/release-201.2/dist/RunnerControl.dmg\n'
+
+----------------------------------------------------------------------
+Ran 23 tests in 7.955s
+
+FAILED (failures=1)
+
+exit=1
+
+Partial-only failed-read narrowing mutant
+test_failed_identity_read_with_empty_output_is_unknown_not_missing (test_release_preflight.ReleasePreflightTests.test_failed_identity_read_with_empty_output_is_unknown_not_missing) ... ok
+test_failed_identity_read_with_partial_output_is_not_verified (test_release_preflight.ReleasePreflightTests.test_failed_identity_read_with_partial_output_is_not_verified) ... FAIL
+test_locked_keychain_fails_with_unlock_guidance (test_release_preflight.ReleasePreflightTests.test_locked_keychain_fails_with_unlock_guidance) ... ok
+test_missing_identity_rejected (test_release_preflight.ReleasePreflightTests.test_missing_identity_rejected) ... ok
+test_missing_profile_names_profile_without_locked_guidance (test_release_preflight.ReleasePreflightTests.test_missing_profile_names_profile_without_locked_guidance) ... ok
+test_multiple_team_identities_rejected (test_release_preflight.ReleasePreflightTests.test_multiple_team_identities_rejected) ... ok
+test_preflight_passes_with_valid_credentials (test_release_preflight.ReleasePreflightTests.test_preflight_passes_with_valid_credentials) ... ok
+test_sparkle_key_mismatch_rejected (test_release_preflight.ReleasePreflightTests.test_sparkle_key_mismatch_rejected) ... ok
+
+======================================================================
+FAIL: test_failed_identity_read_with_partial_output_is_not_verified (test_release_preflight.ReleasePreflightTests.test_failed_identity_read_with_partial_output_is_not_verified)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/var/folders/v5/c7x5kxfd2dvc6gmb1772xdp00000gn/T/release-review-r2-2827w5hf/Scripts/tests/test_release_preflight.py", line 130, in test_failed_identity_read_with_partial_output_is_not_verified
+    self.assertNotEqual(r.returncode, 0)
+AssertionError: 0 == 0
+
+----------------------------------------------------------------------
+Ran 8 tests in 2.674s
+
+FAILED (failures=1)
+
+exit=1

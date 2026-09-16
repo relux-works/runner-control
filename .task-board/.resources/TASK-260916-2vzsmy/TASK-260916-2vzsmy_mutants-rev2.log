@@ -1,0 +1,119 @@
+--- M12 applied ---
+bash -n exit=0
+test target: Scripts.tests.test_release_workflow exit=1
+  test_existing_release_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_existing_release_refused) ... ok
+  test_gh_empty_error_fails_closed (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_empty_error_fails_closed) ... ok
+  test_gh_lookup_failure_fails_closed_not_absent (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_lookup_failure_fails_closed_not_absent) ... ok
+  test_head_tag_mismatch_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_head_tag_mismatch_refused) ... ok
+  test_malformed_tags_refused_before_any_git_work (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_malformed_tags_refused_before_any_git_work) ... ok
+  test_missing_release_tag_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_missing_release_tag_refused) ... ok
+  test_non_main_ancestry_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_non_main_ancestry_refused) ... FAIL
+  test_trusted_tag_accepted (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_trusted_tag_accepted) ... ok
+  test_gates_precede_packaging_precedes_publish (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_gates_precede_packaging_precedes_publish) ... ok
+  test_only_log_preservation_overrides_success_gating (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_only_log_preservation_overrides_success_gating) ... ok
+  test_workflow_invokes_trust_script_before_any_work (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_workflow_invokes_trust_script_before_any_work) ... ok
+  FAIL: test_non_main_ancestry_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_non_main_ancestry_refused)
+  Ran 11 tests in 3.071s
+  FAILED (failures=1)
+named-fail-present=True failures=1
+restored OK: validate-release-tag.sh (diff exit 0)
+--- M13 applied ---
+bash -n exit=0
+test target: Scripts.tests.test_release_workflow exit=1
+  test_existing_release_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_existing_release_refused) ... ok
+  test_gh_empty_error_fails_closed (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_empty_error_fails_closed) ... ok
+  test_gh_lookup_failure_fails_closed_not_absent (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_lookup_failure_fails_closed_not_absent) ... ok
+  test_head_tag_mismatch_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_head_tag_mismatch_refused) ... ok
+  test_malformed_tags_refused_before_any_git_work (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_malformed_tags_refused_before_any_git_work) ... FAIL
+  test_missing_release_tag_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_missing_release_tag_refused) ... ok
+  test_non_main_ancestry_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_non_main_ancestry_refused) ... ok
+  test_trusted_tag_accepted (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_trusted_tag_accepted) ... ok
+  test_gates_precede_packaging_precedes_publish (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_gates_precede_packaging_precedes_publish) ... ok
+  test_only_log_preservation_overrides_success_gating (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_only_log_preservation_overrides_success_gating) ... ok
+  test_workflow_invokes_trust_script_before_any_work (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_workflow_invokes_trust_script_before_any_work) ... ok
+  FAIL: test_malformed_tags_refused_before_any_git_work (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_malformed_tags_refused_before_any_git_work)
+  Ran 11 tests in 2.788s
+  FAILED (failures=1)
+named-fail-present=True failures=1
+restored OK: validate-release-tag.sh (diff exit 0)
+--- M14 applied ---
+bash -n exit=0
+test target: Scripts.tests.test_release_workflow exit=1
+  test_existing_release_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_existing_release_refused) ... ok
+  test_gh_empty_error_fails_closed (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_empty_error_fails_closed) ... ok
+  test_gh_lookup_failure_fails_closed_not_absent (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_lookup_failure_fails_closed_not_absent) ... ok
+  test_head_tag_mismatch_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_head_tag_mismatch_refused) ... FAIL
+  test_malformed_tags_refused_before_any_git_work (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_malformed_tags_refused_before_any_git_work) ... ok
+  test_missing_release_tag_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_missing_release_tag_refused) ... ok
+  test_non_main_ancestry_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_non_main_ancestry_refused) ... ok
+  test_trusted_tag_accepted (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_trusted_tag_accepted) ... ok
+  test_gates_precede_packaging_precedes_publish (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_gates_precede_packaging_precedes_publish) ... ok
+  test_only_log_preservation_overrides_success_gating (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_only_log_preservation_overrides_success_gating) ... ok
+  test_workflow_invokes_trust_script_before_any_work (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_workflow_invokes_trust_script_before_any_work) ... ok
+  FAIL: test_head_tag_mismatch_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_head_tag_mismatch_refused)
+  Ran 11 tests in 2.255s
+  FAILED (failures=1)
+named-fail-present=True failures=1
+restored OK: validate-release-tag.sh (diff exit 0)
+--- M15 applied ---
+bash -n exit=0
+test target: Scripts.tests.test_release_workflow exit=1
+  test_existing_release_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_existing_release_refused) ... FAIL
+  test_gh_empty_error_fails_closed (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_empty_error_fails_closed) ... ok
+  test_gh_lookup_failure_fails_closed_not_absent (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_lookup_failure_fails_closed_not_absent) ... ok
+  test_head_tag_mismatch_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_head_tag_mismatch_refused) ... ok
+  test_malformed_tags_refused_before_any_git_work (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_malformed_tags_refused_before_any_git_work) ... ok
+  test_missing_release_tag_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_missing_release_tag_refused) ... ok
+  test_non_main_ancestry_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_non_main_ancestry_refused) ... ok
+  test_trusted_tag_accepted (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_trusted_tag_accepted) ... ok
+  test_gates_precede_packaging_precedes_publish (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_gates_precede_packaging_precedes_publish) ... ok
+  test_only_log_preservation_overrides_success_gating (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_only_log_preservation_overrides_success_gating) ... ok
+  test_workflow_invokes_trust_script_before_any_work (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_workflow_invokes_trust_script_before_any_work) ... ok
+  FAIL: test_existing_release_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_existing_release_refused)
+  Ran 11 tests in 2.084s
+  FAILED (failures=1)
+named-fail-present=True failures=1
+restored OK: validate-release-tag.sh (diff exit 0)
+--- M16 applied ---
+bash -n exit=0
+test target: Scripts.tests.test_release_workflow exit=1
+  test_existing_release_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_existing_release_refused) ... ok
+  test_gh_empty_error_fails_closed (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_empty_error_fails_closed) ... FAIL
+  test_gh_lookup_failure_fails_closed_not_absent (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_lookup_failure_fails_closed_not_absent) ... FAIL
+  test_head_tag_mismatch_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_head_tag_mismatch_refused) ... ok
+  test_malformed_tags_refused_before_any_git_work (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_malformed_tags_refused_before_any_git_work) ... ok
+  test_missing_release_tag_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_missing_release_tag_refused) ... ok
+  test_non_main_ancestry_refused (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_non_main_ancestry_refused) ... ok
+  test_trusted_tag_accepted (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_trusted_tag_accepted) ... ok
+  test_gates_precede_packaging_precedes_publish (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_gates_precede_packaging_precedes_publish) ... ok
+  test_only_log_preservation_overrides_success_gating (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_only_log_preservation_overrides_success_gating) ... ok
+  test_workflow_invokes_trust_script_before_any_work (Scripts.tests.test_release_workflow.ReleaseWorkflowTests.test_workflow_invokes_trust_script_before_any_work) ... ok
+  FAIL: test_gh_empty_error_fails_closed (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_empty_error_fails_closed)
+  FAIL: test_gh_lookup_failure_fails_closed_not_absent (Scripts.tests.test_release_workflow.ReleaseTagTrustBehaviorTests.test_gh_lookup_failure_fails_closed_not_absent)
+    File "/Users/iv/Documents/Codex/2026-09-15/new-chat-4/outputs/RunnerControl/.temp/STORY-260916-1o0gkc/worktree/Scripts/tests/test_release_workflow.py", line 180, in test_gh_lookup_failure_fails_clos
+  Ran 11 tests in 2.031s
+  FAILED (failures=2)
+named-fail-present=True failures=2
+restored OK: validate-release-tag.sh (diff exit 0)
+--- M17 applied ---
+test target: Scripts.tests.test_release_docs exit=1
+  test_docs_contain_no_secret_material (Scripts.tests.test_release_docs.ReleaseDocsTests.test_docs_contain_no_secret_material) ... ok
+  test_docs_name_signing_team_profile_and_account (Scripts.tests.test_release_docs.ReleaseDocsTests.test_docs_name_signing_team_profile_and_account) ... ok
+  test_docs_name_sparkle_tool_pin (Scripts.tests.test_release_docs.ReleaseDocsTests.test_docs_name_sparkle_tool_pin) ... ok
+  test_docs_name_toolchain_pins (Scripts.tests.test_release_docs.ReleaseDocsTests.test_docs_name_toolchain_pins) ... ok
+  test_docs_state_notarization_gates_and_diagnostic_handling (Scripts.tests.test_release_docs.ReleaseDocsTests.test_docs_state_notarization_gates_and_diagnostic_handling) ... FAIL
+  test_documented_run_attempt_bounds_match_code (Scripts.tests.test_release_docs.ReleaseDocsTests.test_documented_run_attempt_bounds_match_code) ... ok
+  FAIL: test_docs_state_notarization_gates_and_diagnostic_handling (Scripts.tests.test_release_docs.ReleaseDocsTests.test_docs_state_notarization_gates_and_diagnostic_handling)
+  AssertionError: 'Do not duplicate' not found in "# Release operations\n\n## One-time setup on macbook-iv\n\nThe release workflow uses this Mac's manually controlled runner. Enable it in Runner Control
+  Ran 6 tests in 0.010s
+  FAILED (failures=1)
+named-fail-present=True failures=1
+restored OK: RELEASING.md (diff exit 0)
+
+===== MUTANT SUMMARY =====
+M12: KILLED target=Scripts.tests.test_release_workflow named=test_non_main_ancestry_refused exit=1 failures=1
+M13: KILLED target=Scripts.tests.test_release_workflow named=test_malformed_tags_refused_before_any_git_work exit=1 failures=1
+M14: KILLED target=Scripts.tests.test_release_workflow named=test_head_tag_mismatch_refused exit=1 failures=1
+M15: KILLED target=Scripts.tests.test_release_workflow named=test_existing_release_refused exit=1 failures=1
+M16: KILLED target=Scripts.tests.test_release_workflow named=test_gh_lookup_failure_fails_closed_not_absent exit=1 failures=2
+M17: KILLED target=Scripts.tests.test_release_docs named=test_docs_state_notarization_gates_and_diagnostic_handling exit=1 failures=1
