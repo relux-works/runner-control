@@ -7,7 +7,8 @@ struct ForeignAction: Relux.Action {}
 struct ForeignEffect: Relux.Effect {}
 
 @Test @MainActor func reducerPreservesUnrelatedActionsAndCleansState() async {
-    let state = Runners.State()
+    let definitions = (1...2).map { Runners.Definition(id: "test.\($0)", title: "Test", detail: "", directory: URL(fileURLWithPath: "/tmp/test-\($0)"), githubURL: URL(string: "https://github.com/example")!) }
+    let state = Runners.State(definitions: definitions)
     let original = state.runners
     await state.reduce(with: ForeignAction())
     #expect(state.runners == original)

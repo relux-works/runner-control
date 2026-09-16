@@ -32,11 +32,15 @@ struct RunnerPage: View {
                     .font(.system(size: 30, weight: .medium)).foregroundStyle(.teal)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Runner Control").font(.system(size: 16, weight: .semibold))
-                    Text("macbook-iv · \(active) из \(props.runners.count) включено")
+                    Text("\(Host.current().localizedName ?? "Этот Mac") · \(active) из \(props.runners.count) включено")
                         .font(.system(size: 11)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Circle().fill(active > 0 ? Color.green : Color.secondary.opacity(0.4)).frame(width: 8, height: 8)
+            }
+            if props.runners.isEmpty {
+                Text("Установленные службы раннеров не найдены на этом Mac.")
+                    .font(.callout).foregroundStyle(.secondary)
             }
             VStack(spacing: 10) {
                 ForEach(props.runners) { runner in
@@ -62,7 +66,7 @@ struct RunnerPage: View {
                     .buttonStyle(.bordered)
                     .disabled(!props.changing.isEmpty || props.runners.allSatisfy { $0.status == .stopped || $0.status == .checking })
             }.controlSize(.regular)
-            Text("CI включается вручную. После перезагрузки раннеры останутся выключенными.")
+            Text("Закрытие приложения не останавливает CI. Автозапуск определяется настройками каждой службы.")
                 .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Divider()
             VStack(alignment: .leading, spacing: 9) {

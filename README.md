@@ -1,14 +1,14 @@
 # Runner Control
 
-Native macOS menu-bar app for the two registered GitHub Actions runners on this Mac.
+Native macOS menu-bar app for installed GitHub Actions runners on the current Mac.
 
 - Click the lightning icon in the menu bar for individual or combined start/stop controls.
 - Stopping CI requires confirmation because it can interrupt a build.
 - Opening or quitting the app does not start or stop CI automatically. Quitting with an active service shows a reminder.
 - Double-clicking the application again also opens a control window.
-- Neither runner starts automatically at login. Existing `.command` controls remain compatible.
+- Opening the app preserves each service’s existing login startup policy. Existing `.command` controls remain compatible.
 - Displayed state comes from local launchd, not GitHub's delayed online/busy status.
-- Two enabled runners can execute two jobs concurrently.
+- Each enabled runner can execute a job; multiple registrations may run concurrently.
 - Missing registrations, invalid service manifests, command failures and paths with spaces are rejected and surfaced.
 
 ## Identity
@@ -43,7 +43,7 @@ For logs and JUnit output use `Scripts/run-macos-package-tests.sh` from https://
 
 The app owns a single Relux runtime in `AppRegistry`; reopening a popover cannot recreate it. UI containers map state to plain page props/reactions. Core owns a HybridState, reducer, actor flow and actor launchd adapter. Process output is file-backed to avoid pipe deadlocks, commands have a timeout, and subprocess arguments are passed without a shell.
 
-The runner service files remain in `~/Library/GitHubActions/macbook-iv` and `~/Library/GitHubActions/cocoaskills`. The app does not store a GitHub token or modify repository workflows.
+At launch, the app discovers `manual-service.plist` files in immediate subdirectories of `~/Library/GitHubActions` and standard `actions.runner.*.plist` files in `~/Library/LaunchAgents`. It reads the registration name and GitHub scope from `.runner`, uses the actual service label/path, and deduplicates registrations. Discovery does not execute scripts, alter services or register runners. Arbitrary folder selection and GitHub sign-in are planned, not implemented. The app does not store a GitHub token or modify repository workflows.
 
 ## Releases and automatic updates
 

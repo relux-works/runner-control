@@ -22,8 +22,8 @@ let project = Project(
             bundleId: "works.relux.runnercontrol", deploymentTargets: .macOS("14.0"),
             infoPlist: .extendingDefault(with: [
                 "LSUIElement": .boolean(true),
-                "CFBundleShortVersionString": .string("1.1.0"),
-                "CFBundleVersion": .string("2"),
+                "CFBundleShortVersionString": .string("1.1.1"),
+                "CFBundleVersion": .string("101.99"),
                 "NSHumanReadableCopyright": .string("Relux Works"),
                 "SUAutomaticallyUpdate": .boolean(true),
                 "SUEnableAutomaticChecks": .boolean(true),

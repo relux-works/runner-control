@@ -6,18 +6,15 @@ extension Runners {
         public let detail: String
         public let directory: URL
         public let githubURL: URL
-        public init(id: String, title: String, detail: String, directory: URL, githubURL: URL) {
+        private let servicePlist: URL?
+        public init(id: String, title: String, detail: String, directory: URL, githubURL: URL, servicePlist: URL? = nil) {
             self.id = id; self.title = title; self.detail = detail
-            self.directory = directory; self.githubURL = githubURL
+            self.directory = directory; self.githubURL = githubURL; self.servicePlist = servicePlist
         }
-        public var plist: URL { directory.appendingPathComponent("manual-service.plist") }
+        public var plist: URL { servicePlist ?? directory.appendingPathComponent("manual-service.plist") }
         public var logs: URL { FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/" + id) }
         public static func installed(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [Self] {
-            let root = home.appendingPathComponent("Library/GitHubActions")
-            return [
-                .init(id: "actions.runner.relux-works.macbook-iv", title: "Relux Works", detail: "curator · launcher · spec · project-management", directory: root.appendingPathComponent("macbook-iv"), githubURL: URL(string: "https://github.com/organizations/relux-works/settings/actions/runners")!),
-                .init(id: "actions.runner.ivanopcode-cocoaskills.macbook-iv", title: "CocoaSkills", detail: "ivanopcode / cocoaskills", directory: root.appendingPathComponent("cocoaskills"), githubURL: URL(string: "https://github.com/ivanopcode/cocoaskills/settings/actions/runners")!)
-            ]
+            RunnerDiscovery.installed(home: home)
         }
     }
     public enum Status: String, Sendable, Equatable {
