@@ -132,10 +132,24 @@ public actor LaunchAgentService: RunnerServicing {
         }
         let result = try await executor.run("/bin/launchctl", enabled ? ["bootstrap", domain, d.plist.path] : ["bootout", key])
         guard result.code == 0 else { throw RunnerError.message(String(result.output.prefix(700))) }
+        // RunAtLoad=false jobs load without starting, so bootstrap alone
+        // never yields running. Kickstart the loaded-but-idle job once,
+        // without -k, so a running service is never restarted. Disable
+        // never kickstarts. Plist and login policy are untouched.
+        var didKickstart = false
         for _ in 0..<30 {
             let result = try await executor.run("/bin/launchctl", ["print", key])
-            if Self.status(from: result) == (enabled ? .running : .stopped) { return }
+            let polled = Self.status(from: result)
+            if polled == (enabled ? .running : .stopped) { return }
+            if enabled, !didKickstart, polled == .failed {
+                didKickstart = true
+                let started = try await executor.run("/bin/launchctl", ["kickstart", key])
+                guard started.code == 0 else { throw RunnerError.message(String(started.output.prefix(700))) }
+            }
             try await Task.sleep(for: .milliseconds(100))
+        }
+        if enabled {
+            throw RunnerError.message("Не удалось подтвердить запуск. Проверьте журнал раннера и повторите проверку.")
         }
         throw RunnerError.message("Не удалось подтвердить остановку. Проверьте журнал раннера и повторите проверку.")
     }
