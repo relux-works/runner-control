@@ -8,7 +8,7 @@ import Relux
 
 // TestTransport, jsonResponse, and testConfig are shared from GitHubTransportTests.
 
-private struct RegistrationHarness {
+struct RegistrationHarness {
     let flow: RunnerRegistration.Flow
     let logger: Relux.Testing.Logger
     let transport: TestTransport
@@ -20,7 +20,7 @@ private struct RegistrationHarness {
     let installRoot: URL
 }
 
-private func registrationHarness(
+func registrationHarness(
     transport: TestTransport,
     downloader: (@Sendable (URL) async throws -> Data)? = nil,
     executor: (any CommandExecuting)? = nil,
@@ -63,11 +63,11 @@ private func registrationHarness(
     )
 }
 
-private func registrationActions(_ logger: Relux.Testing.Logger) -> [RunnerRegistration.Action] {
+func registrationActions(_ logger: Relux.Testing.Logger) -> [RunnerRegistration.Action] {
     logger.actions.compactMap { $0 as? RunnerRegistration.Action }
 }
 
-private func lastFailure(_ logger: Relux.Testing.Logger) -> (message: String, step: String)? {
+func lastFailure(_ logger: Relux.Testing.Logger) -> (message: String, step: String)? {
     for action in registrationActions(logger).reversed() {
         switch action {
         case .failed(let message, let step): return (message, step)

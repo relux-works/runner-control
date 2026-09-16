@@ -25,28 +25,20 @@ struct RunnerRegistrationContainer: View {
     @State private var selectedRepositoryIDs: Set<Int64> = []
     @State private var seeded = false
 
-    private static func parseLabels(_ text: String) -> [String] {
-        text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-    }
-
+    /// Snapshots MainActor-owned form state through the pure Core builder.
+    /// Callers must capture this value on the MainActor before crossing the
+    /// Relux dispatcher boundary; the `action { }` factory runs off-main.
     private var currentDraft: RunnerRegistration.Draft {
-        let scope: RunnerRegistration.Scope
-        switch scopeKind {
-        case .organization:
-            scope = .organization(org: org.trimmingCharacters(in: .whitespacesAndNewlines))
-        case .repository:
-            scope = .repository(
-                owner: repoOwner.trimmingCharacters(in: .whitespacesAndNewlines),
-                name: repoName.trimmingCharacters(in: .whitespacesAndNewlines)
-            )
-        }
-        return RunnerRegistration.Draft(
-            scope: scope,
-            runnerName: runnerName.trimmingCharacters(in: .whitespacesAndNewlines),
-            labels: Self.parseLabels(labelsText),
-            installDirName: installDirName.trimmingCharacters(in: .whitespacesAndNewlines),
-            workFolder: workFolder.trimmingCharacters(in: .whitespacesAndNewlines),
-            groupName: groupName.trimmingCharacters(in: .whitespacesAndNewlines),
+        RunnerRegistration.DraftSnapshot.make(
+            organizationScope: scopeKind == .organization,
+            org: org,
+            repoOwner: repoOwner,
+            repoName: repoName,
+            runnerName: runnerName,
+            labelsText: labelsText,
+            installDirName: installDirName,
+            workFolder: workFolder,
+            groupName: groupName,
             selectedRepositoryIDs: selectedRepositoryIDs,
             allowGroupMutation: allowGroupMutation,
             allowGroupTakeover: allowGroupTakeover,
@@ -105,7 +97,18 @@ struct RunnerRegistrationContainer: View {
                     Task { await action { GitHubAuth.Effect.selectRepositories(ids) } }
                     pushDraft()
                 },
-                beginDraft: { Task { await action { RunnerRegistration.Effect.beginDraft(currentDraft) } } },
+                beginDraft: {
+                    // Capture the MainActor-owned snapshot synchronously at
+                    // click time through the production capture boundary,
+                    // before crossing the dispatcher boundary: the queued
+                    // factory runs off-main and holds only the immutable
+                    // draft (dispatch actor-isolation crash, Begin
+                    // 2026-09-16).
+                    let makeAction = RunnerRegistration.BeginDraftCapture.makeBeginDraftAction(
+                        readDraft: { currentDraft }
+                    )
+                    Task { await action(action: makeAction) }
+                },
                 resolveGroup: { Task { await action { RunnerRegistration.Effect.resolveGroup } } },
                 downloadAndInstall: { Task { await action { RunnerRegistration.Effect.downloadAndInstall } } },
                 registerRunner: { Task { await action { RunnerRegistration.Effect.registerRunner } } },
@@ -118,7 +121,7 @@ struct RunnerRegistrationContainer: View {
                     Task { await action { effect } }
                 },
                 applyLabels: {
-                    let labels = Self.parseLabels(labelsText)
+                    let labels = RunnerRegistration.DraftSnapshot.parseLabels(labelsText)
                     Task { await action { RunnerRegistration.Effect.applyLabels(labels) } }
                 },
                 retry: { Task { await action { RunnerRegistration.Effect.retry } } },
