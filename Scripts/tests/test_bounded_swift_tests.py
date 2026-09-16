@@ -77,6 +77,24 @@ if [ "$1" = "test" ]; then
       sleep 30
       exit 0
       ;;
+    hang_with_helper)
+      # Diagnostic-selection fixture: four decoys first, then the
+      # helper-named descendant last (highest pid, enumerated last), so an
+      # order-only first-3 selection cannot reach the helper while the
+      # preferred-host selection must.
+      sleep 30 &
+      sleep 30 &
+      sleep 30 &
+      sleep 30 &
+      sleep 0.2
+      bash -c 'exec -a swiftpm-testing-helper sleep 30' &
+      if [ -n "${SWIFT_CHILD_PID_FILE:-}" ]; then
+        printf '%s\\n' "$!" > "$SWIFT_CHILD_PID_FILE"
+      fi
+      echo "SWIFT-HANG-WITH-HELPER-STARTED"
+      sleep 30
+      exit 0
+      ;;
     term_ignoring_child)
       # F1 attack shape: TERM-responsive parent (default action), one
       # descendant that ignores SIGTERM. Group TERM kills the parent, the
@@ -116,7 +134,16 @@ exit 0
 '''
 
 SAMPLE_STUB = '''#!/bin/bash
+if [ "${SAMPLE_MODE:-ok}" = "hang" ]; then
+  exec sleep 60
+fi
 echo "SAMPLE-STUB pid=$1 duration=$2"
+n="${SAMPLE_EMIT_LINES:-0}"
+i=1
+while [ "$i" -le "$n" ]; do
+  echo "SAMPLE-FRAME-$i pid=$1"
+  i=$((i + 1))
+done
 exit 0
 '''
 
@@ -540,6 +567,127 @@ class BoundedHelperBehaviorTests(BoundedHelperHarness):
         self.assertIn('SWIFT-VERSION-STUB', r.stdout)
         self.assertIn('XCODEBUILD-VERSION-STUB', r.stdout)
         self.assertIn('Xcode_26.3', r.stdout)
+
+
+class BoundedHelperTimeoutSampleTests(BoundedHelperHarness):
+    """Timeout-diagnostic sampling: descendant host capture.
+
+    Production call site: run-bounded-swift-tests.sh timeout block via
+    select_sample_targets + sample_one_bounded. The hosted stall (root
+    swift-test awaiting descendant swiftpm-testing-helper) lost the helper
+    stack because diagnostics sampled only the parent through head -40.
+    These tests prove the helper descendant is sampled alongside the parent
+    with bounded work, deep stacks, and cleanup a hung sampler cannot block.
+    """
+
+    def test_timeout_samples_helper_descendant_not_only_parent(self):
+        try:
+            r = self.run_helper(timeout_secs='2', mode='hang_with_helper')
+            self.assertEqual(r.returncode, 124,
+                             f'stdout={r.stdout!r} stderr={r.stderr!r}')
+            self.assertIn('TIMEOUT', r.stderr)
+            self.assertIn('SWIFT-HANG-WITH-HELPER-STARTED', r.stdout)
+            parent = int(self.pid_file.read_text().strip())
+            helper = int(self.child_pid_file.read_text().strip())
+            self.assertNotEqual(parent, helper,
+                                'fixture must separate parent from helper')
+            self.assertIn(f'SAMPLE-STUB pid={helper} ', r.stderr,
+                          'helper descendant stack was not sampled')
+            self.assertIn(f'SAMPLE-STUB pid={parent} ', r.stderr,
+                          'parent stack was not sampled')
+            for pid in (parent, helper):
+                deadline = time.time() + 10
+                while self.pid_alive(pid) and time.time() < deadline:
+                    time.sleep(0.2)
+                self.assertFalse(self.pid_alive(pid),
+                                 f'owned pid {pid} survived timeout cleanup')
+        finally:
+            self.force_kill_pid_file(self.child_pid_file)
+            self.force_kill_pid_file(self.pid_file)
+
+    def test_timeout_sample_bounded_to_three_targets(self):
+        try:
+            r = self.run_helper(timeout_secs='2', mode='hang_with_helper')
+            self.assertEqual(r.returncode, 124, r.stderr)
+            self.assertEqual(r.stderr.count('SAMPLE-STUB pid='), 3,
+                             f'expected exactly 3 samples despite >3 owned pids: {r.stderr!r}')
+        finally:
+            self.force_kill_pid_file(self.child_pid_file)
+            self.force_kill_pid_file(self.pid_file)
+
+    def test_timeout_sample_captures_deep_stack_beyond_40_lines(self):
+        try:
+            r = self.run_helper(timeout_secs='2', mode='hang',
+                                env_extra={'SAMPLE_EMIT_LINES': '100'})
+            self.assertEqual(r.returncode, 124, r.stderr)
+            self.assertIn('SAMPLE-FRAME-100 pid=', r.stderr,
+                          'stack truncated: frame 100 missing (head -40 would cut it)')
+            self.assertIn('SAMPLE-FRAME-41 pid=', r.stderr,
+                          'stack truncated at the old 40-line header')
+        finally:
+            self.force_kill_pid_file(self.pid_file)
+
+    def test_timeout_hanging_sample_does_not_block_cleanup(self):
+        try:
+            start = time.time()
+            r = self.run_helper(timeout_secs='2', mode='hang',
+                                env_extra={'SAMPLE_MODE': 'hang',
+                                           'SAMPLE_WATCHDOG_SECS': '3'})
+            elapsed = time.time() - start
+            self.assertEqual(r.returncode, 124,
+                             f'stdout={r.stdout!r} stderr={r.stderr!r}')
+            self.assertIn('TIMEOUT', r.stderr)
+            self.assertIn('exceeded 3s; killed', r.stderr)
+            self.assertLess(elapsed, 30,
+                            'hanging sampler blocked timeout cleanup')
+            pid = int(self.pid_file.read_text().strip())
+            deadline = time.time() + 10
+            while self.pid_alive(pid) and time.time() < deadline:
+                time.sleep(0.2)
+            self.assertFalse(self.pid_alive(pid),
+                             'owned swift stub survived timeout cleanup')
+        finally:
+            self.force_kill_pid_file(self.pid_file)
+
+    def test_timeout_production_default_watchdog_kills_hung_sampler(self):
+        """F1 rev2 regression: production default 15s watchdog, no override.
+
+        Production call site: run-bounded-swift-tests.sh timeout block via
+        sample_one_bounded default ${SAMPLE_WATCHDOG_SECS:-15}. The sibling
+        override test (SAMPLE_WATCHDOG_SECS=3) proves the kill mechanism but
+        never exercises the production default, so the narrowing mutant
+        15->300 survived it. This test sets only the stub hang mode and
+        explicitly unsets every production sampling override, proving the
+        exact default bound through the real entry point.
+        """
+        saved = {}
+        for var in ('SAMPLE_WATCHDOG_SECS', 'SAMPLE_MAX_TARGETS',
+                    'SAMPLE_LINES'):
+            if var in os.environ:
+                saved[var] = os.environ.pop(var)
+        try:
+            start = time.time()
+            r = self.run_helper(timeout_secs='2', mode='hang',
+                                env_extra={'SAMPLE_MODE': 'hang'})
+            elapsed = time.time() - start
+            self.assertEqual(r.returncode, 124,
+                             f'stdout={r.stdout!r} stderr={r.stderr!r}')
+            self.assertIn('TIMEOUT', r.stderr)
+            self.assertIn('exceeded 15s; killed', r.stderr,
+                          'production default 15s watchdog did not kill the '
+                          'hung sampler; narrowing 15->300 must fail here')
+            self.assertLess(elapsed, 55,
+                            'hung sampler blocked timeout cleanup under the '
+                            'production default watchdog')
+            pid = int(self.pid_file.read_text().strip())
+            deadline = time.time() + 10
+            while self.pid_alive(pid) and time.time() < deadline:
+                time.sleep(0.2)
+            self.assertFalse(self.pid_alive(pid),
+                             'owned swift stub survived timeout cleanup')
+        finally:
+            os.environ.update(saved)
+            self.force_kill_pid_file(self.pid_file)
 
 
 class CiComposedStepTests(unittest.TestCase):

@@ -181,6 +181,90 @@ if ! kill -0 "$child" 2>/dev/null; then
   exit "$status"
 fi
 
+# Timeout-diagnostic sampling bounds (test-only overrides; the workflow never
+# sets them). At most SAMPLE_MAX_TARGETS owned processes are sampled 1s each,
+# preferring test-host-like descendants; each sampler is SIGKILLed after
+# SAMPLE_WATCHDOG_SECS so diagnostics can never block cleanup; SAMPLE_LINES
+# keeps full call graphs instead of a 40-line header.
+select_sample_targets() {
+  root="$1"
+  max_targets="${SAMPLE_MAX_TARGETS:-3}"
+  case "$max_targets" in
+    ''|*[!0-9]*) max_targets=3 ;;
+  esac
+  owned="$(owned_pids "$root" 2>/dev/null || true)"
+  if [ -z "$(printf '%s' "$owned" | tr -d ' \n\t')" ]; then
+    return 0
+  fi
+  owned_csv="$(printf '%s\n' "$owned" | tr '\n' ',' | sed 's/,$//')"
+  proclist="$(ps -o pid=,command= -p "$owned_csv" 2>/dev/null || true)"
+  preferred=""
+  if [ -n "$(printf '%s' "$proclist" | tr -d ' \n\t')" ]; then
+    preferred="$(printf '%s\n' "$proclist" | grep -E 'swiftpm-testing-helper|swift-testing|swift-test' 2>/dev/null | awk '{ print $1 }' || true)"
+  fi
+  out=""
+  count=0
+  for p in $preferred; do
+    case " $out " in
+      *" $p "*) ;;
+      *) out="$out$p "; count=$((count + 1)) ;;
+    esac
+    if [ "$count" -ge "$max_targets" ]; then break; fi
+  done
+  if [ "$count" -lt "$max_targets" ]; then
+    for p in $owned; do
+      case " $out " in
+        *" $p "*) ;;
+        *) out="$out$p "; count=$((count + 1)) ;;
+      esac
+      if [ "$count" -ge "$max_targets" ]; then break; fi
+    done
+  fi
+  for p in $out; do
+    printf '%s\n' "$p"
+  done
+}
+
+# Sample one pid for 1s, emitting up to SAMPLE_LINES of call graph to stderr.
+# Bounded so diagnostics can never block cleanup: the sampler runs in the
+# background while the parent polls for exit, and a runaway is SIGKILLed after
+# SAMPLE_WATCHDOG_SECS. Always returns 0 so a broken sampler degrades to a
+# warning, never to a blocked cleanup or a changed exit status.
+sample_one_bounded() {
+  _pid="$1"
+  _watchdog="${SAMPLE_WATCHDOG_SECS:-15}"
+  _lines="${SAMPLE_LINES:-400}"
+  echo "--- sample owned pid $_pid (1s) ---" >&2
+  _tmp="$(mktemp /tmp/runner-control-sample.XXXXXX 2>/dev/null || true)"
+  if [ -z "${_tmp:-}" ] || [ ! -f "$_tmp" ]; then
+    echo "WARNING: sample scratch unavailable for pid $_pid" >&2
+    return 0
+  fi
+  sample "$_pid" 1 >"$_tmp" 2>&1 &
+  _sp=$!
+  _el=0
+  while [ "$_el" -lt "$_watchdog" ]; do
+    _st="$(ps -o stat= -p "$_sp" 2>/dev/null || true)"
+    _st="$(printf '%s' "$_st" | tr -d ' \t\n')"
+    case "$_st" in
+      ""|Z*) break ;;
+    esac
+    sleep 1
+    _el=$((_el + 1))
+  done
+  _st="$(ps -o stat= -p "$_sp" 2>/dev/null || true)"
+  _st="$(printf '%s' "$_st" | tr -d ' \t\n')"
+  case "$_st" in
+    ""|Z*) ;;
+    *) kill -9 "$_sp" 2>/dev/null || true
+       echo "WARNING: sample of pid $_pid exceeded ${_watchdog}s; killed" >&2 ;;
+  esac
+  wait "$_sp" 2>/dev/null || true
+  head -n "$_lines" "$_tmp" >&2 2>&1 || echo "WARNING: sample output unreadable for pid $_pid" >&2
+  rm -f "$_tmp" 2>/dev/null || true
+  return 0
+}
+
 echo "TIMEOUT: swift test exceeded ${timeout_secs}s; capturing owned-process diagnostics" >&2
 pids_csv="$(owned_pids "$child" 2>/dev/null | tr '\n' ',' | sed 's/,$//' || true)"
 echo "--- owned-process ps (${pids_csv:-unknown}) ---" >&2
@@ -190,8 +274,14 @@ else
   echo "WARNING: no owned pids enumerated" >&2
 fi
 if command -v sample >/dev/null 2>&1; then
-  echo "--- sample owned test host $child (1s) ---" >&2
-  sample "$child" 1 2>&1 | head -n 40 >&2 || echo "WARNING: sample probe failed" >&2
+  targets="$(select_sample_targets "$child" 2>/dev/null || true)"
+  if [ -z "$(printf '%s' "$targets" | tr -d ' \n\t')" ]; then
+    echo "WARNING: no owned pids to sample" >&2
+  else
+    for t in $targets; do
+      sample_one_bounded "$t"
+    done
+  fi
 else
   echo "--- sample tool unavailable; ps output above is the timeout diagnostic ---" >&2
 fi
