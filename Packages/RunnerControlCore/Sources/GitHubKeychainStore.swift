@@ -56,6 +56,17 @@ public protocol KeychainBackend: Sendable {
     func deleteMatching(service: String, accountPrefix: String, accountSuffix: String)
 }
 
+/// System Keychain backend. Plain generic-password items with no custom
+/// ACL and no access group. Established sharing rule: an Apple-signed
+/// binary reads items written by the same team silently (this is how the
+/// GUI app and the CLI companion share one session — release.sh signs both
+/// with one Developer ID identity — with zero migration). Cross-team reads
+/// of foreign items prompt or deny instead of reading silently (observed:
+/// a dev-team probe of a release-team item reads nil); ad-hoc builds also
+/// prompt. Scripts therefore always Apple-sign the CLI and warn loudly on
+/// ad-hoc fallback. `keychain-access-groups` was evaluated and rejected:
+/// amfid demands a provisioning profile for that entitlement, which a bare
+/// tool cannot carry.
 public struct SecurityKeychainBackend: KeychainBackend, Sendable {
     public init() {}
     public func save(_ data: Data, service: String, account: String) throws {

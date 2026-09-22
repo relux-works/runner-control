@@ -9,6 +9,7 @@ struct ManagementWindowContainer: View {
     @ObservedObject var registration: RunnerRegistration.State
     @ObservedObject private var updater = AppRegistry.updater
     @StateObject private var launchAtLogin = LaunchAtLoginModel()
+    @StateObject private var cliInstall = CLIInstallModel()
     @State private var serverHostText: String = "github.com"
     @State private var showRegistration = false
 
@@ -49,7 +50,11 @@ struct ManagementWindowContainer: View {
                     canCheckForUpdates: updater.canCheckForUpdates,
                     automaticChecks: updater.automaticallyChecks,
                     automaticDownloads: updater.automaticallyDownloads,
-                    launchAtLoginEnabled: launchAtLogin.enabled
+                    launchAtLoginEnabled: launchAtLogin.enabled,
+                    cliAvailable: cliInstall.available,
+                    cliInstalled: cliInstall.installed,
+                    cliStatus: cliInstall.statusText,
+                    cliBusy: cliInstall.busy
                 )
             ),
             reactions: .init(
@@ -91,6 +96,9 @@ struct ManagementWindowContainer: View {
                 setAutomaticChecks: updater.setAutomaticChecks,
                 setAutomaticDownloads: updater.setAutomaticDownloads,
                 setLaunchAtLogin: { launchAtLogin.setEnabled($0) },
+                installCLI: { cliInstall.install() },
+                installCLIForUser: { cliInstall.installForUser() },
+                uninstallCLI: { cliInstall.uninstall() },
                 quit: quit
             )
         )

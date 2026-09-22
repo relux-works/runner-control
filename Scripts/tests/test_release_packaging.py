@@ -107,6 +107,23 @@ printf 'fixture-dmg' > "${@: -1}"
 exit 0
 '''
 
+SWIFT_STUB = '''#!/bin/bash
+# Fake `swift build`: materialize a dummy CLI product at the real
+# multi-arch layout build-cli.sh expects.
+scratch=""
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "--scratch-path" ]; then scratch="$arg"; fi
+  prev="$arg"
+done
+if [ -n "$scratch" ]; then
+  mkdir -p "$scratch/apple/Products/Release"
+  printf '#!/bin/sh\\nexit 0\\n' > "$scratch/apple/Products/Release/runner-control"
+  chmod +x "$scratch/apple/Products/Release/runner-control"
+fi
+exit 0
+'''
+
 
 def write_exe(path, content):
     path.write_text(content)
@@ -120,7 +137,7 @@ class ReleasePackagingHarness(unittest.TestCase):
         scripts = root / 'Scripts'
         scripts.mkdir()
         for name in ('release.sh', 'release-preflight.sh', 'release_metadata.py',
-                     'sparkle-tools.sh'):
+                     'sparkle-tools.sh', 'build-cli.sh'):
             shutil.copy(REPO / 'Scripts' / name, scripts / name)
         (root / 'ios-app-manager.json').write_text(json.dumps({
             'bundle_id': 'works.relux.runnercontrol',
@@ -140,6 +157,7 @@ class ReleasePackagingHarness(unittest.TestCase):
         write_exe(bindir / 'codesign', CODESIGN_STUB)
         write_exe(bindir / 'ditto', DITTO_STUB)
         write_exe(bindir / 'hdiutil', HDIUTIL_STUB)
+        write_exe(bindir / 'swift', SWIFT_STUB)
         for tool in ('spctl', 'tuist', 'gh', 'ios-app-manager'):
             write_exe(bindir / tool, '#!/bin/bash\nexit 0\n')
         self.root = root
@@ -198,6 +216,16 @@ class ReleasePackagingHarness(unittest.TestCase):
         sums = list((self.root / '.temp').glob('release-*/dist/SHA256SUMS'))
         self.assertEqual(sums, [])
 
+    def assert_dmg_never_signed(self):
+        """The DMG is signed only on the success path. The embedded CLI is
+        legitimately signed earlier (before notarization), so a blanket
+        no-sign assertion would be wrong."""
+        if not self.codesign_log.exists():
+            return
+        signed = [line for line in self.codesign_log.read_text().splitlines()
+                  if '--sign ' in line and 'RunnerControl.dmg' in line]
+        self.assertEqual(signed, [])
+
 
 class ReleasePackagingTests(ReleasePackagingHarness):
     def test_release_signs_dmg_with_resolved_team_identity(self):
@@ -215,6 +243,16 @@ class ReleasePackagingTests(ReleasePackagingHarness):
         dist = self.dist_of()
         for name in ('RunnerControl.dmg', 'appcast.xml', 'SHA256SUMS'):
             self.assertTrue((dist / name).exists(), name)
+
+    def test_release_embeds_signed_cli(self):
+        r = self.run_release(VALID_OUTPUT, attempt=1)
+        self.assertEqual(r.returncode, 0, r.stderr[-2000:])
+        embedded = list(self.root.glob('.temp/**/RunnerControl.app/Contents/Helpers/runner-control'))
+        self.assertTrue(embedded, 'CLI missing from exported app bundle')
+        log = self.codesign_log.read_text()
+        cli_signs = [line for line in log.splitlines()
+                     if '--sign ' in line and line.rstrip().endswith('runner-control')]
+        self.assertTrue(cli_signs, 'CLI binary never signed')
 
     def test_zero_identities_prevents_packaging_and_output(self):
         r = self.run_release(OTHER_LINES, attempt=1)
@@ -247,14 +285,12 @@ class ReleasePackagingTests(ReleasePackagingHarness):
         r = self.run_release(VALID_OUTPUT, attempt=1, notary_status='Rejected')
         self.assert_no_publish_output(r)
         self.assertIn('did not accept', r.stderr)
-        if self.codesign_log.exists():
-            self.assertNotIn('--sign ', self.codesign_log.read_text())
+        self.assert_dmg_never_signed()
 
     def test_codesign_team_mismatch_prevents_packaging(self):
         r = self.run_release(VALID_OUTPUT, attempt=1, codesign_team='OTHERTEAM1')
         self.assert_no_publish_output(r)
-        if self.codesign_log.exists():
-            self.assertNotIn('--sign ', self.codesign_log.read_text())
+        self.assert_dmg_never_signed()
 
     def test_appcast_tamper_prevents_publish(self):
         r = self.run_release(VALID_OUTPUT, attempt=1, tamper_appcast=True)

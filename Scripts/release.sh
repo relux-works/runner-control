@@ -34,6 +34,12 @@ PLIST
 xcodebuild -exportArchive -archivePath "$archive" -exportPath "$release_root/export" \
   -exportOptionsPlist "$release_root/ExportOptions.plist" > "$release_root/export.log" 2>&1
 app="$release_root/export/RunnerControl.app"
+signing_identity="$(security find-identity -v -p codesigning | python3 Scripts/release_metadata.py signing-identity --team 262RZ595FP)"
+cli_bin="$(CLI_MODE=release CLI_SCRATCH="$release_root/cli-build" CLI_IDENTITY="$signing_identity" "$root/Scripts/build-cli.sh")"
+mkdir -p "$app/Contents/Helpers"
+cp "$cli_bin" "$app/Contents/Helpers/runner-control"
+# Re-seal before notarization sees it (embedding the CLI broke the seal).
+codesign --force --timestamp --options runtime --sign "$signing_identity" "$app"
 codesign --verify --deep --strict "$app"
 metadata="$(codesign -dvv "$app" 2>&1)"
 grep -q 'TeamIdentifier=262RZ595FP' <<< "$metadata"
@@ -58,7 +64,6 @@ ditto "$app" "$release_root/image/RunnerControl.app"
 ln -s /Applications "$release_root/image/Applications"
 hdiutil create -volname 'Runner Control' -srcfolder "$release_root/image" -fs APFS \
   -format ULFO "$release_root/dist/RunnerControl.dmg"
-signing_identity="$(security find-identity -v -p codesigning | python3 Scripts/release_metadata.py signing-identity --team 262RZ595FP)"
 codesign --force --timestamp --sign "$signing_identity" "$release_root/dist/RunnerControl.dmg"
 notarize "$release_root/dist/RunnerControl.dmg" "$release_root/dmg-notary.json"
 xcrun stapler staple "$release_root/dist/RunnerControl.dmg"

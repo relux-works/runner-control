@@ -25,6 +25,10 @@ extension ManagementWindowPage {
         let automaticChecks: Bool
         let automaticDownloads: Bool
         let launchAtLoginEnabled: Bool
+        let cliAvailable: Bool
+        let cliInstalled: Bool
+        let cliStatus: String
+        let cliBusy: Bool
     }
     struct RunnersProps {
         let snapshots: [Runners.Snapshot]
@@ -87,6 +91,9 @@ extension ManagementWindowPage {
         let setAutomaticChecks: (Bool) -> Void
         let setAutomaticDownloads: (Bool) -> Void
         let setLaunchAtLogin: (Bool) -> Void
+        let installCLI: () -> Void
+        let installCLIForUser: () -> Void
+        let uninstallCLI: () -> Void
         let quit: () -> Void
     }
 }

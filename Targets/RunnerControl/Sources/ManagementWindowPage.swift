@@ -609,6 +609,26 @@ struct ManagementWindowPage: View {
                 Text("Выход и обновление приложения оставляют уже запущенные службы работать.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                 Divider()
+                Text("Командная строка").font(.system(size: 13, weight: .semibold))
+                Text(props.general.cliStatus).font(.callout).foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    if props.general.cliInstalled {
+                        Button("Удалить команду…", action: reactions.uninstallCLI)
+                            .buttonStyle(.bordered)
+                            .disabled(!props.general.cliAvailable || props.general.cliBusy)
+                    } else {
+                        Button("Установить команду…", action: reactions.installCLI)
+                            .buttonStyle(.bordered)
+                            .disabled(!props.general.cliAvailable || props.general.cliBusy)
+                            .accessibilityIdentifier("Install CLI button")
+                        Button("Для текущего пользователя", action: reactions.installCLIForUser)
+                            .buttonStyle(.plain).font(.callout)
+                            .disabled(!props.general.cliAvailable || props.general.cliBusy)
+                    }
+                }
+                Text("Команда runner-control управляет теми же раннерами и использует общую сессию GitHub.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                Divider()
                 HStack {
                     Text("RELUX WORKS").font(.system(size: 9, weight: .semibold, design: .monospaced)).tracking(1.5).foregroundStyle(.tertiary)
                     Spacer()

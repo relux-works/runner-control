@@ -1,0 +1,24 @@
+{
+  "originHash" : "eb173df4f969505d009bc2cffd22af6319c56a045eff922648c951a7cc769be8",
+  "pins" : [
+    {
+      "identity" : "swift-argument-parser",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-argument-parser.git",
+      "state" : {
+        "revision" : "41982a3656a71c768319979febd796c6fd111d5c",
+        "version" : "1.5.0"
+      }
+    },
+    {
+      "identity" : "swift-relux",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/relux-works/swift-relux.git",
+      "state" : {
+        "revision" : "483a0f2b6c97721ecb651516e9db9fb83c90cd69",
+        "version" : "9.2.0"
+      }
+    }
+  ],
+  "version" : 3
+}

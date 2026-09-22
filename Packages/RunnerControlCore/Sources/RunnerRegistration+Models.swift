@@ -248,6 +248,12 @@ extension RunnerRegistration {
         /// Deliberate product behavior: the wizard runs ONE active installer
         /// mutation per app instance, for any directory.
         case installerBusy(path: String)
+        /// The cross-process installer lease could not be established
+        /// (lock directory uncreatable, lock file unopenable, lock system
+        /// error). Mutations are refused rather than running unserialized:
+        /// a second owner (GUI vs CLI) may be mid-mutation. Fix the
+        /// underlying filesystem state and retry.
+        case installerUnavailable(String)
 
         public var errorDescription: String? {
             switch self {
@@ -301,6 +307,8 @@ extension RunnerRegistration {
                 "Registration cancelled."
             case .installerBusy(let path):
                 "Installer is busy with another registration operation. '\(path)' was not started. Retry after it settles; no second operation was started."
+            case .installerUnavailable(let text):
+                text.isEmpty ? "Installer lease unavailable. Refusing to run installer mutations unserialized." : text
             }
         }
     }

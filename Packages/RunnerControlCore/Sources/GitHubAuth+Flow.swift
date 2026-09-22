@@ -289,10 +289,31 @@ extension GitHubAuth.Flow: GitHubAuth.IFlow {
         await action { GitHubAuth.Action.loggedOut }
     }
 
+    /// Deletes the stored token and identity only when the stored token is
+    /// still `accessToken` — the record this owner just proved dead. A
+    /// concurrent owner (GUI vs CLI) may have already refreshed and saved a
+    /// newer valid session since our read; deleting it would sign every
+    /// surface out. Same compare-before-delete rule as the refresh cancel
+    /// path in `GitHubTokenRefresh`.
+    private func deleteSessionIfCurrent(
+        serverHost: String, userID: Int64, clientID: String, accessToken: String
+    ) async -> Bool {
+        guard let stored = await store.load(serverHost: serverHost, userID: userID, clientID: clientID),
+              stored.accessToken == accessToken else {
+            return false
+        }
+        await store.delete(serverHost: serverHost, userID: userID, clientID: clientID)
+        await identities.delete()
+        return true
+    }
+
     /// Re-establishes the session from persisted Keychain tokens after relaunch.
-    /// Validates via `/user`; revoked tokens clear storage and require relogin.
+    /// Validates via `/user`; revoked tokens clear storage and require relogin,
+    /// but only when the dead record is still current — a concurrent owner
+    /// may have saved a newer session, in which case restore retries once
+    /// against the fresh record instead of destroying it.
     /// Offline/403 keep the local session with a stale marker instead of disconnecting.
-    private func restoreSession() async {
+    private func restoreSession(retried: Bool = false) async {
         let gen = generation
         guard session == nil else { return }
         guard deviceCode == nil, pollTask == nil else { return }
@@ -311,8 +332,12 @@ extension GitHubAuth.Flow: GitHubAuth.IFlow {
             return
         }
         guard var record = await store.load(serverHost: identity.serverHost, userID: identity.userID, clientID: identity.clientID) else {
-            guard !isStale(gen) else { return }
-            await identities.delete()
+            // A nil read conflates "no stored token" with "Keychain refused
+            // this read" (locked keychain, denied prompt, foreign-team
+            // probe). Deleting the identity here would orphan a still-valid
+            // token and sign every surface out; a read-only restore must
+            // never mutate. Stay disconnected and retry on the next launch —
+            // login and logout repair stale identities explicitly.
             return
         }
         guard !isStale(gen) else { return }
@@ -320,8 +345,12 @@ extension GitHubAuth.Flow: GitHubAuth.IFlow {
             try GitHubAuth.PATGuard.validate(token: record.accessToken)
         } catch {
             guard !isStale(gen) else { return }
-            await store.delete(serverHost: identity.serverHost, userID: identity.userID, clientID: identity.clientID)
-            await identities.delete()
+            let dead = await deleteSessionIfCurrent(serverHost: identity.serverHost, userID: identity.userID, clientID: identity.clientID, accessToken: record.accessToken)
+            guard !isStale(gen) else { return }
+            if !dead, !retried {
+                await restoreSession(retried: true)
+                return
+            }
             await action { GitHubAuth.Action.failed(message: GitHubAuth.AuthError.patNotSupported.localizedDescription, retry: .none) }
             return
         }
@@ -340,13 +369,21 @@ extension GitHubAuth.Flow: GitHubAuth.IFlow {
                 guard !isStale(gen) else { return }
                 switch error {
                 case .revoked, .unauthorized, .tokenRefreshFailed:
-                    await store.delete(serverHost: identity.serverHost, userID: identity.userID, clientID: identity.clientID)
-                    await identities.delete()
+                    let dead = await deleteSessionIfCurrent(serverHost: identity.serverHost, userID: identity.userID, clientID: identity.clientID, accessToken: record.accessToken)
+                    guard !isStale(gen) else { return }
+                    if !dead, !retried {
+                        await restoreSession(retried: true)
+                        return
+                    }
                     await action { GitHubAuth.Action.failed(message: GitHubAuth.AuthError.revoked.localizedDescription, retry: .relogin) }
                     return
                 case .patNotSupported:
-                    await store.delete(serverHost: identity.serverHost, userID: identity.userID, clientID: identity.clientID)
-                    await identities.delete()
+                    let dead = await deleteSessionIfCurrent(serverHost: identity.serverHost, userID: identity.userID, clientID: identity.clientID, accessToken: record.accessToken)
+                    guard !isStale(gen) else { return }
+                    if !dead, !retried {
+                        await restoreSession(retried: true)
+                        return
+                    }
                     await action { GitHubAuth.Action.failed(message: GitHubAuth.AuthError.patNotSupported.localizedDescription, retry: .none) }
                     return
                 default:
@@ -368,13 +405,14 @@ extension GitHubAuth.Flow: GitHubAuth.IFlow {
                 try? await store.save(record, serverHost: identity.serverHost, userID: user.id, clientID: identity.clientID)
                 guard !isStale(gen) else { return }
             }
+            guard !isStale(gen) else { return }
             session = GitHubAuth.Session(userID: user.id, username: user.login, serverHost: config.serverHost, config: config)
             let restoredIncarnation: String? = (user.id == identity.userID) ? identity.sessionIncarnation : UUID().uuidString
             await identities.save(GitHubSessionIdentity(serverHost: config.serverHost, userID: user.id, clientID: config.clientID, username: user.login, sessionIncarnation: restoredIncarnation))
             guard !isStale(gen) else { return }
             await action { GitHubAuth.Action.accountVerified(username: user.login, userID: user.id, serverHost: config.serverHost) }
             guard !isStale(gen) else { return }
-            await restoreInstallations(config: config, token: record.accessToken, username: user.login, userID: user.id, generation: gen)
+            await restoreInstallations(config: config, token: record.accessToken, username: user.login, userID: user.id, generation: gen, retried: retried)
         } catch is CancellationError {
             return
         } catch let error as GitHubAuth.AuthError {
@@ -388,12 +426,20 @@ extension GitHubAuth.Flow: GitHubAuth.IFlow {
                     await action { GitHubAuth.Action.syncFailed(message: error.localizedDescription) }
                     return
                 }
-                await store.delete(serverHost: identity.serverHost, userID: identity.userID, clientID: identity.clientID)
-                await identities.delete()
+                let dead = await deleteSessionIfCurrent(serverHost: identity.serverHost, userID: identity.userID, clientID: identity.clientID, accessToken: record.accessToken)
+                guard !isStale(gen) else { return }
+                if !dead, !retried {
+                    await restoreSession(retried: true)
+                    return
+                }
                 await action { GitHubAuth.Action.failed(message: error.localizedDescription, retry: .relogin) }
             case .patNotSupported:
-                await store.delete(serverHost: identity.serverHost, userID: identity.userID, clientID: identity.clientID)
-                await identities.delete()
+                let dead = await deleteSessionIfCurrent(serverHost: identity.serverHost, userID: identity.userID, clientID: identity.clientID, accessToken: record.accessToken)
+                guard !isStale(gen) else { return }
+                if !dead, !retried {
+                    await restoreSession(retried: true)
+                    return
+                }
                 await action { GitHubAuth.Action.failed(message: error.localizedDescription, retry: .none) }
             default:
                 session = GitHubAuth.Session(userID: identity.userID, username: identity.username, serverHost: identity.serverHost, config: config)
@@ -410,7 +456,7 @@ extension GitHubAuth.Flow: GitHubAuth.IFlow {
         }
     }
 
-    private func restoreInstallations(config: GitHubAuth.AppConfig, token: String, username: String, userID: Int64, generation gen: Int) async {
+    private func restoreInstallations(config: GitHubAuth.AppConfig, token: String, username: String, userID: Int64, generation gen: Int, retried: Bool) async {
         guard !isStale(gen) else { return }
         do {
             let installations = try await api.fetchInstallations(config: config, token: token)
@@ -428,8 +474,13 @@ extension GitHubAuth.Flow: GitHubAuth.IFlow {
                     guard !isStale(gen) else { return }
                     switch error {
                     case .unauthorized, .revoked:
-                        await store.delete(serverHost: config.serverHost, userID: userID, clientID: config.clientID)
-                        await identities.delete()
+                        let dead = await deleteSessionIfCurrent(serverHost: config.serverHost, userID: userID, clientID: config.clientID, accessToken: token)
+                        guard !isStale(gen) else { return }
+                        if !dead, !retried {
+                            session = nil
+                            await restoreSession(retried: true)
+                            return
+                        }
                         session = nil
                         await action { GitHubAuth.Action.failed(message: error.localizedDescription, retry: .relogin) }
                         return
@@ -453,8 +504,13 @@ extension GitHubAuth.Flow: GitHubAuth.IFlow {
             guard !isStale(gen) else { return }
             switch error {
             case .unauthorized, .revoked:
-                await store.delete(serverHost: config.serverHost, userID: userID, clientID: config.clientID)
-                await identities.delete()
+                let dead = await deleteSessionIfCurrent(serverHost: config.serverHost, userID: userID, clientID: config.clientID, accessToken: token)
+                guard !isStale(gen) else { return }
+                if !dead, !retried {
+                    session = nil
+                    await restoreSession(retried: true)
+                    return
+                }
                 session = nil
                 await action { GitHubAuth.Action.failed(message: error.localizedDescription, retry: .relogin) }
             default:

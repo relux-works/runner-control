@@ -63,6 +63,14 @@ public actor RunnerInstallerService {
     /// Directory the lease owner is mutating. Diagnostic only: refusal never
     /// compares paths, it refuses whenever a lease is held.
     private var activePath: String?
+    /// Open file descriptor holding the cross-process lock for the active
+    /// operation. flock releases automatically if the process dies, so a
+    /// crashed owner can never wedge the installer for other processes.
+    private var activeLockFD: Int32?
+    /// Lock file name below the install root. Production app and CLI share
+    /// the same root and therefore the same lock; tests inject temporary
+    /// roots and stay isolated from each other and from production.
+    nonisolated static let installerLockFileName = ".runnercontrol-installer.lock"
 
     public func directory(for installDirName: String) -> URL {
         installRoot.appendingPathComponent(installDirName)
@@ -150,38 +158,134 @@ public actor RunnerInstallerService {
     /// check-and-set is atomic under actor isolation. Throws a retryable
     /// `installerBusy` whenever ANY live operation holds the lease,
     /// regardless of directory — there is no path comparison to bypass.
-    /// Returns the owner token; the caller must hold it across awaits and
-    /// release that exact token when the operation settles.
+    /// The lease is also held cross-process via a flock file lock below
+    /// the install root, so the GUI app and the CLI (separate processes)
+    /// serialize installer mutations exactly like two operations in one
+    /// process. Returns the owner token; the caller must hold it across
+    /// awaits and release that exact token when the operation settles.
     private func acquireMutationLease(for directory: URL) throws -> UUID {
         try Self.ensureNoAlias(at: directory)
         guard activeOperation == nil else {
             throw RunnerRegistration.RegistrationError.installerBusy(path: directory.path)
         }
+        let lockFD = try Self.lockInstallRoot(installRoot, pathForError: directory.path)
         let token = UUID()
         activeOperation = token
         activePath = directory.path
+        activeLockFD = lockFD
         return token
     }
 
     /// Releases the installer-wide lease, but only for its exact owner. A
     /// token that does not match the current owner releases nothing, so a
     /// stale or foreign completion can never unlock a newer operation.
+    /// Closing the lock descriptor releases the cross-process lock.
     private func releaseMutationLease(_ token: UUID) {
         guard activeOperation == token else { return }
         activeOperation = nil
         activePath = nil
+        if let fd = activeLockFD {
+            activeLockFD = nil
+            close(fd)
+        }
     }
 
-    /// Refuses a synchronous mutation (service setup, recovery) while the
-    /// installer lease is held by a live async side effect. No insert:
-    /// without an await the caller itself cannot interleave, it only needs
-    /// to respect the lease held by another operation. Refuses for ANY
-    /// directory while ANY mutation is live.
+    /// Non-blocking exclusive lock on the install root. Another process
+    /// (GUI app vs CLI) holding the lock refuses with retryable
+    /// `installerBusy`. Every other lock failure fails CLOSED with
+    /// `installerUnavailable`: running a mutation with no proof of
+    /// exclusivity would admit two installer owners (a second process may
+    /// be mid-mutation behind the same broken lock path). The caller owns
+    /// the returned descriptor and releases the lock by closing it.
+    nonisolated static func lockInstallRoot(_ root: URL, pathForError: String) throws -> Int32 {
+        do {
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        } catch {
+            throw RunnerRegistration.RegistrationError.installerUnavailable(
+                "Cannot create installer lock directory \(root.path): \(error.localizedDescription). Refusing to run installer mutations unserialized."
+            )
+        }
+        let lockURL = root.appendingPathComponent(installerLockFileName)
+        let fd = open(lockURL.path, O_CREAT | O_RDWR, 0o600)
+        guard fd >= 0 else {
+            let code = errno
+            throw RunnerRegistration.RegistrationError.installerUnavailable(
+                "Cannot open installer lock \(lockURL.path): \(String(cString: strerror(code))). Refusing to run installer mutations unserialized."
+            )
+        }
+        // Close-on-exec: installer mutations spawn children (tar, config.sh)
+        // while holding this descriptor. An inherited copy in a long-lived
+        // child would keep the flock held after this process closes (and
+        // releases) it, manufacturing phantom installerBusy refusals.
+        guard fcntl(fd, F_SETFD, FD_CLOEXEC) == 0 else {
+            let code = errno
+            close(fd)
+            throw RunnerRegistration.RegistrationError.installerUnavailable(
+                "Cannot secure installer lock \(lockURL.path): \(String(cString: strerror(code))). Refusing to run installer mutations unserialized."
+            )
+        }
+        // Contended acquisition spins briefly before refusing: a genuine
+        // holder (another install running seconds) still refuses, but a
+        // transient EWOULDBLOCK under massive process/thread parallelism
+        // resolves into a correct acquisition instead of a phantom busy.
+        // Bounded well under any real mutation window; the in-process
+        // activeOperation guard ahead of this call already covers the
+        // same-installer case, so this spin never waits on our own actor.
+        var attempts = 0
+        while flock(fd, LOCK_EX | LOCK_NB) != 0 {
+            let code = errno
+            if code == EWOULDBLOCK, attempts < 30 {
+                attempts += 1
+                usleep(2_000)
+                continue
+            }
+            close(fd)
+            if code == EWOULDBLOCK {
+                throw RunnerRegistration.RegistrationError.installerBusy(path: pathForError)
+            }
+            throw RunnerRegistration.RegistrationError.installerUnavailable(
+                "Cannot lock \(lockURL.path): \(String(cString: strerror(code))). Refusing to run installer mutations unserialized."
+            )
+        }
+        return fd
+    }
+
+    /// Point probe: refuses while the installer lease is held by a live
+    /// operation, for ANY directory, in this or another process. The file
+    /// lock is probed and released immediately, never held past this
+    /// check — use `withInstallerHeld` for mutations that must stay
+    /// serialized across their own writes.
     private func requireIdleInstaller(_ directory: URL) throws {
         try Self.ensureNoAlias(at: directory)
         guard activeOperation == nil else {
             throw RunnerRegistration.RegistrationError.installerBusy(path: directory.path)
         }
+        close(try Self.lockInstallRoot(installRoot, pathForError: directory.path))
+    }
+
+    /// Runs a synchronous mutation while holding the installer lease both
+    /// in-process and cross-process for the whole body. Synchronous bodies
+    /// cannot interleave on this actor, so the lease is set and released
+    /// around the call; the flock descriptor is held (not probe-closed)
+    /// until the writes settle, closing the probe-then-write race where a
+    /// foreign async mutation could start mid-write.
+    private func withInstallerHeld<T>(directory: URL, _ body: () throws -> T) throws -> T {
+        try Self.ensureNoAlias(at: directory)
+        guard activeOperation == nil else {
+            throw RunnerRegistration.RegistrationError.installerBusy(path: directory.path)
+        }
+        let fd = try Self.lockInstallRoot(installRoot, pathForError: directory.path)
+        let token = UUID()
+        activeOperation = token
+        activePath = directory.path
+        defer {
+            if activeOperation == token {
+                activeOperation = nil
+                activePath = nil
+            }
+            close(fd)
+        }
+        return try body()
     }
 
     // MARK: - Idempotency markers
@@ -531,28 +635,28 @@ public actor RunnerInstallerService {
         guard !directory.path.contains(" ") else {
             throw RunnerRegistration.RegistrationError.noSpacePath("Installation path must not contain spaces.")
         }
-        // Never rewrite the service while the installer lease is held by a
-        // live install/config; the caller retries after that operation
-        // settles.
-        try requireIdleInstaller(directory)
-        let files = FileManager.default
-        guard files.fileExists(atPath: directory.appendingPathComponent("runsvc.sh").path) else {
-            throw RunnerRegistration.RegistrationError.network(
-                "runsvc.sh is missing; reinstall before setting up the service."
-            )
+        // The lease is held for the whole rewrite: a foreign mutation
+        // starting after a point probe would otherwise overlap these writes.
+        return try withInstallerHeld(directory: directory) {
+            let files = FileManager.default
+            guard files.fileExists(atPath: directory.appendingPathComponent("runsvc.sh").path) else {
+                throw RunnerRegistration.RegistrationError.network(
+                    "runsvc.sh is missing; reinstall before setting up the service."
+                )
+            }
+            let plist = directory.appendingPathComponent("manual-service.plist")
+            let payload: [String: Any] = [
+                "Label": label,
+                "ProgramArguments": [directory.appendingPathComponent("runsvc.sh").path],
+                "WorkingDirectory": directory.path,
+                "RunAtLoad": false
+            ]
+            let data = try PropertyListSerialization.data(fromPropertyList: payload, format: .xml, options: 0)
+            try data.write(to: plist, options: .atomic)
+            let scopeKey = loadMarker(directory: directory)?.scopeKey ?? ""
+            try markCompleted(Self.stepServiceReady, directory: directory, scopeKey: scopeKey)
+            return plist
         }
-        let plist = directory.appendingPathComponent("manual-service.plist")
-        let payload: [String: Any] = [
-            "Label": label,
-            "ProgramArguments": [directory.appendingPathComponent("runsvc.sh").path],
-            "WorkingDirectory": directory.path,
-            "RunAtLoad": false
-        ]
-        let data = try PropertyListSerialization.data(fromPropertyList: payload, format: .xml, options: 0)
-        try data.write(to: plist, options: .atomic)
-        let scopeKey = loadMarker(directory: directory)?.scopeKey ?? ""
-        try markCompleted(Self.stepServiceReady, directory: directory, scopeKey: scopeKey)
-        return plist
     }
 
     /// Removes a failed partial install so retries start clean. Refuses to
@@ -561,16 +665,17 @@ public actor RunnerInstallerService {
     public func recoverPartialInstall(directory: URL, scopeKey: String) throws {
         let files = FileManager.default
         guard files.fileExists(atPath: directory.path) else { return }
-        // Never delete while the installer lease is held by a live
-        // operation; the caller retries after that operation settles.
-        try requireIdleInstaller(directory)
-        guard !files.fileExists(atPath: directory.appendingPathComponent(".runner").path) else {
-            throw RunnerRegistration.RegistrationError.alreadyRegistered(name: directory.lastPathComponent)
+        // The lease is held for the whole deletion: a foreign mutation
+        // starting after a point probe would otherwise overlap it.
+        try withInstallerHeld(directory: directory) {
+            guard !files.fileExists(atPath: directory.appendingPathComponent(".runner").path) else {
+                throw RunnerRegistration.RegistrationError.alreadyRegistered(name: directory.lastPathComponent)
+            }
+            if let marker = loadMarker(directory: directory), marker.scopeKey != scopeKey {
+                throw RunnerRegistration.RegistrationError.alreadyInstalled(path: directory.path)
+            }
+            try files.removeItem(at: directory)
         }
-        if let marker = loadMarker(directory: directory), marker.scopeKey != scopeKey {
-            throw RunnerRegistration.RegistrationError.alreadyInstalled(path: directory.path)
-        }
-        try files.removeItem(at: directory)
     }
 
     // MARK: - Catalog operations (shared lease)
@@ -628,14 +733,17 @@ public actor RunnerInstallerService {
         guard !directory.path.contains(" ") else {
             throw RunnerRegistration.RegistrationError.noSpacePath("Installation path must not contain spaces.")
         }
-        try requireIdleInstaller(directory)
-        guard let data = try? Data(contentsOf: plist),
-              var object = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
-            throw RunnerRegistration.RegistrationError.network("Service manifest is unreadable.")
+        // The lease is held for the whole rewrite: a foreign mutation
+        // starting after a point probe would otherwise overlap these writes.
+        try withInstallerHeld(directory: directory) {
+            guard let data = try? Data(contentsOf: plist),
+                  var object = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
+                throw RunnerRegistration.RegistrationError.network("Service manifest is unreadable.")
+            }
+            object["WorkingDirectory"] = directory.path
+            object["ProgramArguments"] = [directory.appendingPathComponent("runsvc.sh").path]
+            let out = try PropertyListSerialization.data(fromPropertyList: object, format: .xml, options: 0)
+            try out.write(to: plist, options: .atomic)
         }
-        object["WorkingDirectory"] = directory.path
-        object["ProgramArguments"] = [directory.appendingPathComponent("runsvc.sh").path]
-        let out = try PropertyListSerialization.data(fromPropertyList: object, format: .xml, options: 0)
-        try out.write(to: plist, options: .atomic)
     }
 }

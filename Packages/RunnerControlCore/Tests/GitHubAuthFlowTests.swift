@@ -429,11 +429,107 @@ private extension GitHubKeychainStore {
     #expect(await identities.load() == nil)
 }
 
+/// Transport that parks the loser's refresh POST until another owner saves
+/// over the stale record, then answers invalid_grant: a deterministic model
+/// of an in-flight cross-process refresh that loses the race.
+private actor LoserRefreshTransport: GitHubHTTPTransport {
+    private let store: GitHubKeychainStore
+    private let staleToken: String
+    private var scripted: [GitHubHTTPResponse]
+    private(set) var refreshCalls = 0
+
+    init(store: GitHubKeychainStore, staleToken: String, scripted: [GitHubHTTPResponse]) {
+        self.store = store
+        self.staleToken = staleToken
+        self.scripted = scripted
+    }
+
+    func send(_ request: GitHubHTTPRequest) async throws -> GitHubHTTPResponse {
+        if request.url.path.contains("access_token") {
+            refreshCalls += 1
+            for _ in 0 ..< 400 {
+                let current = await store.load(serverHost: "github.com", userID: 42, clientID: testConfig.clientID)
+                if current?.accessToken != staleToken { break }
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            return jsonResponse(["error": "invalid_grant"])
+        }
+        guard !scripted.isEmpty else { throw GitHubTransportError.invalidResponse }
+        return scripted.removeFirst()
+    }
+}
+
+@Test func flowRestoreLoserAfterWinnerRefreshKeepsNewerSession() async throws {
+    // Two independent owners (GUI vs CLI) restore concurrently against
+    // shared stores. The winner refreshes first and saves a new session;
+    // the loser's in-flight refresh then fails invalid_grant. The loser
+    // must NOT erase the winner's newer session — it retries once and
+    // adopts it. Pre-fix the loser deleted storage unconditionally.
+    let store = GitHubKeychainStore(backend: InMemoryKeychainBackend())
+    let identities = InMemoryGitHubSessionIdentityStore(value: GitHubSessionIdentity(serverHost: "github.com", userID: 42, clientID: testConfig.clientID, username: "octo"))
+    try await store.save(
+        GitHubAuth.TokenRecord(accessToken: "ghu_old", refreshToken: "ghr_old", expiresAt: Date().addingTimeInterval(-30)),
+        serverHost: "github.com", userID: 42, clientID: testConfig.clientID
+    )
+    // The loser starts first and parks inside its refresh POST.
+    let loserTransport = LoserRefreshTransport(store: store, staleToken: "ghu_old", scripted: [
+        jsonResponse(["login": "octo", "id": 42]),
+        jsonResponse(["installations": []]),
+    ])
+    let (loser, loserLogger, credentialStore) = await githubHarness(transport: loserTransport, store: store, identityStore: identities)
+    let loserTask = Task { await loser.apply(GitHubAuth.Effect.restoreSession) }
+    // Deterministic gate: the winner must finish only after the loser is
+    // parked in its refresh POST. Without this the loser could fast-path
+    // to the new record and the race would never be exercised.
+    var parked = false
+    for _ in 0 ..< 400 {
+        if await loserTransport.refreshCalls == 1 { parked = true; break }
+        try await Task.sleep(for: .milliseconds(5))
+    }
+    #expect(parked)
+    // The winner restores while the loser is parked: refresh succeeds and
+    // the new session lands in the shared stores.
+    let winnerTransport = TestTransport([
+        jsonResponse(["access_token": "ghu_new", "refresh_token": "ghr_new", "expires_in": 3600]),
+        jsonResponse(["login": "octo", "id": 42]),
+        jsonResponse(["installations": []]),
+    ])
+    let (winner, winnerLogger, _) = await githubHarness(transport: winnerTransport, store: store, identityStore: identities)
+    _ = await winner.apply(GitHubAuth.Effect.restoreSession)
+    #expect(await waitForLoggedActions(winnerLogger, count: 4))
+    _ = await loserTask.value
+    #expect(await waitForLoggedActions(loserLogger, count: 5))
+    // The winner's newer session survives the loser's invalid_grant.
+    let kept = await credentialStore.load(serverHost: "github.com", userID: 42, clientID: testConfig.clientID)
+    #expect(kept?.accessToken == "ghu_new")
+    let keptIdentity = await identities.load()
+    #expect(keptIdentity?.userID == 42 && keptIdentity?.username == "octo")
+    // The loser adopted the newer session on retry instead of failing.
+    let actions = githubActions(loserLogger)
+    #expect(actions.contains { if case .connected(let user, _, _) = $0, user == "octo" { true } else { false } })
+    #expect(!actions.contains { if case .failed = $0 { true } else { false } })
+}
+
 @Test func flowRestoreSessionWithoutIdentityIsNoop() async throws {
     let (flow, logger, _) = await githubHarness(transport: TestTransport([]))
     _ = await flow.apply(GitHubAuth.Effect.restoreSession)
     try await Task.sleep(for: .milliseconds(100))
     #expect(logger.actions.isEmpty)
+}
+
+@Test func flowRestoreSessionWithUnreadableTokenKeepsIdentity() async throws {
+    // Identity present but the token read returns nil (locked keychain,
+    // denied prompt, foreign-team probe). Restore must stay silent AND keep
+    // the identity: deleting it would orphan a still-valid token and sign
+    // every surface out.
+    let store = GitHubKeychainStore(backend: InMemoryKeychainBackend())
+    let identities = InMemoryGitHubSessionIdentityStore(value: GitHubSessionIdentity(serverHost: "github.com", userID: 42, clientID: testConfig.clientID, username: "octo"))
+    let (flow, logger, _) = await githubHarness(transport: TestTransport([]), store: store, identityStore: identities)
+    _ = await flow.apply(GitHubAuth.Effect.restoreSession)
+    try await Task.sleep(for: .milliseconds(100))
+    #expect(logger.actions.isEmpty)
+    let kept = await identities.load()
+    #expect(kept?.serverHost == "github.com" && kept?.userID == 42 && kept?.username == "octo")
 }
 
 // MARK: - Refresh through the production Flow path

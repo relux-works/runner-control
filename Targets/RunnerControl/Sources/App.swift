@@ -21,9 +21,21 @@ struct RunnerControl: App {
 
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
+    private var loginItemObserver: (any NSObjectProtocol)?
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         AppRegistry.start()
+        // Honor a CLI-requested launch-at-login state (if any) and mirror
+        // the actual registration for CLI status; keep applying while
+        // running when the CLI asks.
+        LaunchAtLoginModel.applyDesiredIfNeeded()
+        loginItemObserver = DistributedNotificationCenter.default().addObserver(
+            forName: LoginItemBridge.applyNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in LaunchAtLoginModel.applyDesiredIfNeeded() }
+        }
         NotificationCenter.default.addObserver(
             forName: .openManagementWindow,
             object: nil,

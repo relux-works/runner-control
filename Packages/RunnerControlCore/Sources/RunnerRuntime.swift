@@ -14,10 +14,12 @@ import OSLog
         githubState: GitHubAuth.State,
         service: (any RunnerServicing)? = nil,
         transport: any GitHubHTTPTransport = URLSessionGitHubTransport(),
-        store: any GitHubCredentialStoring = GitHubKeychainStore()
+        store: any GitHubCredentialStoring = GitHubKeychainStore(),
+        identities: (any GitHubSessionIdentityStoring)? = nil,
+        configProvider: (@Sendable (String?) throws -> GitHubAuth.AppConfig)? = nil
     ) async -> Relux {
         let registrationState = await MainActor.run { RunnerRegistration.State() }
-        return await make(state: state, githubState: githubState, registrationState: registrationState, service: service, transport: transport, store: store)
+        return await make(state: state, githubState: githubState, registrationState: registrationState, service: service, transport: transport, store: store, identities: identities, configProvider: configProvider)
     }
 
     public static func make(
@@ -26,7 +28,9 @@ import OSLog
         registrationState: RunnerRegistration.State,
         service: (any RunnerServicing)? = nil,
         transport: any GitHubHTTPTransport = URLSessionGitHubTransport(),
-        store: any GitHubCredentialStoring = GitHubKeychainStore()
+        store: any GitHubCredentialStoring = GitHubKeychainStore(),
+        identities: (any GitHubSessionIdentityStoring)? = nil,
+        configProvider: (@Sendable (String?) throws -> GitHubAuth.AppConfig)? = nil
     ) async -> Relux {
         let runtime = await Relux(logger: RuntimeLogger())
         // One shared installer for registration and catalog unregister/recovery:
@@ -35,24 +39,27 @@ import OSLog
         let installer = RunnerInstallerService()
         let catalog = RunnerCatalogStore()
         let resolvedService: any RunnerServicing = service ?? LaunchAgentService(catalog: catalog)
-        let identities = UserDefaultsGitHubSessionIdentityStore()
+        // Overridable so the CLI shares the app's session identity file and
+        // GitHub App client_id without a host bundle Info.plist. Defaults
+        // preserve GUI behavior exactly.
+        let resolvedIdentities = identities ?? UserDefaultsGitHubSessionIdentityStore()
         let runnerAPI = GitHubRunnerAPIClient(transport: transport)
         let refresher = GitHubTokenRefresh(transport: transport, store: store)
         let flow = await Runners.Flow(
             service: resolvedService, catalog: catalog, installer: installer,
-            api: runnerAPI, userStore: store, identities: identities,
-            refresher: refresher, dispatcher: runtime.dispatcher
+            api: runnerAPI, userStore: store, identities: resolvedIdentities,
+            refresher: refresher, configProvider: configProvider, dispatcher: runtime.dispatcher
         )
         runtime.register(Runners.Module(state: state, flow: flow))
         let deviceFlow = GitHubDeviceFlow(transport: transport)
         let api = GitHubAPIClient(transport: transport)
-        let githubFlow = await GitHubAuth.Flow(deviceFlow: deviceFlow, api: api, refresher: refresher, store: store, identityStore: identities, dispatcher: runtime.dispatcher)
+        let githubFlow = await GitHubAuth.Flow(deviceFlow: deviceFlow, api: api, refresher: refresher, store: store, identityStore: resolvedIdentities, configProvider: configProvider, dispatcher: runtime.dispatcher)
         runtime.register(GitHubAuth.Module(state: githubState, flow: githubFlow))
         let registrationTokens = RunnerRegistrationTokenStore()
         let registrationFlow = await RunnerRegistration.Flow(
             api: runnerAPI, installer: installer, registrationTokens: registrationTokens,
-            userStore: store, identityStore: identities,
-            refresher: refresher, dispatcher: runtime.dispatcher
+            userStore: store, identityStore: resolvedIdentities,
+            refresher: refresher, configProvider: configProvider, dispatcher: runtime.dispatcher
         )
         runtime.register(RunnerRegistration.Module(state: registrationState, flow: registrationFlow))
         return runtime
