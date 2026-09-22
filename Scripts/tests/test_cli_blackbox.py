@@ -20,7 +20,12 @@ import subprocess
 import tempfile
 import unittest
 
-REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Canonical: the CLI reports its process-image path fully resolved, so a
+# checkout under a symlinked parent (/tmp -> /private/tmp) must compare
+# resolved against resolved.
+REPO = os.path.realpath(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 DEV_APP = os.path.join(REPO, ".temp", "products", "RunnerControl.app")
 DEV_CLI = os.path.join(DEV_APP, "Contents", "Helpers", "runner-control")
 HAS_BINARY = os.path.isfile(DEV_CLI) and os.access(DEV_CLI, os.X_OK)

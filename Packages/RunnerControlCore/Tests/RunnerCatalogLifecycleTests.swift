@@ -1763,7 +1763,10 @@ private actor ReviewR3ReloginTransport: GitHubHTTPTransport {
             fired = true
             _ = await auth.apply(GitHubAuth.Effect.logout)
             _ = await auth.apply(GitHubAuth.Effect.beginLogin(serverHost: nil))
-            let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+            // CI VMs saturate the cooperative pool under full-suite parallel
+            // load (locally this completes in ~20ms); keep a generous hang
+            // bound instead of a tight latency assertion.
+            let deadline = ContinuousClock.now.advanced(by: .seconds(30))
             while ContinuousClock.now < deadline {
                 if authLogger.actions.contains(where: {
                     guard let a = $0 as? GitHubAuth.Action else { return false }
